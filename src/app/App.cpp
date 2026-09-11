@@ -1122,6 +1122,13 @@ void App::registerCalibRoutes() {
         ergo::SweepPlan plan = ergo::SweepRunner::planFor((uint8_t)c.levelCount(),
                                                           c.levelMinTenths(),
                                                           c.levelStepTenths(), rpm, coarse);
+        const int16_t maxLvl = limiter.effectiveMaxLevelTenths();
+        const uint8_t beforeClip = plan.count;
+        ergo::SweepRunner::clipPlanToMax(plan, maxLvl);
+        if (plan.count == 0) {
+            NetUtil::sendError(server, 409, "Profilgrenze: keine Sweep-Stufe übrig");
+            return;
+        }
         if (server.hasArg("settleS")) {
             plan.settleMs = (uint32_t)server.arg("settleS").toInt() * 1000UL;
         }
@@ -1134,13 +1141,14 @@ void App::registerCalibRoutes() {
         }
         sweepSeen_ = 0;
         sweepWas_ = sweep.state();
-        Serial.printf("[SWEEP] Start: %u Stufen, Ziel %.0f rpm, %lu s + %lu s je Stufe\n",
-                      (unsigned)plan.count, plan.targetRpm, plan.settleMs / 1000UL,
-                      plan.windowMs / 1000UL);
+        Serial.printf("[SWEEP] Start: %u Stufen (Profil max %d, Plan war %u), Ziel %.0f rpm\n",
+                      (unsigned)plan.count, (int)maxLvl, (unsigned)beforeClip, plan.targetRpm);
 
         JsonDocument doc;
         doc["ok"] = true;
         doc["levels"] = plan.count;
+        doc["clipped"] = (plan.count < beforeClip);
+        doc["maxLevelTenths"] = maxLvl;
         doc["targetRpm"] = plan.targetRpm;
         doc["estimateS"] = (uint32_t)plan.count * (plan.settleMs + plan.windowMs) / 1000UL;
         NetUtil::sendJson(server, 200, doc);

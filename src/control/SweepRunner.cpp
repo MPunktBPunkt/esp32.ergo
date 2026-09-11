@@ -39,6 +39,15 @@ SweepPlan SweepRunner::planFor(uint8_t levelCount, int16_t minTenths, uint16_t s
     return p;
 }
 
+void SweepRunner::clipPlanToMax(SweepPlan& plan, int16_t maxTenths) {
+    if (maxTenths <= 0) return;
+    uint8_t n = 0;
+    for (uint8_t i = 0; i < plan.count; ++i) {
+        if (plan.levels[i] <= maxTenths) plan.levels[n++] = plan.levels[i];
+    }
+    plan.count = n;
+}
+
 bool SweepRunner::start(const SweepPlan& plan, uint32_t nowMs) {
     if (plan.count == 0) return false;
     reset();

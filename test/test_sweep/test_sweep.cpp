@@ -330,6 +330,16 @@ static void test_progress_counts_levels(void) {
     TEST_ASSERT_EQUAL_UINT8(50, r.progressPct());
 }
 
+static void test_clip_plan_to_profile_max(void) {
+    SweepPlan p = SweepRunner::planFor(16, 10, 10, 60.0f, false);
+    TEST_ASSERT_EQUAL_UINT8(9, p.count);  // 1..16 step 2-ish full list
+    SweepRunner::clipPlanToMax(p, 80);     // Stufe 8.0
+    TEST_ASSERT_EQUAL_UINT8(5, p.count);  // 1,2,4,6,8
+    TEST_ASSERT_EQUAL_INT16(80, p.levels[p.count - 1]);
+    SweepRunner::clipPlanToMax(p, 0);  // no-op
+    TEST_ASSERT_EQUAL_UINT8(5, p.count);
+}
+
 int main(int, char**) {
     UNITY_BEGIN();
     RUN_TEST(test_plan_full);
@@ -349,5 +359,6 @@ int main(int, char**) {
     RUN_TEST(test_cancel_stops);
     RUN_TEST(test_reset_clears);
     RUN_TEST(test_progress_counts_levels);
+    RUN_TEST(test_clip_plan_to_profile_max);
     return UNITY_END();
 }

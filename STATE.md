@@ -5,11 +5,12 @@ zuerst diese Datei und danach gezielt weiter. Alle anderen Notizen in `debug/`
 sind Protokolle einzelner Arbeitsschritte und beschreiben den Stand *zu ihrem
 Zeitpunkt* — sie werden nicht nachgeführt.
 
-Stand dieser Datei: **2026-09-11** (Abend), Fixture-Roundtrip 6a + Sweep-Profilpflicht.
+Stand dieser Datei: **2026-09-11** (Abend), Test 1 gefahren — siehe
+[debug/HW_TEST1_60RPM.md](debug/HW_TEST1_60RPM.md).
 
-**Wochenende:** Einstieg hier. Hand-Beweis: `tools/hand-proof.sh`.
-Details: [debug/UPDATE_CONTROL_UI.md](debug/UPDATE_CONTROL_UI.md),
-[debug/UPDATE_FIXTURE_6A.md](debug/UPDATE_FIXTURE_6A.md).
+**Wochenende / nächster Schritt am Rad:** Profil **standard**, Map leeren,
+Test 1 wiederholen (oder Test 2 bei 80 rpm, wenn Test 1 mit standard lief).
+Hand-Beweis: `tools/hand-proof.sh` (durch Anstieg 1→8 weniger kritisch).
 
 ---
 
@@ -98,9 +99,11 @@ für die Wirkung — und `guardAllowSim` muss dafür von `false` auf `true`.
 ## 5. Nächste Schritte
 
 1. ~~Kopieren und bauen.~~ / ~~Caps-Fix OTA.~~
-2. **Der Beweis aus §3** (Hand an der Kurbel) — wenn du daheim bist:
-   `tools/hand-proof.sh` oder Debug-Reiter + Stufe 1 vs 16.
-3. Nachtest 1 und 2 mit Fahrer.
+2. **Der Beweis aus §3** (Hand an der Kurbel) — weniger dringlich nach Test 1
+   (Anstieg 1→8 sichtbar); formal noch offen.
+3. **Test 1 Nacharbeit:** wenn mit `reha` gefahren → Map leeren, `standard`,
+   Sweep wiederholen. Sonst **Test 2** (80 rpm). Details:
+   [debug/HW_TEST1_60RPM.md](debug/HW_TEST1_60RPM.md).
 4. ~~**Profile mit Grenzen**~~ — RAM + API + Limiter; **NVS-Persistenz + UI-Reiter**
    (`debug/UPDATE_PROFILE_PERSIST.md`). LittleFS weiterhin optional.
 5. ~~**Steuermodi OFF / MANUAL_LEVEL**~~ — gebaut; ERG/HR/WORKOUT warten auf §3.
@@ -144,8 +147,8 @@ Die Liste selbst steht in [PFLICHTENHEFT.md](docs/ergometer/PFLICHTENHEFT.md) §
 | Nr. | Stand |
 |---|---|
 | 1–4 | erfüllt und auf Hardware gesehen |
-| 5 | **offen** — genau der Beweis aus §3 |
-| 6 | Mechanik gebaut (Sweep, Kennfläche, verworfene Punkte werden als verworfen ausgewiesen), Messung fehlt |
+| 5 | **teilweise** — Anstieg Stufe 1→8 in Test 1 sichtbar; Hand-Beweis formal offen |
+| 6 | Mechanik + erster 60-rpm-Lauf; Punkte ab Stufe 10 unter Reha-Verdacht |
 | 6a | **erfüllt** (Host + Live-Export + CI `--verify-curated`) |
 | 6b | gebaut und hosttestbar; auf Hardware noch nicht gesehen |
 | 7–12, 14–17, 19–21 | nicht angefangen |

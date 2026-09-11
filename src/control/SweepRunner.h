@@ -69,6 +69,13 @@ public:
     static SweepPlan planFor(uint8_t levelCount, int16_t minTenths, uint16_t stepTenths,
                              float targetRpm, bool coarse);
 
+    /**
+     * Entfernt Stufen oberhalb `maxTenths` (0 = keine Grenze). Noetig, weil der
+     * Limiter still klemmt: sonst misst der Sweep „Stufe 16", faehrt aber 8,
+     * und die Kennflaeche wird vergiftet (gesehen mit Profil reha).
+     */
+    static void clipPlanToMax(SweepPlan& plan, int16_t maxTenths);
+
     bool start(const SweepPlan& plan, uint32_t nowMs);
     void cancel(uint32_t nowMs);
     void reset();

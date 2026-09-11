@@ -822,7 +822,8 @@ function sweepStart(coarse){
     .then(r=>r.json().then(j=>({ok:r.ok,j})))
     .then(o=>{m.className='msg '+(o.ok?'ok':'err');
       m.textContent=o.ok?(o.j.levels+' Stufen, etwa '+Math.round(o.j.estimateS/60)
-        +' min — jetzt gleichmäßig '+Math.round(o.j.targetRpm)+' rpm treten')
+        +' min — jetzt gleichmäßig '+Math.round(o.j.targetRpm)+' rpm treten'
+        +(o.j.clipped?' (an Profilgrenze gekürzt)':''))
         :('Fehler: '+(o.j.error||'?'));})
     .catch(e=>{m.className='msg err';m.textContent=''+e});
 }
