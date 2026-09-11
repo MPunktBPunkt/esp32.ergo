@@ -5,11 +5,10 @@ zuerst diese Datei und danach gezielt weiter. Alle anderen Notizen in `debug/`
 sind Protokolle einzelner Arbeitsschritte und beschreiben den Stand *zu ihrem
 Zeitpunkt* — sie werden nicht nachgeführt.
 
-Stand dieser Datei: **2026-09-11** ~20:55, Test 1 (standard) **gültig** —
-[~170 W bei Stufe 16 / 60 rpm](debug/HW_TEST1_60RPM.md). Nächster Lauf: Test 2
-(80 rpm).
-
-**Hand-Beweis §3:** durch Journal WORKS + lineare Kennlinie praktisch erledigt.
+Stand dieser Datei: **2026-09-11** ~21:44. Test 1 + Test 2 leicht **ok**.
+Kennlinie linear bis 170 W @ 60 rpm; bei Stufe 8: 89 W@60 → 123 W@80 (+37 %).
+Details: [HW_TEST1_60RPM.md](debug/HW_TEST1_60RPM.md),
+[HW_TEST2_LIGHT.md](debug/HW_TEST2_LIGHT.md).
 
 ---
 
@@ -100,11 +99,10 @@ für die Wirkung — und `guardAllowSim` muss dafür von `false` auf `true`.
 1. ~~Kopieren und bauen.~~ / ~~Caps-Fix OTA.~~
 2. ~~Hand-Beweis / Stufenwirkung~~ — bestätigt durch Test 1 (Journal WORKS,
    lineare Kennlinie).
-3. **Test 2 leicht** (~2 min, Stufe 4+8 @ 80 rpm) — reicht für Kadenzfrage.
-   Voller Test 2 optional. UI-Button „Test 2 leicht“.
-   Test 1: [debug/HW_TEST1_60RPM.md](debug/HW_TEST1_60RPM.md).
-4. ~~**Profile mit Grenzen**~~ — RAM + API + Limiter; **NVS-Persistenz + UI-Reiter**
-   (`debug/UPDATE_PROFILE_PERSIST.md`). LittleFS weiterhin optional.
+3. ~~**Test 2 leicht**~~ — Kadenzabhängigkeit bestätigt (+37 % W bei Stufe 8,
+   60→80 rpm). [debug/HW_TEST2_LIGHT.md](debug/HW_TEST2_LIGHT.md).
+   Voller Test 2 optional.
+4. Optional: Nachtest 3 (`0x05` tot) / 4 (`0x11` Simulation) — ohne langen Sweep.
 5. ~~**Steuermodi OFF / MANUAL_LEVEL**~~ — gebaut; ERG/HR/WORKOUT warten auf §3.
    Profilpflicht + Ride-UI + Profil-Editor: [debug/UPDATE_CONTROL_UI.md](debug/UPDATE_CONTROL_UI.md).
 6. ~~`.github/workflows/build.yml`~~ — native + `ergo`-Build + Fixture-Verify.
@@ -147,7 +145,7 @@ Die Liste selbst steht in [PFLICHTENHEFT.md](docs/ergometer/PFLICHTENHEFT.md) §
 |---|---|
 | 1–4 | erfüllt und auf Hardware gesehen |
 | 5 | **erfüllt** (Test 1: linear bis 170 W @ Stufe 16; Journal WORKS) |
-| 6 | **erster Lauf ok** (60 rpm); Test 2 (80 rpm) fehlt noch |
+| 6 | **erfüllt für Architektur** (60 rpm voll + 80 rpm leicht); dichtere Map optional |
 | 6a | **erfüllt** (Host + Live-Export + CI `--verify-curated`) |
 | 6b | gebaut und hosttestbar; auf Hardware noch nicht gesehen |
 | 7–12, 14–17, 19–21 | nicht angefangen |
