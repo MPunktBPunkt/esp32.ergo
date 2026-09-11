@@ -100,7 +100,8 @@ für die Wirkung — und `guardAllowSim` muss dafür von `false` auf `true`.
 1. ~~Kopieren und bauen.~~ / ~~Caps-Fix OTA.~~
 2. ~~Hand-Beweis / Stufenwirkung~~ — bestätigt durch Test 1 (Journal WORKS,
    lineare Kennlinie).
-3. **Test 2** (80 rpm, Stufen 4/8/12/16) — Kadenzabhängigkeit.
+3. **Test 2 leicht** (~2 min, Stufe 4+8 @ 80 rpm) — reicht für Kadenzfrage.
+   Voller Test 2 optional. UI-Button „Test 2 leicht“.
    Test 1: [debug/HW_TEST1_60RPM.md](debug/HW_TEST1_60RPM.md).
 4. ~~**Profile mit Grenzen**~~ — RAM + API + Limiter; **NVS-Persistenz + UI-Reiter**
    (`debug/UPDATE_PROFILE_PERSIST.md`). LittleFS weiterhin optional.

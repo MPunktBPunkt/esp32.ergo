@@ -463,12 +463,13 @@ footer{color:var(--dim);font-size:12px;text-align:center;margin-top:26px}
       <div class="row">
         <button id="sw1">Test 1 &middot; 60 rpm</button>
         <button id="sw2" class="ghost">Test 2 &middot; 80 rpm</button>
+        <button id="sw2l" class="ghost">Test 2 leicht &middot; Stufe 4+8</button>
         <button id="swx" class="danger">Abbrechen</button>
       </div>
-      <div class="hint flat">Test 1 fährt neun Stufen und dauert knapp neun Minuten,
-        Test 2 vier Stufen bei höherer Kadenz. Je Stufe 20 s einschwingen, 40 s messen.
-        Ein Punkt zählt nur, wenn die Kadenz im Messfenster gehalten wird — die Anzeige
-        oben sagt, wie weit sie abweicht. Wer aufhört zu treten, bricht den Sweep ab.</div>
+      <div class="hint flat">Test 1: neun Stufen, knapp neun Minuten. Test 2: vier Stufen
+        bei 80 rpm (~4 min) — deutlich härter. <b>Test 2 leicht</b>: nur Stufe 4 und 8
+        bei 80 rpm (~2 min), reicht für die Kadenzfrage. Je Stufe 20 s einschwingen,
+        40 s messen. Wer aufhört zu treten, bricht den Sweep ab.</div>
       <div class="msg" id="swmsg"></div>
     </div>
 
@@ -760,6 +761,7 @@ function renderCalib(s){
   const bike=!!(s.ble&&s.ble.links&&s.ble.links.bike&&s.ble.links.bike.state==='READY');
   $('sw1').disabled=!bike||run;
   $('sw2').disabled=!bike||run;
+  if($('sw2l')) $('sw2l').disabled=!bike||run;
   $('swx').disabled=!run;
 
   const pts=sw.points||[];
@@ -814,18 +816,6 @@ function loadMap(){
     }
     box.innerHTML=h;
   }).catch(e=>{$('mpmsg').className='msg err';$('mpmsg').textContent=''+e});
-}
-
-function sweepStart(coarse){
-  const m=$('swmsg'); m.className='msg'; m.textContent='starte...';
-  fetch('/api/calib/sweep/start?coarse='+(coarse?1:0),{method:'POST'})
-    .then(r=>r.json().then(j=>({ok:r.ok,j})))
-    .then(o=>{m.className='msg '+(o.ok?'ok':'err');
-      m.textContent=o.ok?(o.j.levels+' Stufen, etwa '+Math.round(o.j.estimateS/60)
-        +' min — jetzt gleichmäßig '+Math.round(o.j.targetRpm)+' rpm treten'
-        +(o.j.clipped?' (an Profilgrenze gekürzt)':''))
-        :('Fehler: '+(o.j.error||'?'));})
-    .catch(e=>{m.className='msg err';m.textContent=''+e});
 }
 
 function devs(){
@@ -992,8 +982,23 @@ function step(delta){
     post('/api/control/level?tenths='+(cur+delta));
   });
 }
-$('sw1').onclick=()=>sweepStart(false);
-$('sw2').onclick=()=>sweepStart(true);
+function sweepStart(kind){
+  const m=$('swmsg'); m.className='msg'; m.textContent='starte...';
+  let q='';
+  if(kind==='light') q='light=1';
+  else if(kind==='coarse'||kind===true) q='coarse=1';
+  fetch('/api/calib/sweep/start?'+q,{method:'POST'})
+    .then(r=>r.json().then(j=>({ok:r.ok,j})))
+    .then(o=>{m.className='msg '+(o.ok?'ok':'err');
+      m.textContent=o.ok?(o.j.levels+' Stufen, etwa '+Math.round(o.j.estimateS/60)
+        +' min — jetzt gleichmäßig '+Math.round(o.j.targetRpm)+' rpm treten'
+        +(o.j.clipped?' (an Profilgrenze gekürzt)':''))
+        :('Fehler: '+(o.j.error||'?'));})
+    .catch(e=>{m.className='msg err';m.textContent=''+e});
+}
+$('sw1').onclick=()=>sweepStart('full');
+$('sw2').onclick=()=>sweepStart('coarse');
+$('sw2l').onclick=()=>sweepStart('light');
 $('swx').onclick=()=>post('/api/calib/sweep/stop','swmsg');
 $('rgon').onclick=()=>{
   const on=$('rgst').textContent!=='aus';

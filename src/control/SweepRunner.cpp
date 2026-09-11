@@ -1,5 +1,7 @@
 #include "SweepRunner.h"
 
+#include <string.h>
+
 namespace ergo {
 
 /** Nicht oefter als so oft einen Stufen-Write versuchen. Die Rampe des
@@ -18,21 +20,26 @@ const char* sweepStateName(SweepState s) {
     }
 }
 
-// Stufennummern (1-basiert) der beiden Plaene aus NACHTESTS.md.
+// Stufennummern (1-basiert) der Plaene aus NACHTESTS.md (+ leichte Variante).
 static const uint8_t kFull[] = {1, 2, 4, 6, 8, 10, 12, 14, 16};
 static const uint8_t kCoarse[] = {4, 8, 12, 16};
+static const uint8_t kLight[] = {4, 8};
 
 SweepPlan SweepRunner::planFor(uint8_t levelCount, int16_t minTenths, uint16_t stepTenths,
-                               float targetRpm, bool coarse) {
+                               float targetRpm, const char* kind) {
     SweepPlan p;
     p.targetRpm = targetRpm > 0.0f ? targetRpm : 60.0f;
     if (stepTenths == 0) stepTenths = 10;
-    const uint8_t* list = coarse ? kCoarse : kFull;
-    const uint8_t n = coarse ? (uint8_t)(sizeof(kCoarse) / sizeof(kCoarse[0]))
-                             : (uint8_t)(sizeof(kFull) / sizeof(kFull[0]));
+    const uint8_t* list = kFull;
+    uint8_t n = (uint8_t)(sizeof(kFull) / sizeof(kFull[0]));
+    if (kind && (strcmp(kind, "coarse") == 0 || strcmp(kind, "2") == 0)) {
+        list = kCoarse;
+        n = (uint8_t)(sizeof(kCoarse) / sizeof(kCoarse[0]));
+    } else if (kind && (strcmp(kind, "light") == 0 || strcmp(kind, "leicht") == 0)) {
+        list = kLight;
+        n = (uint8_t)(sizeof(kLight) / sizeof(kLight[0]));
+    }
     for (uint8_t i = 0; i < n && p.count < kMapMaxLevels; i++) {
-        // Stufen jenseits des Geraetebereichs fallen weg. Ein Geraet mit zwölf
-        // Stufen soll einen kuerzeren Sweep fahren, keinen kaputten.
         if (list[i] > levelCount) continue;
         p.levels[p.count++] = (int16_t)(minTenths + (int32_t)(list[i] - 1) * stepTenths);
     }

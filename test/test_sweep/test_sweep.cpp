@@ -86,6 +86,14 @@ static void test_plan_coarse(void) {
     TEST_ASSERT_EQUAL_FLOAT(80.0f, p.targetRpm);
 }
 
+static void test_plan_light(void) {
+    const SweepPlan p = SweepRunner::planFor(16, 10, 10, 80.0f, "light");
+    TEST_ASSERT_EQUAL_UINT8(2, p.count);
+    TEST_ASSERT_EQUAL_INT(40, p.levels[0]);
+    TEST_ASSERT_EQUAL_INT(80, p.levels[1]);
+    TEST_ASSERT_EQUAL_FLOAT(80.0f, p.targetRpm);
+}
+
 static void test_plan_shortens_on_small_device(void) {
     // Acht Stufen: die Stufen 10 bis 16 fallen weg, der Plan bleibt fahrbar
     const SweepPlan p = SweepRunner::planFor(8, 10, 10, 60.0f, false);
@@ -344,6 +352,7 @@ int main(int, char**) {
     UNITY_BEGIN();
     RUN_TEST(test_plan_full);
     RUN_TEST(test_plan_coarse);
+    RUN_TEST(test_plan_light);
     RUN_TEST(test_plan_shortens_on_small_device);
     RUN_TEST(test_start_rejects_empty_plan);
     RUN_TEST(test_full_run_collects_every_level);

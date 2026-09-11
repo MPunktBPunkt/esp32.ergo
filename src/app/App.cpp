@@ -1114,14 +1114,26 @@ void App::registerCalibRoutes() {
             return;
         }
         const bool coarse = server.arg("coarse") == "1";
-        float rpm = server.hasArg("rpm") ? server.arg("rpm").toFloat() : (coarse ? 80.0f : 60.0f);
+        const bool light = server.arg("light") == "1" || server.arg("plan") == "light";
+        const char* kind = light ? "light" : (coarse ? "coarse" : "full");
+        float rpm = server.hasArg("rpm") ? server.arg("rpm").toFloat()
+                                         : (light || coarse ? 80.0f : 60.0f);
         if (rpm < 40.0f || rpm > 119.0f) {
             NetUtil::sendError(server, 400, "rpm ausserhalb 40..119");
             return;
         }
         ergo::SweepPlan plan = ergo::SweepRunner::planFor((uint8_t)c.levelCount(),
                                                           c.levelMinTenths(),
-                                                          c.levelStepTenths(), rpm, coarse);
+                                                          c.levelStepTenths(), rpm, kind);
+        // Optional: nur bis Stufe N (1-basiert), z.B. maxLevel=8.
+        if (server.hasArg("maxLevel")) {
+            const int ml = server.arg("maxLevel").toInt();
+            if (ml > 0) {
+                const int16_t maxTenths =
+                    (int16_t)(c.levelMinTenths() + (int32_t)(ml - 1) * c.levelStepTenths());
+                ergo::SweepRunner::clipPlanToMax(plan, maxTenths);
+            }
+        }
         const int16_t maxLvl = limiter.effectiveMaxLevelTenths();
         const uint8_t beforeClip = plan.count;
         ergo::SweepRunner::clipPlanToMax(plan, maxLvl);
@@ -1141,11 +1153,12 @@ void App::registerCalibRoutes() {
         }
         sweepSeen_ = 0;
         sweepWas_ = sweep.state();
-        Serial.printf("[SWEEP] Start: %u Stufen (Profil max %d, Plan war %u), Ziel %.0f rpm\n",
-                      (unsigned)plan.count, (int)maxLvl, (unsigned)beforeClip, plan.targetRpm);
+        Serial.printf("[SWEEP] Start %s: %u Stufen, Ziel %.0f rpm\n", kind, (unsigned)plan.count,
+                      plan.targetRpm);
 
         JsonDocument doc;
         doc["ok"] = true;
+        doc["plan"] = kind;
         doc["levels"] = plan.count;
         doc["clipped"] = (plan.count < beforeClip);
         doc["maxLevelTenths"] = maxLvl;

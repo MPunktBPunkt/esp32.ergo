@@ -62,12 +62,18 @@ public:
         int16_t levelTenths = 0;
     };
 
-    /** Baut den Plan aus dem Geraetebereich. `coarse` nimmt die verkuerzte
-     *  Liste aus Test 2 (Stufen 4, 8, 12, 16), sonst die volle aus Test 1
-     *  (1, 2, 4, 6, 8, 10, 12, 14, 16). Stufen jenseits des Bereichs fallen
-     *  weg, statt den Plan unbrauchbar zu machen. */
+    /** Baut den Plan aus dem Geraetebereich.
+     *  `full` = Test 1 (1,2,4…16 @ 60), `coarse` = Test 2 (4,8,12,16 @ 80),
+     *  `light` = verkuerzte Kadenzprobe (4,8 @ 80) — ~2 min, wenn der volle
+     *  Test 2 zu hart ist. Stufen jenseits des Bereichs fallen weg. */
     static SweepPlan planFor(uint8_t levelCount, int16_t minTenths, uint16_t stepTenths,
-                             float targetRpm, bool coarse);
+                             float targetRpm, const char* kind);
+
+    /** Abwaertskompatibel: coarse=true → "coarse", sonst "full". */
+    static SweepPlan planFor(uint8_t levelCount, int16_t minTenths, uint16_t stepTenths,
+                             float targetRpm, bool coarse) {
+        return planFor(levelCount, minTenths, stepTenths, targetRpm, coarse ? "coarse" : "full");
+    }
 
     /**
      * Entfernt Stufen oberhalb `maxTenths` (0 = keine Grenze). Noetig, weil der
