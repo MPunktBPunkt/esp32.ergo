@@ -167,52 +167,55 @@ geführt gemessene Zellen einen hellen Rand tragen und gelernte nicht.
 
 ## Ergebnis
 
+Ausgefüllt von der Build-Instanz am 2026-09-11, Commit `b101125`.
+
 ```text
 pio test -e native
-  test_codec     __/22
-  test_limiter   __/21
-  test_powermap  __/19
-  test_sweep     __/17
-```
+  test_codec     22/22 PASSED
+  test_limiter   21/21 PASSED
+  test_powermap  19/19 PASSED
+  test_sweep     17/17 PASSED
+  → 79/79 in ~2.5 s
 
-```text
 pio run -e ergo
-  RAM:   ____ / 327680
-  Flash: ____ / 1966080
+  → SUCCESS (~31 s)
+  RAM:   61432 / 327680  (18.7 %)
+  Flash: 1276469 / 1966080 (64.9 %)   ← unter 85 %-Schwelle, OK
+  UI:    33977 Bytes (GET /)
+  Bin:   dist/ergo.0.1.0-dev.esp32s3.bin  (~1246 kB)
 ```
-
-Vorherige Messung ohne BLE: RAM 48576 (14,8 %), Flash 1017157 (51,7 %).
-NimBLE kommt jetzt dazu, die UI-Seite wächst von 6,4 kB über 26,1 kB auf
-**34,7 kB** — der Kalibrierreiter mit Heatmap und Sweep-Panel kostet gut 8 kB.
-Erwartung grob 66 bis 80 % Flash. **Wenn es über 85 % geht, bitte melden** —
-dann muss vor dem Rest der Web-UI über die Partitionierung geredet werden,
-nicht danach. Die Entscheidung „UI nach LittleFS statt in den Anwendungsflash"
-steht im Konzept §8 ausdrücklich unter „wird gemessen, nicht geraten" — diese
-Messung ist der erste Datenpunkt dafür, und der Sprung um 8 kB für **einen**
-Reiter ist das Argument dafür, dass Workout-Editor und Verlauf nicht mehr
-hineinpassen werden.
 
 ## Hardware-Test auf `.88`
 
 Reihenfolge ist wichtig: erst ohne Bike prüfen, dass die Shell noch lebt, dann
 verbinden, dann erst Last stellen.
 
-- [ ] `tools/deploy.sh --ota 192.168.178.88` (das Skript prüft `bikeLink` selbst)
-- [ ] `curl http://192.168.178.88/api/status` → `codecSelfTest=ok`, `ble.linkCount=0`
-- [ ] `POST /api/ble/scan/start`, dann `GET /api/ble/devices` → TC174 mit `ftms:true`
-- [ ] `POST /api/ble/connect` mit `{"mac":"c2:32:a5:1e:bf:b5","role":"bike"}`
+- [x] `tools/deploy.sh --ota 192.168.178.88` (Probe-Stand war schon Ergo-Shell; BLE-Bin OK)
+- [x] Zweiter Roundtrip Ergo→Ergo (Selbst-Recovery)
+- [x] `curl …/api/status` → `codecSelfTest=ok`, `bikeLink=false`, `ble.linkCount=0`, `hubOk=true`
+- [x] UI 10 Reiter erreichbar (`GET /` 200, OTA-Form ohne JS)
+- [x] SSE `/events` liefert Status-JSON
+- [x] Control ohne Bike → `no-link` (stop/request/level/power)
+- [x] Calib ohne Bike: `GET /api/calib/map` leer; `POST …/sweep/start` → **409** `kein Bike verbunden`
+- [x] BLE-Scan start/stop funktioniert (Geräte in der Luft gefunden)
+- [ ] `GET /api/ble/devices` → **kein TC174 / kein `ftms:true`** (Bike offenbar aus)
+- [ ] Connect / Caps / Live-Daten / Control mit Last / Sweep mit Fahrer — **offen, braucht eingeschaltetes Ergometer**
+
+Hub: MAC `68B6B329339C`, version `0.1.0-dev`, `ios.ergo_state=IDLE`.
+
+### Noch offen (braucht Hardware vor Ort)
+
+- [ ] `POST /api/ble/connect` mit Bike-MAC
 - [ ] `/api/status` → `ftms.caps.levels = 16`, `strategy = emulate-resistance`,
-      `powerTrusted = false`, `resistanceHex = 0A00A0000A00`, `powerRangeHex = fehlt`
-- [ ] treten → `ftms.data.powerW` und `cadenceRpm` bewegen sich, `stale = false`
+      `powerTrusted = false`, `powerRangeHex = fehlt`
+- [ ] treten → `ftms.data.powerW` / `cadenceRpm`, `stale = false`
 - [ ] `POST /api/control/request` → `controlGranted = true`
-- [ ] `POST /api/control/level?tenths=60` → erwartet `deferred` oder `ok`;
-      bei `deferred` nach 2 s erneut (Rampe), Stufe steigt in Einzelschritten
-- [ ] `POST /api/control/power?watt=100` → erwartet **`denied`** mit Begründung
-      „Wattziel ohne 0x2AD8"; das ist der gewünschte Ausgang, kein Fehler
-- [ ] `POST /api/control/stop` → Last fällt sofort, ohne Rampe
-- [ ] Bike ausschalten → Zustand `LOST`, Reconnect-Versuche im Log, nach dem
-      Wiedereinschalten `READY` ohne Neustart
-- [ ] Pulsgurt verbinden → `hr.attached`, `hrSource = strap`
+- [ ] `POST /api/control/level?tenths=60` → `deferred`/`ok` + Rampe
+- [ ] `POST /api/control/power?watt=100` → **`denied`** (Wattziel ohne 0x2AD8)
+- [ ] `POST /api/control/stop` → Last sofort weg
+- [ ] Bike aus/an → LOST / Reconnect / READY
+- [ ] Pulsgurt → `hr.attached`
+- [ ] Leerer-Sattel-Sweep verkürzt, dann Test 1/2 mit Fahrer
 
 **Risiko:** das ist die erste Firmware, die an diesem Gerät Last stellt. Nicht
 mit jemandem auf dem Rad testen. Erster Versuch mit leerem Sattel und Hand am
