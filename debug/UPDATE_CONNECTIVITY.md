@@ -80,17 +80,21 @@ pio run -e ergo
   Bin:   .pio/build/ergo/firmware.bin  (1017520 bytes)
 ```
 
-OTA-Routen in der Bin vorhanden (`/ota-upload` in App.cpp + UiPages) —
-`tools/deploy.sh` darf also theoretisch flashen. **Noch nicht auf `.88` ausgerollt.**
+OTA-Routen in der Bin vorhanden (`/ota-upload` in App.cpp + UiPages).
 
-Erster OTA-Versuch auf `.88`:
+### OTA auf `.88` — 2026-09-11 (Build-Instanz)
 
-- [ ] `curl http://192.168.178.88/api/status` vor dem Flash (laufende Version notieren)
-- [ ] `tools/deploy.sh --ota 192.168.178.88`
-- [ ] nach dem Reboot `fwType = ergo`, `codecSelfTest = ok`
-- [ ] Gerät im Hub sichtbar
-- [ ] zweiter Roundtrip Ergo → Ergo (beweist Selbst-Recovery)
-- [ ] `http://ergo-XXXXXX.local/` erreichbar
+Review vor Flash: OK (Familien-OTA-Vertrag, Strings in Bin, kein Bike-Link,
+Rollback `ftmsprobe.0.1.4.esp32s3.bin` vorhanden).
+
+- [x] Vorher: FtmsProbe-S3 **v0.1.4**, links=0, hubOk
+- [x] `tools/deploy.sh --ota 192.168.178.88` (Probe → Ergo)
+- [x] Nachher: `fwType=ergo`, `version=0.1.0-dev`, `codecSelfTest=ok`, `hubOk=true`
+- [x] Hub: MAC `68B6B329339C`, version `0.1.0-dev`, hwType `esp32s3`
+- [x] Zweiter Roundtrip Ergo → Ergo (Selbst-Recovery)
+- [ ] mDNS `ergo-29339C.local` vom Build-Host nicht auflösbar; per IP ok
+
+Gerätename noch `FtmsProbe-S3` (geteiltes NVS `esphub`) — optional umbenennen.
 
 ## Noch nicht im Repo
 
