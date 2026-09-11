@@ -45,9 +45,18 @@ static void test_manual_erg(void) {
     TEST_ASSERT_FALSE(c.setLevelTargetTenths(80));
 }
 
+static void test_manual_hr(void) {
+    ControlState c;
+    TEST_ASSERT_TRUE(c.setMode(ControlMode::HrHold));
+    TEST_ASSERT_TRUE(c.allowsHrHold());
+    TEST_ASSERT_TRUE(c.allowsErg());
+    TEST_ASSERT_TRUE(c.setHrTargetBpm(140));
+    TEST_ASSERT_EQUAL_UINT8(140, c.hrTargetBpm());
+    TEST_ASSERT_TRUE(c.setPowerTargetW(70.0f));
+}
+
 static void test_unimplemented_modes(void) {
     ControlState c;
-    TEST_ASSERT_FALSE(c.setMode(ControlMode::HrHold));
     TEST_ASSERT_FALSE(c.setMode(ControlMode::Workout));
     TEST_ASSERT_FALSE(c.setMode(ControlMode::Sim));
     TEST_ASSERT_EQUAL_INT((int)ControlMode::Off, (int)c.mode());
@@ -61,6 +70,8 @@ static void test_token_parse(void) {
     TEST_ASSERT_EQUAL_INT((int)ControlMode::ManualLevel, (int)m);
     TEST_ASSERT_TRUE(controlModeFromToken("erg", m));
     TEST_ASSERT_EQUAL_INT((int)ControlMode::ManualErg, (int)m);
+    TEST_ASSERT_TRUE(controlModeFromToken("hr", m));
+    TEST_ASSERT_EQUAL_INT((int)ControlMode::HrHold, (int)m);
     TEST_ASSERT_FALSE(controlModeFromToken("nope", m));
 }
 
@@ -68,6 +79,7 @@ static void test_names(void) {
     TEST_ASSERT_EQUAL_STRING("OFF", controlModeName(ControlMode::Off));
     TEST_ASSERT_EQUAL_STRING("MANUAL_LEVEL", controlModeName(ControlMode::ManualLevel));
     TEST_ASSERT_EQUAL_STRING("MANUAL_ERG", controlModeName(ControlMode::ManualErg));
+    TEST_ASSERT_EQUAL_STRING("HR_HOLD", controlModeName(ControlMode::HrHold));
 }
 
 void setUp(void) {}
@@ -78,6 +90,7 @@ int main(int, char**) {
     RUN_TEST(test_boot_off);
     RUN_TEST(test_manual_level);
     RUN_TEST(test_manual_erg);
+    RUN_TEST(test_manual_hr);
     RUN_TEST(test_off_clears_target);
     RUN_TEST(test_level_while_off_denied);
     RUN_TEST(test_unimplemented_modes);

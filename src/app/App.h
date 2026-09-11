@@ -10,6 +10,7 @@
 #include "ble/DebugRing.h"
 #include "control/ControlJournal.h"
 #include "control/ControlMode.h"
+#include "control/HrController.h"
 #include "control/Limiter.h"
 #include "control/PowerController.h"
 #include "control/PowerMap.h"
@@ -19,8 +20,7 @@
 #include "core/Profile.h"
 
 /**
- * Shell, BLE, Kalibrierung, Profile, OFF / MANUAL_LEVEL / MANUAL_ERG.
- * HR_HOLD folgt, sobald die Pulsfuehrung steht.
+ * Shell, BLE, Kalibrierung, Profile, OFF / LEVEL / ERG / HR_HOLD.
  */
 class App {
 public:
@@ -36,6 +36,7 @@ public:
     ergo::Limiter limiter;
     ergo::PowerMap powerMap;
     ergo::PowerController powerCtl;
+    ergo::HrController hrCtl;
     ergo::SweepRunner sweep;
     ergo::DebugRing ring;
     ergo::ControlJournal journal;
@@ -80,6 +81,7 @@ private:
     // ── Kalibrierung ────────────────────────────────────────────────────────
     void loopCalibration(unsigned long now);
     void loopErg(unsigned long now);
+    void loopHr(unsigned long now);
     /** Fertige Sweep-Punkte in die Kennflaeche uebernehmen und protokollieren. */
     void harvestSweepPoints();
     void appendCalibJson(JsonObject obj) const;

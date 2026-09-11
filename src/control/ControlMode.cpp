@@ -49,15 +49,21 @@ bool controlModeFromToken(const char* token, ControlMode& out) {
 }
 
 bool ControlState::setMode(ControlMode m) {
-    if (m != ControlMode::Off && m != ControlMode::ManualLevel && m != ControlMode::ManualErg)
+    if (m != ControlMode::Off && m != ControlMode::ManualLevel && m != ControlMode::ManualErg &&
+        m != ControlMode::HrHold)
         return false;
     mode_ = m;
     if (m == ControlMode::Off) {
         levelTargetTenths_ = -1;
         powerTargetW_ = 0.0f;
+        hrTargetBpm_ = 0;
     } else if (m == ControlMode::ManualLevel) {
         powerTargetW_ = 0.0f;
+        hrTargetBpm_ = 0;
     } else if (m == ControlMode::ManualErg) {
+        levelTargetTenths_ = -1;
+        hrTargetBpm_ = 0;
+    } else if (m == ControlMode::HrHold) {
         levelTargetTenths_ = -1;
     }
     return true;
@@ -71,9 +77,16 @@ bool ControlState::setLevelTargetTenths(int16_t tenths) {
 }
 
 bool ControlState::setPowerTargetW(float watt) {
-    if (mode_ != ControlMode::ManualErg) return false;
+    if (mode_ != ControlMode::ManualErg && mode_ != ControlMode::HrHold) return false;
     if (watt < 0.0f) return false;
     powerTargetW_ = watt;
+    return true;
+}
+
+bool ControlState::setHrTargetBpm(uint8_t bpm) {
+    if (mode_ != ControlMode::HrHold) return false;
+    if (bpm < 40 || bpm > 220) return false;
+    hrTargetBpm_ = bpm;
     return true;
 }
 

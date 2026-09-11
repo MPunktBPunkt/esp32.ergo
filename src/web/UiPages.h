@@ -210,6 +210,7 @@ footer{color:var(--dim);font-size:12px;text-align:center;margin-top:26px}
         <button id="moff" class="ghost">OFF</button>
         <button id="mlvl" class="ghost">LEVEL</button>
         <button id="merg" class="ghost">ERG</button>
+        <button id="mhr" class="ghost">HR</button>
         <button id="panic" class="danger">STOP</button>
       </div>
       <div class="row flat">
@@ -217,7 +218,13 @@ footer{color:var(--dim);font-size:12px;text-align:center;margin-top:26px}
           <input type="number" id="ergw" min="20" max="300" step="5" value="80"></label>
         <button id="erggo" class="ghost">Ziel setzen</button>
       </div>
+      <div class="row flat">
+        <label class="f" style="flex:1;margin:0"><div class="k">Zielpuls (HR)</div>
+          <input type="number" id="hrbpm" min="40" max="220" step="1" value="130"></label>
+        <button id="hrgo" class="ghost">Puls setzen</button>
+      </div>
       <div class="k" id="ergsub"></div>
+      <div class="k" id="hrsub" style="color:#b45309"></div>
       <div class="row flat">
         <button id="req" class="ghost">Steuerhoheit</button>
         <button id="cstart" class="ghost">Start</button>
@@ -226,8 +233,8 @@ footer{color:var(--dim);font-size:12px;text-align:center;margin-top:26px}
         <button id="lvlup" class="ghost">Stufe +1</button>
       </div>
       <div class="msg" id="cmsg"></div>
-      <div class="hint flat">Ohne aktives Profil keine Last. ERG braucht eine
-        Kennfläche (Kalibrierung). HR_HOLD folgt später. Start/Reset sind FTMS-
+      <div class="hint flat">Ohne aktives Profil keine Last. ERG und HR brauchen eine
+        Kennfläche (Kalibrierung). HR regelt Puls→Watt→Stufe. Start/Reset sind FTMS-
         Freigaben — nach STOP ggf. nötig.</div>
     </div>
   </section>
@@ -676,24 +683,44 @@ function renderBle(s){
   const mode=(s.mode||'OFF');
   $('rmode').textContent=mode;
   const erg=s.erg||{};
+  const hh=s.hrHold||{};
   let msub=mode==='MANUAL_LEVEL'?'Handstufe':(mode==='OFF'?'keine Last':'');
   if(mode==='MANUAL_ERG'){
     msub=(erg.targetW?('Ziel '+Math.round(erg.targetW)+' W'):'kein Ziel')
       +(erg.ceiling?' · Decke':'')
       +(erg.smoothedW!=null?(' · Ist~'+Math.round(erg.smoothedW)+' W'):'');
   }
+  if(mode==='HR_HOLD'){
+    msub='Ziel '+(hh.targetBpm||s.hrTargetBpm||'-')+' bpm'
+      +(hh.powerTargetW!=null?(' · ~'+Math.round(hh.powerTargetW)+' W'):'')
+      +(hh.smoothedHr?(' · Ist '+hh.smoothedHr):'')
+      +(hh.lost?' · PULSVERLUST':'');
+  }
   $('rmodesub').textContent=msub;
   $('moff').classList.toggle('ghost', mode!=='OFF');
   $('mlvl').classList.toggle('ghost', mode!=='MANUAL_LEVEL');
   $('merg').classList.toggle('ghost', mode!=='MANUAL_ERG');
-  $('lvlup').disabled=!hasP||mode==='MANUAL_ERG';
-  $('lvldn').disabled=!hasP||mode==='MANUAL_ERG';
+  $('mhr').classList.toggle('ghost', mode!=='HR_HOLD');
+  const ergLike=mode==='MANUAL_ERG'||mode==='HR_HOLD';
+  $('lvlup').disabled=!hasP||ergLike;
+  $('lvldn').disabled=!hasP||ergLike;
   $('mlvl').disabled=!hasP;
   $('merg').disabled=!hasP||!(erg.mapReady);
-  $('erggo').disabled=!hasP||!(erg.mapReady);
+  $('mhr').disabled=!hasP||!(erg.mapReady);
+  $('erggo').disabled=!hasP||!(erg.mapReady)||mode==='HR_HOLD';
+  $('hrgo').disabled=!hasP||!(erg.mapReady)||mode!=='HR_HOLD';
+  if(hh.targetBpm&&document.activeElement!==$('hrbpm')) $('hrbpm').value=hh.targetBpm;
   $('ergsub').textContent=erg.mapReady
     ?(mode==='MANUAL_ERG'&&erg.ceiling?'Ziel oberhalb der Kennfläche — höchste Stufe':'')
-    :'ERG: zuerst Kalibrierung (Kennfläche)';
+    :'ERG/HR: zuerst Kalibrierung (Kennfläche)';
+  let hrHint='';
+  if(mode==='HR_HOLD'&&hh.lost){
+    const pol=hh.onHrLoss||'reduce';
+    hrHint=pol==='stop'?'Pulsverlust — STOP':
+           pol==='freeze'?'Pulsverlust — Stufe eingefroren':
+           'Pulsverlust — Watt wird abgesenkt';
+  }
+  $('hrsub').textContent=hrHint;
   $('rprof').style.color=(pi&&pi.color)?('#'+('000000'+Number(pi.color).toString(16)).slice(-6)):'';
 
   const strat={'emulate-resistance':'Emulation über Widerstand','direct-target':'Wattziel direkt',
@@ -994,9 +1021,17 @@ $('merg').onclick=()=>{
   const w=+$('ergw').value||80;
   post('/api/control/mode?mode=erg&watt='+w);
 };
+$('mhr').onclick=()=>{
+  const bpm=+$('hrbpm').value||130;
+  post('/api/control/mode?mode=hr&hr='+bpm);
+};
 $('erggo').onclick=()=>{
   const w=+$('ergw').value||80;
   post('/api/control/power?watt='+w);
+};
+$('hrgo').onclick=()=>{
+  const bpm=+$('hrbpm').value||130;
+  post('/api/control/hr?bpm='+bpm);
 };
 $('lvlup').onclick=()=>step(+10);
 $('lvldn').onclick=()=>step(-10);

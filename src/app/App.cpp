@@ -44,6 +44,7 @@ void App::begin() {
     applyLimiterConfig();
     loadPowerMap();
     powerCtl.begin({});
+    hrCtl.begin({});
     journal.begin(ergo::JournalConfig{});
     // Der Ring bleibt nach dem Booten aus und wird bewusst nicht in der
     // Konfiguration gemerkt. Ein Mitschnitt, der einen Neustart ueberlebt und
@@ -341,6 +342,18 @@ void App::buildStatusJson(JsonDocument& doc) {
     erg["ceiling"] = powerCtl.ceiling();
     erg["levelTenths"] = powerCtl.lastLevelTenths();
     erg["mapReady"] = powerMap.ready() && powerMap.pointCount() > 0;
+    doc["hrTargetBpm"] = control.hrTargetBpm();
+    JsonObject hrhold = doc["hrHold"].to<JsonObject>();
+    hrhold["targetBpm"] = hrCtl.targetHr();
+    hrhold["powerTargetW"] = hrCtl.powerTargetW();
+    hrhold["lost"] = hrCtl.lost();
+    hrhold["smoothedHr"] = hrCtl.smoothedHr();
+    if (const ergo::Profile* ap = profiles.active()) {
+        const char* loss = "reduce";
+        if (ap->onHrLoss == ergo::HrLossPolicy::Freeze) loss = "freeze";
+        else if (ap->onHrLoss == ergo::HrLossPolicy::Stop) loss = "stop";
+        hrhold["onHrLoss"] = loss;
+    }
     if (const ergo::Profile* ap = profiles.active()) {
         doc["profile"] = ap->id;
         JsonObject po = doc["profileInfo"].to<JsonObject>();
@@ -664,6 +677,7 @@ void App::registerControlRoutes() {
         const auto r = ftms.stop(millis());
         control.setMode(ergo::ControlMode::Off);
         powerCtl.reset();
+        hrCtl.reset();
         reply(r);
     });
     server.on("/api/control/request", HTTP_POST,
@@ -702,12 +716,12 @@ void App::registerControlRoutes() {
             return;
         }
         if (m != ergo::ControlMode::Off && m != ergo::ControlMode::ManualLevel &&
-            m != ergo::ControlMode::ManualErg) {
+            m != ergo::ControlMode::ManualErg && m != ergo::ControlMode::HrHold) {
             NetUtil::sendError(server, 501, "Modus noch nicht implementiert");
             return;
         }
         if (m != ergo::ControlMode::Off && !requireProfile()) return;
-        if (m == ergo::ControlMode::ManualErg &&
+        if ((m == ergo::ControlMode::ManualErg || m == ergo::ControlMode::HrHold) &&
             (!powerMap.ready() || powerMap.pointCount() == 0)) {
             NetUtil::sendError(server, 409, "Kennfläche leer — zuerst Kalibrierung");
             return;
@@ -733,6 +747,7 @@ void App::registerControlRoutes() {
         }
         if (m == ergo::ControlMode::ManualErg) {
             powerCtl.reset();
+            hrCtl.reset();
             if (watt > 0.0f) {
                 control.setPowerTargetW(watt);
                 powerCtl.setTargetW(watt);
@@ -740,9 +755,38 @@ void App::registerControlRoutes() {
             doc["powerTargetW"] = control.powerTargetW();
             doc["mapPoints"] = powerMap.pointCount();
         }
+        if (m == ergo::ControlMode::HrHold) {
+            powerCtl.reset();
+            hrCtl.reset();
+            int hr = server.hasArg("hr") ? server.arg("hr").toInt() : 0;
+            if (hasBody && !body["hr"].isNull()) hr = body["hr"].as<int>();
+            if (hr <= 0 && profiles.active() && profiles.active()->maxHr > 0)
+                hr = profiles.active()->maxHr > 10 ? profiles.active()->maxHr - 10 : 100;
+            if (hr <= 0) hr = 130;
+            control.setHrTargetBpm((uint8_t)hr);
+            hrCtl.setTargetHr((uint8_t)hr);
+            hrCtl.setLossPolicy(profiles.active() ? profiles.active()->onHrLoss
+                                                  : ergo::HrLossPolicy::Reduce);
+            float maxW = 180.0f;
+            float minW = 25.0f;
+            float base = 80.0f;
+            if (const ergo::Profile* ap = profiles.active()) {
+                if (ap->maxPowerW > 0) maxW = (float)ap->maxPowerW;
+                if (ap->ftpW > 0) base = (float)ap->ftpW * 0.55f;
+            }
+            if (watt > 0.0f) base = watt;
+            hrCtl.setPowerLimits(minW, maxW);
+            hrCtl.setBasePowerW(base);
+            powerCtl.setTargetW(base);
+            control.setPowerTargetW(base);
+            doc["hrTargetBpm"] = control.hrTargetBpm();
+            doc["powerTargetW"] = base;
+            doc["mapPoints"] = powerMap.pointCount();
+        }
         if (m == ergo::ControlMode::Off && ble.ready(ergo::Role::Bike)) {
             ftms.stop(millis());
             powerCtl.reset();
+            hrCtl.reset();
             doc["stopSent"] = true;
         }
         NetUtil::sendJson(server, 200, doc);
@@ -797,6 +841,31 @@ void App::registerControlRoutes() {
         doc["mode"] = "MANUAL_ERG";
         doc["powerTargetW"] = watt;
         doc["ceiling"] = powerCtl.ceiling();
+        NetUtil::sendJson(server, 200, doc);
+    });
+
+    server.on("/api/control/hr", HTTP_POST, [this, requireProfile]() {
+        if (!requireProfile()) return;
+        if (!control.allowsHrHold()) {
+            NetUtil::sendError(server, 409, "nicht im Modus HR_HOLD");
+            return;
+        }
+        int bpm = server.hasArg("bpm") ? server.arg("bpm").toInt()
+                                       : (server.hasArg("hr") ? server.arg("hr").toInt() : 0);
+        if (bpm <= 0) {
+            NetUtil::sendError(server, 400, "bpm fehlt");
+            return;
+        }
+        if (!control.setHrTargetBpm((uint8_t)bpm)) {
+            NetUtil::sendError(server, 400, "bpm ungueltig (40..220)");
+            return;
+        }
+        hrCtl.setTargetHr((uint8_t)bpm);
+        JsonDocument doc;
+        doc["ok"] = true;
+        doc["mode"] = "HR_HOLD";
+        doc["hrTargetBpm"] = control.hrTargetBpm();
+        doc["powerTargetW"] = hrCtl.powerTargetW();
         NetUtil::sendJson(server, 200, doc);
     });
 }
@@ -1063,15 +1132,19 @@ void App::loopCalibration(unsigned long now) {
 }
 
 void App::loopErg(unsigned long now) {
-    if (control.mode() != ergo::ControlMode::ManualErg) return;
+    if (!control.allowsErg()) return;
+    // HR verloren + Freeze: Stufe halten, keine Watt→Level-Anpassung.
+    if (control.allowsHrHold() && hrCtl.lost() &&
+        hrCtl.lossPolicy() == ergo::HrLossPolicy::Freeze) {
+        return;
+    }
     if (!ble.ready(ergo::Role::Bike) || !ftms.attached()) return;
-    if (sweep.running()) return;  // Kalibrierung hat Vorrang
+    if (sweep.running()) return;
 
     const bool fresh = ftms.hasLive() && !ftms.stale(now);
     const float rpm = fresh ? ftms.live().cadenceRpm() : 0.0f;
     const float watt = fresh ? (float)ftms.live().powerW : 0.0f;
 
-    // Ziel aus ControlState nachziehen (API kann es aendern).
     if (control.powerTargetW() > 0.0f &&
         fabsf(control.powerTargetW() - powerCtl.targetW()) > 0.5f) {
         powerCtl.setTargetW(control.powerTargetW());
@@ -1082,12 +1155,59 @@ void App::loopErg(unsigned long now) {
 
     const ergo::FtmsClient::Result r = ftms.setLevelTenths(t.levelTenths, now);
     if (r == ergo::FtmsClient::Result::Ok) {
-        Serial.printf("[ERG] Ziel %.0f W → Stufe %d%s (Ist~%.0f W, rpm=%.0f)\n", t.targetW,
-                      (int)t.levelTenths, t.ceiling ? " CEILING" : "", t.smoothedW, rpm);
+        Serial.printf("[%s] Ziel %.0f W → Stufe %d%s (Ist~%.0f W, rpm=%.0f)\n",
+                      control.allowsHrHold() ? "HR" : "ERG", t.targetW, (int)t.levelTenths,
+                      t.ceiling ? " CEILING" : "", t.smoothedW, rpm);
     } else if (r != ergo::FtmsClient::Result::Deferred) {
         Serial.printf("[ERG] Write abgelehnt: %s (%s)\n", ergo::FtmsClient::resultName(r),
                       ftms.lastDenyReason());
     }
+}
+
+void App::loopHr(unsigned long now) {
+    if (!control.allowsHrHold()) return;
+    if (sweep.running()) return;
+
+    const uint8_t hr = effectiveHr();
+    const bool hrFresh = (resolveHrSource() != ergo::HrSource::None) && hr > 0;
+    uint8_t hardMax = 0;
+    if (const ergo::Profile* ap = profiles.active()) {
+        hardMax = ap->maxHr;
+        hrCtl.setLossPolicy(ap->onHrLoss);
+    }
+
+    const ergo::HrController::Tick ht = hrCtl.tick(now, hr, hrFresh, hardMax);
+
+    if (ht.lost) {
+        static unsigned long lastLossLog = 0;
+        if (now - lastLossLog > 2000) {
+            lastLossLog = now;
+            Serial.printf("[HR] Pulsverlust — Politik %d\n", (int)ht.lossPolicy);
+        }
+        if (ht.lossPolicy == ergo::HrLossPolicy::Stop) {
+            ftms.stop(now);
+            control.setMode(ergo::ControlMode::Off);
+            powerCtl.reset();
+            hrCtl.reset();
+            return;
+        }
+        if (ht.lossPolicy == ergo::HrLossPolicy::Freeze) {
+            // Stufe einfrieren: kein neues Watt-Ziel, loopErg schreibt nur bei
+            // Periodenwechsel derselben Stufe — lastLevel verhindert Writes.
+            return;
+        }
+        // Reduce: Wattziel absenken
+        float p = powerCtl.targetW();
+        if (p < 1.0f) p = ht.powerTargetW;
+        p *= 0.92f;
+        if (p < 25.0f) p = 25.0f;
+        control.setPowerTargetW(p);
+        powerCtl.setTargetW(p);
+        return;
+    }
+
+    control.setPowerTargetW(ht.powerTargetW);
+    powerCtl.setTargetW(ht.powerTargetW);
 }
 
 void App::loadPowerMap() {
@@ -1474,6 +1594,7 @@ void App::loop() {
     const unsigned long now = millis();
     loopDebug(now);
     loopCalibration(now);
+    loopHr(now);
     loopErg(now);
 
     // Waehrend eines aktiven Links haeufiger senden — beim Fahren sind 2 s
