@@ -26,8 +26,21 @@ uint16_t Capabilities::levelStepTenths() const {
 }
 
 bool Capabilities::needsWideResistance() const {
-    // uint8 in Zehnteln reicht nur bis Stufe 25,5.
-    return !hasResistanceRange || resistance.maxRaw > 255 || resistance.minRaw < 0;
+    // Hier stand eine Bereichsfrage: passt der Wert in ein uint8? Beim Varon
+    // passt er (10 bis 160), also ging die schmale Form hinaus — das Geraet
+    // quittierte sie mit Success und tat nichts. Genau die Falle, die
+    // GERAETEPROFIL.md beschreibt: eine Erfolgsquittung beweist nichts.
+    //
+    // Der Stellbereich kann das Drahtformat nicht beantworten. Nach FTMS ist
+    // Set Target Resistance sint16 in Zehnteln; die uint8-Form ist eine
+    // Geraeteeigenschaft und muss aus einer Messung kommen, nicht aus einer
+    // Herleitung. Deshalb ist Spec-Treue der Standard und die schmale Form die
+    // ausdrueckliche Ausnahme.
+    if (resistanceFormat == ResistanceFormat::Uint8) {
+        // Auch dann nur, solange der Bereich ueberhaupt hineinpasst.
+        return hasResistanceRange && (resistance.maxRaw > 255 || resistance.minRaw < 0);
+    }
+    return true;
 }
 
 Capabilities deriveCapabilities(const FeatureSet& feat, const ResistanceRange* res,
@@ -59,10 +72,11 @@ Capabilities deriveCapabilities(const FeatureSet& feat, const ResistanceRange* r
     // obwohl er `05` mit Success quittiert.
     c.powerTargetTrusted = c.canTargetPower && c.hasPowerRange;
 
-    // Nur der erzwungene Fall laesst sich hier schon entscheiden. Sonst
-    // bleibt das Format offen und wird aus dem Geraeteprofil gesetzt oder
-    // beim Kalibrieren ermittelt.
-    if (c.canTargetResistance && c.needsWideResistance()) {
+    // Spec-Treue als Ausgangspunkt, nicht als Herleitung: sint16. Wer die
+    // schmale Form braucht, ist die Ausnahme, und diese Ausnahme kommt aus dem
+    // Geraeteprofil — nach einer Messung, die belegt, dass die Stufe wirklich
+    // greift, und nicht nach einer Quittung.
+    if (c.canTargetResistance) {
         c.resistanceFormat = ResistanceFormat::Sint16;
     }
 

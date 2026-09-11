@@ -137,6 +137,16 @@ tr.pick:hover td{color:var(--accent)}
 .bar i{display:block;height:100%;background:var(--accent);width:0;
   transition:width .4s linear}
 .v.cadok{color:var(--ok)} .v.cadbad{color:var(--bad)}
+.v.ok{color:var(--ok)}
+/* Der Widerspruch „quittiert, aber wirkungslos" bekommt eigenes Gewicht — er
+   ist der Befund, der die letzte Hardware-Session gekostet hat. */
+.warn{margin-top:12px;padding:10px 12px;border-radius:6px;font-size:13px;
+  color:#F3C6CF;background:rgba(201,48,74,.14);border:1px solid rgba(201,48,74,.45)}
+.q{font-style:italic;color:var(--fg)}
+.vd{display:inline-block;padding:1px 8px;border-radius:10px;font-size:11px;
+  letter-spacing:.04em;background:var(--edge);color:var(--dim);white-space:nowrap}
+.vd.w{background:rgba(76,175,99,.18);color:var(--ok)}
+.vd.n{background:rgba(201,48,74,.18);color:var(--bad)}
 .soonbox{text-align:center;padding:34px 20px;color:var(--dim)}
 .soonbox b{display:block;font-family:'Syne',system-ui,sans-serif;font-size:20px;
   letter-spacing:.1em;text-transform:uppercase;color:var(--fg);margin-bottom:8px}
@@ -268,7 +278,7 @@ footer{color:var(--dim);font-size:12px;text-align:center;margin-top:26px}
     </div>
 
     <div class="card">
-      <h2>Steuer-Journal</h2>
+      <h2>Datenstrom und Limiter</h2>
       <div class="grid">
         <div><div class="k">0x2AD2 Notifies</div><div class="v" id="dnot">-</div></div>
         <div><div class="k">0x2AD9 Antworten</div><div class="v" id="dresp">-</div></div>
@@ -277,6 +287,47 @@ footer{color:var(--dim);font-size:12px;text-align:center;margin-top:26px}
         <div><div class="k">Letzte Ablehnung</div><div class="v" id="ddeny">-</div></div>
         <div><div class="k">Datenstrom</div><div class="v" id="dstale">-</div></div>
       </div>
+    </div>
+
+    <div class="card">
+      <h2>Steuer-Journal</h2>
+      <div class="grid">
+        <div><div class="k">Beurteilt</div><div class="v" id="jrn">-</div></div>
+        <div><div class="k">Wirkt</div><div class="v ok" id="jrw">-</div></div>
+        <div><div class="k">Ohne Wirkung</div><div class="v" id="jr0">-</div></div>
+        <div><div class="k">Kein Urteil</div><div class="v" id="jru">-</div></div>
+      </div>
+      <div class="warn" id="jrwarn" hidden></div>
+      <table id="jrt"></table>
+      <div class="hint flat" id="jrnone">Noch kein Schreibvorgang beurteilt.</div>
+      <div class="hint flat">Beurteilt wird <b>Watt pro Kadenz</b> und nicht Watt:
+        schneller treten erhöht die Leistung, nicht die Stufe. Bei zu niedriger
+        oder zwischen den Fenstern weggelaufener Kadenz fällt bewusst kein
+        Urteil — <span class="q">weiß nicht</span> ist ein Ergebnis.</div>
+    </div>
+
+    <div class="card">
+      <h2>Mitschnitt</h2>
+      <div class="row flat">
+        <button id="rgon" class="ghost">Mitschnitt starten</button>
+        <button id="rgdl" class="ghost">Als JSONL laden</button>
+        <button id="rgx" class="ghost">Leeren</button>
+      </div>
+      <div class="grid">
+        <div><div class="k">Zustand</div>
+          <div class="v"><span class="dot" id="rgdot"></span><span id="rgst">aus</span></div></div>
+        <div><div class="k">Datensätze</div><div class="v" id="rgn">-</div></div>
+        <div><div class="k">Angeboten</div><div class="v" id="rgs">-</div></div>
+        <div><div class="k">Ausgedünnt</div><div class="v" id="rgt">-</div></div>
+      </div>
+      <div class="bar"><i id="rgbar"></i></div>
+      <div class="msg" id="rgmsg"></div>
+      <div class="hint flat">Rohbytes im JSONL-Format der Sonde. Der Export lässt
+        sich unverändert von <code>tools/make-fixtures.py</code> lesen — Fixtures
+        aus einer echten Fahrt statt aus einem Laborlauf. Ausgedünnt wird nur der
+        Messstrom; jedes neue Flagwort und der gesamte Steuerverkehr bleiben
+        vollständig. Der Mitschnitt startet nicht von allein und überlebt keinen
+        Neustart.</div>
     </div>
   </section>
 
@@ -459,6 +510,62 @@ function render(s){
   $('sub').textContent=[s.fwType||'ergo',s.chip||'',s.time||'ohne Zeit'].join(' / ');
   renderBle(s);
   renderCalib(s);
+  renderDebug(s);
+}
+
+const VD={WORKS:['wirkt','w'],NO_EFFECT:['keine Wirkung','n'],
+          UNJUDGED:['kein Urteil',''],PENDING:['läuft','']};
+
+/**
+ * Das Steuer-Journal und der Mitschnitt.
+ *
+ * Die auffaelligste Zeile ist bewusst der Widerspruch: Geraet meldet Erfolg,
+ * Messung sieht nichts. Genau diesen Zustand hat die erste Hardware-Session
+ * gehabt, ohne ihn benennen zu koennen.
+ */
+function renderDebug(s){
+  const d=s.debug||{}, r=d.ring||{}, j=d.journal||{};
+
+  $('jrn').textContent=(j.judged!=null?j.judged:'-')+(j.pending?' (+1 läuft)':'');
+  $('jrw').textContent=j.worked!=null?j.worked:'-';
+  $('jr0').textContent=j.noEffect!=null?j.noEffect:'-';
+  $('jru').textContent=j.unjudged!=null?j.unjudged:'-';
+
+  const w=$('jrwarn');
+  if(j.contradictions>0){
+    w.hidden=false;
+    w.innerHTML='<b>'+j.contradictions+'&times; quittiert, aber wirkungslos.</b> '+
+      'Das Gerät hat den Schreibvorgang mit Success beantwortet, die Messung '+
+      'sieht bei gehaltener Kadenz keine Änderung. Eine Erfolgsquittung beweist '+
+      'nichts — das Kommando kommt an und tut trotzdem nichts.';
+  } else { w.hidden=true; }
+
+  const E=j.entries||[];
+  $('jrnone').hidden=E.length>0;
+  $('jrt').innerHTML=E.length?
+    '<tr><th>Kommando</th><th>Stufe</th><th>W/rpm</th><th>Δ</th><th>Kadenz</th><th>Urteil</th></tr>'+
+    E.map(e=>{
+      const v=VD[e.effect]||[e.effect,''];
+      const lvl=(e.from>=0&&e.to>=0)?(e.from/10).toFixed(0)+' → '+(e.to/10).toFixed(0):'–';
+      const note=e.contradictory?' <span class="vd n">Success</span>':'';
+      return '<tr><td class="mac">'+(e.cmd||'')+'</td><td>'+lvl+'</td>'+
+        '<td>'+e.prePerRpm.toFixed(2)+' → '+e.postPerRpm.toFixed(2)+'</td>'+
+        '<td>'+(e.effect==='UNJUDGED'?'–':(e.changePct>0?'+':'')+e.changePct+' %')+'</td>'+
+        '<td>'+Math.round(e.preRpm)+' → '+Math.round(e.postRpm)+'</td>'+
+        '<td><span class="vd '+v[1]+'">'+v[0]+'</span>'+note+
+        (e.reason?'<div class="k">'+e.reason+'</div>':'')+'</td></tr>';
+    }).join(''):'';
+
+  const on=!!r.on;
+  dot($('rgdot'),on);
+  $('rgst').textContent=on?'schreibt mit':'aus';
+  $('rgon').textContent=on?'Mitschnitt anhalten':'Mitschnitt starten';
+  $('rgn').textContent=(r.count!=null?r.count:'-')+(r.slots?' / '+r.slots:'');
+  $('rgs').textContent=r.seen!=null?r.seen:'-';
+  $('rgt').textContent=(r.thinned!=null?r.thinned:'-')+
+    (r.overwritten>0?' · '+r.overwritten+' überschrieben':'');
+  $('rgbar').style.width=(r.slots?Math.min(100,100*(r.count||0)/r.slots):0)+'%';
+  $('rgdl').disabled=!(r.count>0);
 }
 
 let scanPrev=false;
@@ -703,6 +810,15 @@ function step(delta){
 $('sw1').onclick=()=>sweepStart(false);
 $('sw2').onclick=()=>sweepStart(true);
 $('swx').onclick=()=>post('/api/calib/sweep/stop','swmsg');
+$('rgon').onclick=()=>{
+  const on=$('rgst').textContent!=='aus';
+  post('/api/debug/ring?on='+(on?0:1),'rgmsg');
+};
+$('rgdl').onclick=()=>{location.href='/api/debug/export'};
+$('rgx').onclick=()=>{
+  if(!confirm('Mitschnitt und Steuer-Journal leeren?')) return;
+  post('/api/debug/clear','rgmsg');
+};
 $('mpr').onclick=loadMap;
 $('mpc').onclick=()=>{
   if(!confirm('Kennfläche verwerfen? Alle gemessenen Stützstellen sind dann weg.')) return;

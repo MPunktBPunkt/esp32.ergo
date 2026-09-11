@@ -152,6 +152,9 @@ void FtmsClient::onNotify(NimBLERemoteCharacteristic* chr, const uint8_t* data, 
     const NimBLEUUID u = chr->getUUID();
 
     if (u == NimBLEUUID(ftms::kChrIndoorBikeData)) {
+        // Vor dem Dekodieren: der Ring soll auch das Paket haben, an dem der
+        // Decoder scheitert. Das ist der interessanteste Datensatz ueberhaupt.
+        if (ring_) ring_->add(0x2AD2, DebugRing::Dir::Notify, data, len, millis());
         ftms::IndoorBikeData d;
         if (ftms::decodeIndoorBikeData(data, len, d) == ftms::IbdStatus::Ok) {
             live_ = d;
@@ -165,6 +168,7 @@ void FtmsClient::onNotify(NimBLERemoteCharacteristic* chr, const uint8_t* data, 
     }
 
     if (u == NimBLEUUID(ftms::kChrControlPoint)) {
+        if (ring_) ring_->add(0x2AD9, DebugRing::Dir::Notify, data, len, millis());
         ftms::ControlResponse r;
         if (ftms::decodeControlResponse(data, len, r)) {
             lastResp_ = r;
@@ -199,6 +203,23 @@ FtmsClient::Result FtmsClient::send(const uint8_t* cmd, size_t len, uint32_t now
         Serial.printf("[FTMS] Write fehlgeschlagen (%s)\n", v.reason);
         return Result::WriteFailed;
     }
+
+    // Mitgeschrieben wird `v.data`, nicht `cmd`: der Limiter darf klemmen, und
+    // aufgezeichnet gehoert, was das Geraet gesehen hat.
+    if (ring_) ring_->add(0x2AD9, DebugRing::Dir::Write, v.data, v.len, nowMs);
+    if (journal_) {
+        // Schattenwert noch vor `noteWritten` lesen, sonst ist das Vorher
+        // bereits das Nachher.
+        const int16_t from = limiter_->currentLevelTenths();
+        int16_t to = -1;
+        if (v.len >= 3 && v.data[0] == (uint8_t)ftms::Opcode::SetTargetResistance) {
+            to = (int16_t)((uint16_t)v.data[1] | ((uint16_t)v.data[2] << 8));
+        } else if (v.len == 2 && v.data[0] == (uint8_t)ftms::Opcode::SetTargetResistance) {
+            to = (int16_t)v.data[1];
+        }
+        journal_->noteWrite(v.data, v.len, from, to, nowMs);
+    }
+
     limiter_->noteWritten(v.data, v.len, nowMs);
     return Result::Ok;
 }

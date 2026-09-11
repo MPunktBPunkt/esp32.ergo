@@ -3,8 +3,10 @@
 #include <ArduinoJson.h>
 #include <NimBLEDevice.h>
 
+#include "DebugRing.h"
 #include "FtmsCapabilities.h"
 #include "FtmsCodec.h"
+#include "control/ControlJournal.h"
 #include "control/Limiter.h"
 
 namespace ergo {
@@ -35,6 +37,17 @@ public:
     static const char* resultName(Result r);
 
     void begin(Limiter* limiter);
+
+    /**
+     * Optionale Mitschreiber.
+     *
+     * Beide haengen hier und nicht in `App`, weil nur diese Klasse die
+     * tatsaechlich abgesetzten Bytes kennt — nach dem Limiter, der klemmen
+     * darf. Ein Mitschnitt aus der Absicht statt aus der Wirklichkeit waere
+     * genau die Sorte Beweis, die in der letzten Session nichts wert war.
+     */
+    void setDebugRing(DebugRing* ring) { ring_ = ring; }
+    void setJournal(ControlJournal* journal) { journal_ = journal; }
 
     /** Nach dem Connect aus loop() aufrufen. Entdeckt 0x1826, liest die
      *  Faehigkeiten und abonniert 0x2AD2 sowie 0x2AD9. */
@@ -67,6 +80,9 @@ public:
 
     /** Zuletzt vom Geraet quittierte Antwort auf 0x2AD9. */
     const ftms::ControlResponse& lastResponse() const { return lastResp_; }
+    /** Zaehlt hoch, sobald eine neue Antwort da ist — so erkennt `loop()` eine
+     *  Quittung, ohne im NimBLE-Callback arbeiten zu muessen. */
+    uint32_t respCount() const { return respCount_; }
     const char* lastDenyReason() const { return lastDeny_; }
 
     void appendStatusJson(JsonObject obj) const;
@@ -85,6 +101,8 @@ private:
     NimBLERemoteCharacteristic* ibd_ = nullptr;
     NimBLERemoteCharacteristic* cp_ = nullptr;
     Limiter* limiter_ = nullptr;
+    DebugRing* ring_ = nullptr;
+    ControlJournal* journal_ = nullptr;
 
     ftms::Capabilities caps_;
     ftms::IndoorBikeData live_;

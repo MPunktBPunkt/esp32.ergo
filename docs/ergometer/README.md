@@ -3,6 +3,9 @@
 Steuerung des HAMMER Varon XTR II (BLE-Name `TC174`) über BLE/FTMS, verteilt
 über den ESP-Hub wie die übrigen Projekte der Familie.
 
+> Dieser Ordner ist die **Planungsebene** und beschreibt, was gebaut werden
+> soll. Was davon gebaut *ist*, steht in [`STATE.md`](../../STATE.md).
+
 | Datei | Inhalt |
 |-------|--------|
 | [PFLICHTENHEFT.md](PFLICHTENHEFT.md) | Das Konzept. Revision 4. |
@@ -15,7 +18,8 @@ Steuerung des HAMMER Varon XTR II (BLE-Name `TC174`) über BLE/FTMS, verteilt
 
 Der Protokolltest ist gelaufen. Werkzeug war die eigens gebaute Sonde
 [`esp32.ftmsprobe`](https://github.com/MPunktBPunkt/esp32.ftmsprobe), deren
-BLE-Schicht später zu `BleCentral` plus `FtmsClient` in `esp32.ergo` wird.
+BLE-Schicht inzwischen als `BleCentral` plus `FtmsClient` in `esp32.ergo`
+steht — die Firmware läuft auf Hardware, siehe [`STATE.md`](../../STATE.md).
 
 Vier Befunde bestimmen alles Weitere:
 
@@ -51,4 +55,9 @@ Nebenbei ist damit die Peripheral-Rolle in der Familie erprobt: `heartrate-s3`
 fährt drei BLE-Links plus WiFi plus SSE-UI, und das ohne PSRAM. `HrServer` ist
 die direkte Vorlage für `FtmsServer`.
 
-Kein `esp32.ergo`-Repo, bis Test 1 und Test 2 der Nachtests gelaufen sind.
+Dieser Satz stand hier ursprünglich: *„Kein `esp32.ergo`-Repo, bis Test 1 und
+Test 2 der Nachtests gelaufen sind."* Er ist überholt — das Repo existiert, weil
+sich herausgestellt hat, dass die Tests selbst Firmware brauchen: der
+Stufen-Sweep protokolliert sich inzwischen über den Reiter Kalibrierung, statt
+von Hand mitgeschrieben zu werden. Die beiden Tests sind weiterhin offen und
+weiterhin blockierend für alles Watt-basierte.

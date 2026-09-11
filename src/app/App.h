@@ -7,6 +7,8 @@
 #include "ble/BleCentral.h"
 #include "ble/FtmsClient.h"
 #include "ble/HrClient.h"
+#include "ble/DebugRing.h"
+#include "control/ControlJournal.h"
 #include "control/Limiter.h"
 #include "control/PowerMap.h"
 #include "control/SweepRunner.h"
@@ -37,6 +39,8 @@ public:
     ergo::Limiter limiter;
     ergo::PowerMap powerMap;
     ergo::SweepRunner sweep;
+    ergo::DebugRing ring;
+    ergo::ControlJournal journal;
 
     void begin();
     void loop();
@@ -58,6 +62,7 @@ private:
     void registerBleRoutes();
     void registerControlRoutes();
     void registerCalibRoutes();
+    void registerDebugRoutes();
     void runCodecSelfTest();
     void applyLimiterConfig();
 
@@ -97,6 +102,22 @@ private:
     unsigned long lastPassive_ = 0;
     bool mapDirty_ = false;
     unsigned long mapSaved_ = 0;
+
+    // ── Debug-Modus und Steuer-Journal ──────────────────────────────────────
+    /**
+     * Beides wird aus `loop()` gefuettert, nicht aus dem NimBLE-Callback.
+     *
+     * Der Ring muss im Callback sitzen, weil die Rohbytes nur dort existieren —
+     * das ist ein memcpy und sonst nichts. Das Journal rechnet und urteilt, und
+     * das hat im Host-Task nichts zu suchen. Die beiden Zaehler sagen `loop()`,
+     * ob seit dem letzten Durchlauf ein neuer Messwert oder eine neue Quittung
+     * angekommen ist.
+     */
+    void loopDebug(unsigned long now);
+    void appendDebugJson(JsonObject obj) const;
+    uint32_t liveSeen_ = 0;
+    uint32_t respSeen_ = 0;
+    uint16_t judgedSeen_ = 0;
 
     const char* codecSelfTest_ = "nicht gelaufen";
 };

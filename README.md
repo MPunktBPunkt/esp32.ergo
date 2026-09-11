@@ -8,7 +8,10 @@
 > **Trainingsrechner und BLE-Steuerung für das Ergometer Hammer Varon XTR II** — ERG-Emulation über die Widerstandsstufe, Pulsführung, Trainingszonen, Profile und Web-UI. Anbindung an [iobroker.esp-hub](https://github.com/MPunktBPunkt/iobroker.esp-hub).
 
 > [!WARNING]
-> **Stand: Fundament und Messtechnik stehen, Trainingslogik fehlt.** Hostgetestet sind FTMS-Codec, Capability-Ableitung, Limiter, Kennfläche und Sweep-Ablauf (79 Fälle). Auf Hardware laufen WLAN, Web, OTA, Hub-Heartbeat sowie BLE-Central mit zwei Links, FTMS-Client, Handsteuerung über den Limiter und die geführte Kalibrierung. **Noch nicht da:** Steuermodi, Zonen, Profile, Workouts — also alles, was aus dem Gerät einen Trainingsrechner macht.
+> **Stand: Fundament und Messtechnik stehen, Trainingslogik fehlt.** Hostgetestet sind FTMS-Codec, Capability-Ableitung, Limiter, Kennfläche, Sweep-Ablauf, Steuer-Journal und Rohbyte-Ring (119 Fälle). Auf Hardware laufen WLAN, Web, OTA, Hub-Heartbeat sowie BLE-Central mit zwei Links, FTMS-Client, Handsteuerung über den Limiter, die geführte Kalibrierung und der Debug-Mitschnitt. **Noch nicht belegt:** dass eine gestellte Stufe die Last tatsächlich ändert — die erste Hardware-Session hat lauter Erfolgsquittungen ohne Wirkung gesehen, Ursache gefunden und behoben (siehe [UPDATE_CAPS_FIX.md](debug/UPDATE_CAPS_FIX.md)). Damit sich das nicht wiederholt, beurteilt die Firmware jeden Schreibvorgang jetzt selbst — kadenznormiert, und mit „weiß nicht" als zulässigem Ergebnis. **Noch nicht da:** Steuermodi, Zonen, Profile, Workouts — also alles, was aus dem Gerät einen Trainingsrechner macht.
+
+> [!NOTE]
+> **Wer hier weiterarbeitet, fängt bei [`STATE.md`](STATE.md) an.** Dort stehen der aktuelle Stand, der eine offene Beweis, was ohne Fahrer am Rad möglich ist, die harten Regeln und die nächsten Schritte. Die Notizen in `debug/` sind Protokolle einzelner Arbeitsschritte und werden nicht nachgeführt.
 
 ---
 
@@ -151,7 +154,7 @@ Heartbeat-Feld `fwType`: **`ergo`**
 
 Die Oberfläche hat die zehn Reiter aus [WEBINTERFACE.md](docs/ergometer/WEBINTERFACE.md) §7 — **Ride, Workouts, Tests, Verlauf, Profile, Geräte, Kalibrierung, Debug, Einstellungen, OTA**. Sechs davon tragen Inhalt, vier sind Platzhalter mit Zielversion. Ohne JavaScript zeigt die Seite alle Abschnitte untereinander und das OTA-Formular sendet native; diese Seite ist der Rückweg nach einem Fehlflash und darf nicht an einem Skriptfehler hängen.
 
-Erreichbar sind bisher die Shell (`/`, `/ota`, `/ota-upload`, `/api/status`, `/api/config/get` `/save`, `/api/system/restart`, `/events`), die BLE-Endpunkte (`/api/ble/scan/start` `/stop`, `/api/ble/devices`, `/api/ble/connect` `/disconnect` `/forget` `/reconnect`), die Handsteuerung (`/api/control/request` `/reset` `/start` `/stop` `/level` `/power`) und die Kalibrierung (`/api/calib/sweep/start` `/stop`, `/api/calib/map`, `/api/calib/clear`).
+Erreichbar sind bisher die Shell (`/`, `/ota`, `/ota-upload`, `/api/status`, `/api/config/get` `/save`, `/api/system/restart`, `/events`), die BLE-Endpunkte (`/api/ble/scan/start` `/stop`, `/api/ble/devices`, `/api/ble/connect` `/disconnect` `/forget` `/reconnect`), die Handsteuerung (`/api/control/request` `/reset` `/start` `/stop` `/level` `/power`) die Kalibrierung (`/api/calib/sweep/start` `/stop`, `/api/calib/map`, `/api/calib/clear`) und der Debug-Modus (`/api/debug/ring`, `/api/debug/clear`, `/api/debug/export`).
 
 | Endpoint | Funktion |
 |----------|----------|
@@ -168,7 +171,8 @@ Erreichbar sind bisher die Shell (`/`, `/ota`, `/ota-upload`, `/api/status`, `/a
 | `POST /api/workout/put` · `GET /api/workout/download` `/validate` | Editor (v0.2) |
 | `GET/POST /api/test/list` `/start` `/result` `/accept-ftp` | Geführte Tests (v0.2) |
 | `GET/POST /api/calib/…` | Kennfläche, Sweep |
-| `GET /api/debug/export` | NDJSON-Rohbytes im Sondenformat |
+| `POST /api/debug/ring` `/clear` | Mitschnitt ein/aus, Ausdünnung, leeren |
+| `GET /api/debug/export` | NDJSON-Rohbytes im Sondenformat — direkt als Fixture verwertbar |
 | `GET/POST /api/config/get` `/save` | Config |
 | `/events` | SSE (Live-Updates) |
 

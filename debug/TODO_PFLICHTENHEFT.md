@@ -1,5 +1,12 @@
 # ANWEISUNG: Pflichtenheft weiter einarbeiten
 
+> **Protokoll, keine Anweisung mehr.** Die Schritte 1 bis 4 der Tabelle unten
+> sind erledigt, der Kalibrier-Sweep unter „Nicht in diesem Schritt" ist gebaut.
+> Aktueller Stand und nächste Schritte: **[`STATE.md`](../STATE.md)**.
+>
+> Weiterhin gültig ist der Abschnitt **Harte Regeln** — er ist inzwischen nach
+> `STATE.md` §6 übernommen und dort um zwei Punkte ergänzt.
+
 **Status Connectivity (erledigt):** `.88` läuft `ergo 0.1.0-dev`, OTA Probe→Ergo und Ergo→Ergo ok,
 `codecSelfTest=ok`, Hub-Heartbeat ok. Details: `UPDATE_CONNECTIVITY.md`.
 
@@ -27,13 +34,17 @@ Nächster Baustein laut Architektur und `UPDATE_CONNECTIVITY.md`: **BleCentral +
 
 Priorität Coach v0.1 (nicht die ganze Web-UI auf einmal):
 
-| Schritt | Ziel |
-|---------|------|
-| 1 | `BleCentral`: Scan, Connect, Remember/Forget — Rollen Bike + optional HR |
-| 2 | `FtmsClient`: GATT `0x1826`, Features/Ranges → `ftms::Capabilities`, Notify `0x2AD2`/`0x2AD9` |
-| 3 | Limiter verdrahten als einzigen Schreibpfad |
-| 4 | Live-Werte in `/api/status` + SSE; Hub-`ios` über `SHELL` hinaus |
-| 5 | Steuermodi laut Pflichtenheft: `OFF`, `MANUAL_LEVEL`, … — erst wenn Write-Pfad steht |
+| Schritt | Ziel | Stand |
+|---------|------|-------|
+| 1 | `BleCentral`: Scan, Connect, Remember/Forget — Rollen Bike + optional HR | erledigt |
+| 2 | `FtmsClient`: GATT `0x1826`, Features/Ranges → `ftms::Capabilities`, Notify `0x2AD2`/`0x2AD9` | erledigt |
+| 3 | Limiter verdrahten als einzigen Schreibpfad | erledigt |
+| 4 | Live-Werte in `/api/status` + SSE; Hub-`ios` über `SHELL` hinaus | erledigt |
+| 5 | Steuermodi laut Pflichtenheft: `OFF`, `MANUAL_LEVEL`, … — erst wenn Write-Pfad steht | **offen** — und der Write-Pfad ist weiterhin nicht belegt, siehe `STATE.md` §3 |
+
+Seitdem zusätzlich gebaut, außerhalb dieser Liste: Kalibrier-Sweep mit
+Kennfläche (`PowerMap`, `SweepRunner`), Debug-Modus (`DebugRing`) und
+Steuer-Journal (`ControlJournal`).
 
 Vorlage BLE-Central: `esp32.ftmsprobe` (`BleProbe` → hier `BleCentral`/`FtmsClient`).  
 HR-Muster: `esp32.heartrate`.

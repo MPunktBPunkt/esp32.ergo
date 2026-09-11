@@ -89,7 +89,13 @@ struct Capabilities {
     int16_t levelMaxTenths() const;
     uint16_t levelStepTenths() const;
 
-    /** Kann die gewuenschte Stufe ueberhaupt in uint8-Zehnteln stehen? */
+    /**
+     * Geht `04` als sint16 hinaus?
+     *
+     * Antwortet aus `resistanceFormat`, nicht aus dem Stellbereich. Das ist
+     * nicht dasselbe: der Varon nimmt Werte an, die in ein uint8 passen, tut
+     * aber auf die schmale Form nichts und quittiert sie trotzdem mit Success.
+     */
     bool needsWideResistance() const;
 };
 

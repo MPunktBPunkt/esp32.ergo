@@ -37,7 +37,14 @@ void App::begin() {
 
     applyLimiterConfig();
     loadPowerMap();
+    journal.begin(ergo::JournalConfig{});
+    // Der Ring bleibt nach dem Booten aus und wird bewusst nicht in der
+    // Konfiguration gemerkt. Ein Mitschnitt, der einen Neustart ueberlebt und
+    // dann monatelang unbemerkt mitlaeuft, ist kein Werkzeug, sondern ein Leck.
+    ring.setEnabled(false);
     ftms.begin(&limiter);
+    ftms.setDebugRing(&ring);
+    ftms.setJournal(&journal);
     ble.begin(&config);
     ble.setLinkEvent([](ergo::Role role, bool up) { App::instance().onLink(role, up); });
 
@@ -276,6 +283,7 @@ void App::buildStatusJson(JsonDocument& doc) {
     lim["armed"] = limiter.armed();
 
     appendCalibJson(doc["calib"].to<JsonObject>());
+    appendDebugJson(doc["debug"].to<JsonObject>());
 }
 
 void App::buildHeartbeat(JsonDocument& doc) {
@@ -424,6 +432,7 @@ void App::registerRoutes() {
     registerBleRoutes();
     registerControlRoutes();
     registerCalibRoutes();
+    registerDebugRoutes();
 }
 
 // ────────────────────────────────────────────────────────────── BLE-Routen
@@ -856,6 +865,164 @@ void App::registerCalibRoutes() {
     });
 }
 
+// ─────────────────────────────────────── Debug-Modus und Steuer-Journal
+
+/**
+ * Beides wird hier bedient und nicht im NimBLE-Callback.
+ *
+ * Der Ring haengt notgedrungen im Callback, weil die Rohbytes nur dort
+ * existieren — aber er tut dort auch nichts als kopieren. Das Journal rechnet,
+ * urteilt und schiebt Eintraege um; das gehoert in den Haupttask, sonst
+ * bezahlt man eine Fehlersuche mit einem Watchdog-Reset.
+ */
+void App::loopDebug(unsigned long now) {
+    const uint32_t lc = ftms.liveCount();
+    if (lc != liveSeen_) {
+        liveSeen_ = lc;
+        if (!ftms.stale(now)) {
+            journal.addSample(ftms.live().cadenceRpm(), (float)ftms.live().powerW, now);
+        }
+    }
+
+    const uint32_t rc = ftms.respCount();
+    if (rc != respSeen_) {
+        respSeen_ = rc;
+        const ftms::ControlResponse& r = ftms.lastResponse();
+        journal.noteResponse((uint8_t)r.request, (uint8_t)r.result);
+    }
+
+    journal.tick(now);
+
+    if (journal.judged() != judgedSeen_) {
+        judgedSeen_ = journal.judged();
+        const ergo::JournalEntry* e = journal.at(0);
+        if (e) {
+            Serial.printf("[JRN] %02X len=%u  %.2f -> %.2f W/rpm (%+.0f %%)  %s%s%s\n",
+                          e->cmd[0], (unsigned)e->cmdLen, e->prePerRpm, e->postPerRpm,
+                          e->changePct, ergo::effectName(e->effect),
+                          e->reason[0] ? " — " : "", e->reason);
+            // Der eine Satz, der in der letzten Hardware-Session gefehlt hat.
+            if (e->contradictory()) {
+                Serial.println(
+                    "[JRN] WIDERSPRUCH: Geraet meldet Success, die Messung sieht "
+                    "keine Wirkung");
+            }
+        }
+    }
+}
+
+void App::appendDebugJson(JsonObject obj) const {
+    JsonObject r = obj["ring"].to<JsonObject>();
+    r["on"] = ring.enabled();
+    r["count"] = ring.count();
+    r["slots"] = ergo::kRingSlots;
+    r["seen"] = ring.seen();
+    r["thinned"] = ring.thinned();
+    r["overwritten"] = ring.overwritten();
+    r["every"] = ring.ibdEvery();
+
+    JsonObject j = obj["journal"].to<JsonObject>();
+    j["judged"] = journal.judged();
+    j["worked"] = journal.worked();
+    j["noEffect"] = journal.noEffect();
+    j["unjudged"] = journal.unjudged();
+    j["contradictions"] = journal.contradictions();
+    j["pending"] = journal.open() != nullptr;
+
+    JsonArray a = j["entries"].to<JsonArray>();
+    for (uint8_t i = 0; i < journal.count(); i++) {
+        const ergo::JournalEntry* e = journal.at(i);
+        if (!e) continue;
+        JsonObject o = a.add<JsonObject>();
+        char hex[9] = {0};
+        static const char* kHex = "0123456789ABCDEF";
+        for (uint8_t k = 0; k < e->cmdLen && k < 4; k++) {
+            hex[k * 2] = kHex[(e->cmd[k] >> 4) & 0xF];
+            hex[k * 2 + 1] = kHex[e->cmd[k] & 0xF];
+        }
+        o["cmd"] = hex;
+        o["atMs"] = e->atMs;
+        o["from"] = e->fromTenths;
+        o["to"] = e->toTenths;
+        o["preRpm"] = roundf(e->preRpm * 10.0f) / 10.0f;
+        o["preWatt"] = roundf(e->preWatt);
+        o["postRpm"] = roundf(e->postRpm * 10.0f) / 10.0f;
+        o["postWatt"] = roundf(e->postWatt);
+        o["prePerRpm"] = roundf(e->prePerRpm * 100.0f) / 100.0f;
+        o["postPerRpm"] = roundf(e->postPerRpm * 100.0f) / 100.0f;
+        o["changePct"] = roundf(e->changePct);
+        o["effect"] = ergo::effectName(e->effect);
+        o["reason"] = e->reason;
+        o["acked"] = e->responseSeen;
+        o["result"] = e->responseResult;
+        o["contradictory"] = e->contradictory();
+    }
+}
+
+void App::registerDebugRoutes() {
+    server.on("/api/debug/ring", HTTP_POST, [this]() {
+        const String on = server.arg("on");
+        if (on.length()) ring.setEnabled(on == "1" || on == "true");
+        const String every = server.arg("every");
+        if (every.length()) {
+            const long n = every.toInt();
+            if (n < 0 || n > 1000) {
+                JsonDocument d;
+                d["ok"] = false;
+                d["error"] = "every ausserhalb 0..1000";
+                NetUtil::sendJson(server, 400, d);
+                return;
+            }
+            ring.setIbdEvery((uint16_t)n);
+        }
+        JsonDocument doc;
+        doc["ok"] = true;
+        // In ein Unterobjekt, nicht in die Wurzel: `to<JsonObject>()` auf dem
+        // Dokument leert es und wuerde `ok` gleich wieder wegwerfen.
+        appendDebugJson(doc["debug"].to<JsonObject>());
+        NetUtil::sendJson(server, 200, doc);
+    });
+
+    server.on("/api/debug/clear", HTTP_POST, [this]() {
+        ring.clear();
+        journal.reset();
+        judgedSeen_ = 0;
+        JsonDocument doc;
+        doc["ok"] = true;
+        NetUtil::sendJson(server, 200, doc);
+    });
+
+    /**
+     * Der Mitschnitt als JSONL — genau das Format, das
+     * `tools/make-fixtures.py` als `bike-data.jsonl` liest.
+     *
+     * Zeilenweise gestreamt statt in einen Puffer gebaut: 256 Datensaetze
+     * ergeben ueber 20 kB Text, und so viel zusammenhaengenden Heap gibt der
+     * S3 waehrend eines laufenden BLE-Links nicht gern her.
+     */
+    server.on("/api/debug/export", HTTP_GET, [this]() {
+        server.sendHeader("Content-Disposition", "attachment; filename=\"bike-data.jsonl\"");
+        server.setContentLength(CONTENT_LENGTH_UNKNOWN);
+        server.send(200, "application/x-ndjson", "");
+        char line[160];
+        String chunk;
+        chunk.reserve(1024);
+        for (uint16_t i = 0; i < ring.count(); i++) {
+            const ergo::DebugRing::Rec* rec = ring.at(i);
+            if (!rec) continue;
+            if (!ergo::DebugRing::formatLine(*rec, line, sizeof(line))) continue;
+            chunk += line;
+            chunk += '\n';
+            if (chunk.length() >= 768) {
+                server.sendContent(chunk);
+                chunk = "";
+            }
+        }
+        if (chunk.length()) server.sendContent(chunk);
+        server.sendContent("");
+    });
+}
+
 // ------------------------------------------------------------------ Loop
 
 void App::loop() {
@@ -864,6 +1031,7 @@ void App::loop() {
     hub.loop();
 
     const unsigned long now = millis();
+    loopDebug(now);
     loopCalibration(now);
 
     // Waehrend eines aktiven Links haeufiger senden — beim Fahren sind 2 s

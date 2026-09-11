@@ -1,12 +1,29 @@
-# Nachtests mit der Sonde — vor `esp32.ergo` v0.1
+# Nachtests — vor `esp32.ergo` v0.1
 
 Der erste Lauf hat FTMS bestätigt (siehe [GERAETEPROFIL.md](GERAETEPROFIL.md)).
 Sechs Fragen sind offen, und zwei davon bestimmen, ob v0.1 überhaupt
-sinnvoll gebaut werden kann. Werkzeug ist
-[`esp32.ftmsprobe`](https://github.com/MPunktBPunkt/esp32.ftmsprobe) — kein
-neuer Code nötig, nur ein Sweep-Kommando wäre eine saubere Ergänzung.
+sinnvoll gebaut werden kann.
 
 Reihenfolge ist bewusst: Test 1 und 2 zuerst, alles andere danach.
+
+> **Was sich seit dem Schreiben dieser Datei geändert hat.** Die
+> `probe-run.py`-Kommandos unten beschreiben noch die Sonde. Gefahren werden die
+> Tests inzwischen mit `esp32.ergo` selbst:
+>
+> - **Test 1 und 2** laufen über den Reiter **Kalibrierung**. Der `SweepRunner`
+>   hält Einschwingzeit und Mittelungsfenster ein, verwirft Punkte mit
+>   weggelaufener Kadenz *und weist sie als verworfen aus*, und legt das Ergebnis
+>   als Kennfläche persistent ab. Der Abschnitt „Bug in der Wirkungsauswertung"
+>   am Ende dieser Datei ist damit in Code gegossen und nicht mehr
+>   Menschendisziplin.
+> - Die **Guard-Tabelle** unter „Vorbereitung" betrifft die Sonde. In `esp32.ergo`
+>   übernimmt der `Limiter` diese Rolle; `guardAllowSim` entspricht dort der noch
+>   fehlenden Freigabe für `0x11`.
+> - **Vier der sechs Tests brauchen keinen Fahrer** — welche, steht in
+>   [`STATE.md`](../../STATE.md) §4.
+> - Vorher steht allerdings ein Beweis, den diese Datei noch nicht kennt: dass
+>   eine gestellte Stufe überhaupt wirkt. Die erste Hardware-Session hat lauter
+>   Erfolgsquittungen ohne Wirkung gesehen. `STATE.md` §2 und §3.
 
 ---
 
