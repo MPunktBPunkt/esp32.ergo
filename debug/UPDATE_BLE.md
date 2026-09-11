@@ -192,35 +192,30 @@ verbinden, dann erst Last stellen.
 
 - [x] `tools/deploy.sh --ota 192.168.178.88` (Probe-Stand war schon Ergo-Shell; BLE-Bin OK)
 - [x] Zweiter Roundtrip Ergo→Ergo (Selbst-Recovery)
-- [x] `curl …/api/status` → `codecSelfTest=ok`, `bikeLink=false`, `ble.linkCount=0`, `hubOk=true`
-- [x] UI 10 Reiter erreichbar (`GET /` 200, OTA-Form ohne JS)
-- [x] SSE `/events` liefert Status-JSON
-- [x] Control ohne Bike → `no-link` (stop/request/level/power)
-- [x] Calib ohne Bike: `GET /api/calib/map` leer; `POST …/sweep/start` → **409** `kein Bike verbunden`
-- [x] BLE-Scan start/stop funktioniert (Geräte in der Luft gefunden)
-- [ ] `GET /api/ble/devices` → **kein TC174 / kein `ftms:true`** (Bike offenbar aus)
-- [ ] Connect / Caps / Live-Daten / Control mit Last / Sweep mit Fahrer — **offen, braucht eingeschaltetes Ergometer**
+- [x] `curl …/api/status` → `codecSelfTest=ok`, Shell/Hub/SSE/UI OK
+- [x] Control/Calib ohne Link korrekt abgelehnt
+- [x] BLE-Scan start/stop OK
+- [x] Bike **TC174** `c2:32:a5:1e:bf:b5` verbunden (`READY`, erinnert)
+- [x] Caps: `levels=16`, `strategy=EMULATE`, `powerTrusted=false`,
+      `resistanceHex=0A00A0000A00`, `powerRangeHex=fehlt`, `stale=false`, Notifies laufen
+- [x] `POST /api/control/power?watt=100` → **denied** „Geraet meldet kein Wattziel“
+- [x] `POST /api/control/level?tenths=20` → ok; Rampe nach 60 in Schritten 20→30→40→50→60
+      (zu früh → `deferred`); Bike quittiert `SetTargetResistance` Success
+- [x] `POST /api/control/stop` → sofort, Schattenstufe zurück auf 10, `StopPause` Success
+- [x] Leerer-Sattel-Sweep `coarse=1&settleS=3&windowS=5` → startet, Punkt verworfen
+      „Kadenz zu niedrig“, dann **ABORTED**, Stop gesendet, Map `levels=16` leer
+- [ ] Live-Leistung/Kadenz unter Tritt (Sattel war leer → 0 W / 0 rpm)
+- [ ] Bike aus/an → LOST / Reconnect
+- [ ] Pulsgurt
+- [ ] Sweep Test 1/2 **mit Fahrer**
 
-Hub: MAC `68B6B329339C`, version `0.1.0-dev`, `ios.ergo_state=IDLE`.
+Hinweis: `caps.wide=false` (Checkliste erwartete wide/sint16). Writes wurden trotzdem
+mit Success quittiert — Wirkung unter Last noch mit Fahrer bestätigen.
 
-### Noch offen (braucht Hardware vor Ort)
+Hub: MAC `68B6B329339C`, `ios.ergo_state` wechselt mit Link (IDLE→…).
 
-- [ ] `POST /api/ble/connect` mit Bike-MAC
-- [ ] `/api/status` → `ftms.caps.levels = 16`, `strategy = emulate-resistance`,
-      `powerTrusted = false`, `powerRangeHex = fehlt`
-- [ ] treten → `ftms.data.powerW` / `cadenceRpm`, `stale = false`
-- [ ] `POST /api/control/request` → `controlGranted = true`
-- [ ] `POST /api/control/level?tenths=60` → `deferred`/`ok` + Rampe
-- [ ] `POST /api/control/power?watt=100` → **`denied`** (Wattziel ohne 0x2AD8)
-- [ ] `POST /api/control/stop` → Last sofort weg
-- [ ] Bike aus/an → LOST / Reconnect / READY
-- [ ] Pulsgurt → `hr.attached`
-- [ ] Leerer-Sattel-Sweep verkürzt, dann Test 1/2 mit Fahrer
-
-**Risiko:** das ist die erste Firmware, die an diesem Gerät Last stellt. Nicht
-mit jemandem auf dem Rad testen. Erster Versuch mit leerem Sattel und Hand am
-Netzschalter — die Rampe begrenzt den Anstieg auf eine Stufe pro zwei Sekunden,
-aber getestet ist das bisher nur nativ, nicht am Gerät.
+**Risiko:** erste Last-stellende Firmware — Rampe und Stop am Gerät verifiziert (leer).
+Fahrer-Sweep und Reconnect noch offen.
 
 ### Sweep erst danach, und erst dann mit jemandem auf dem Rad
 
