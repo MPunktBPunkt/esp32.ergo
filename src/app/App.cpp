@@ -376,6 +376,18 @@ void App::buildStatusJson(JsonDocument& doc) {
         else if (ap->onHrLoss == ergo::HrLossPolicy::Stop) loss = "stop";
         reha["onHrLoss"] = loss;
     }
+    JsonObject wo = doc["workout"].to<JsonObject>();
+    wo["name"] = workout.name();
+    wo["state"] = ergo::WorkoutEngine::stateName(workout.state());
+    wo["stepIndex"] = workout.stepIndex();
+    wo["stepCount"] = workout.stepCount();
+    wo["label"] = woSnap_.label ? woSnap_.label : "";
+    wo["desiredW"] = woSnap_.desiredW;
+    wo["hrMax"] = woSnap_.hrMax;
+    wo["hrSoft"] = woSnap_.hrSoft;
+    wo["stepRemainingS"] = woSnap_.stepRemainingS;
+    wo["totalRemainingS"] = woSnap_.totalRemainingS;
+    wo["elapsedS"] = woSnap_.elapsedS;
     if (const ergo::Profile* ap = profiles.active()) {
         doc["profile"] = ap->id;
         JsonObject po = doc["profileInfo"].to<JsonObject>();
@@ -702,6 +714,7 @@ void App::registerControlRoutes() {
         powerCtl.reset();
         hrCtl.reset();
         rehaCtl.reset();
+        workout.stop();
         reply(r);
     });
     server.on("/api/control/request", HTTP_POST,
@@ -741,13 +754,13 @@ void App::registerControlRoutes() {
         }
         if (m != ergo::ControlMode::Off && m != ergo::ControlMode::ManualLevel &&
             m != ergo::ControlMode::ManualErg && m != ergo::ControlMode::HrHold &&
-            m != ergo::ControlMode::Reha) {
+            m != ergo::ControlMode::Reha && m != ergo::ControlMode::Workout) {
             NetUtil::sendError(server, 501, "Modus noch nicht implementiert");
             return;
         }
         if (m != ergo::ControlMode::Off && !requireProfile()) return;
         if ((m == ergo::ControlMode::ManualErg || m == ergo::ControlMode::HrHold ||
-             m == ergo::ControlMode::Reha) &&
+             m == ergo::ControlMode::Reha || m == ergo::ControlMode::Workout) &&
             (!powerMap.ready() || powerMap.pointCount() == 0)) {
             NetUtil::sendError(server, 409, "Kennfläche leer — zuerst Kalibrierung");
             return;
@@ -846,13 +859,54 @@ void App::registerControlRoutes() {
             doc["hrSoft"] = rehaCtl.hrSoft();
             doc["durationS"] = rehaCtl.durationS();
             doc["mapPoints"] = powerMap.pointCount();
+            workout.stop();
+        }
+        if (m == ergo::ControlMode::Workout) {
+            powerCtl.reset();
+            hrCtl.reset();
+            rehaCtl.reset();
+            float scale = server.hasArg("scale") ? server.arg("scale").toFloat() : 1.0f;
+            if (hasBody && !body["scale"].isNull()) scale = body["scale"].as<float>();
+            if (scale <= 0.0f) scale = 1.0f;
+            if (const ergo::Profile* ap = profiles.active()) {
+                workout.setFtpW(ap->ftpW);
+                rehaCtl.setLossPolicy(ap->onHrLoss);
+            } else {
+                workout.setFtpW(0);
+                rehaCtl.setLossPolicy(ergo::HrLossPolicy::Reduce);
+            }
+            if (!workout.loadBuiltinPhysio(scale)) {
+                NetUtil::sendError(server, 500, "Physio-Programm konnte nicht geladen werden");
+                return;
+            }
+            rehaCtl.setDurationS(0);
+            if (!workout.start(millis())) {
+                NetUtil::sendError(server, 500, "Workout-Start fehlgeschlagen");
+                return;
+            }
+            woSnap_ = workout.tick(millis());
+            rehaCtl.setDesiredW(woSnap_.desiredW);
+            rehaCtl.setHrLimits(woSnap_.hrSoft, woSnap_.hrMax ? woSnap_.hrMax : 120);
+            rehaCtl.reset();
+            control.setPowerTargetW(woSnap_.desiredW);
+            powerCtl.setTargetW(woSnap_.desiredW);
+            doc["workout"] = workout.name();
+            doc["scale"] = scale;
+            doc["steps"] = workout.stepCount();
+            doc["mapPoints"] = powerMap.pointCount();
+        }
+        if (m == ergo::ControlMode::ManualErg || m == ergo::ControlMode::HrHold) {
+            workout.stop();
         }
         if (m == ergo::ControlMode::Off && ble.ready(ergo::Role::Bike)) {
             ftms.stop(millis());
             powerCtl.reset();
             hrCtl.reset();
             rehaCtl.reset();
+            workout.stop();
             doc["stopSent"] = true;
+        } else if (m == ergo::ControlMode::Off) {
+            workout.stop();
         }
         NetUtil::sendJson(server, 200, doc);
     });
@@ -977,6 +1031,109 @@ void App::registerControlRoutes() {
         doc["hrMax"] = rehaCtl.hrMax();
         doc["hrSoft"] = rehaCtl.hrSoft();
         doc["durationS"] = rehaCtl.durationS();
+        NetUtil::sendJson(server, 200, doc);
+    });
+
+    auto workoutJson = [this](JsonDocument& doc) {
+        doc["ok"] = true;
+        doc["mode"] = ergo::controlModeName(control.mode());
+        doc["name"] = workout.name();
+        doc["state"] = ergo::WorkoutEngine::stateName(workout.state());
+        doc["stepIndex"] = workout.stepIndex();
+        doc["stepCount"] = workout.stepCount();
+        doc["label"] = woSnap_.label ? woSnap_.label : "";
+        doc["desiredW"] = woSnap_.desiredW;
+        doc["stepRemainingS"] = woSnap_.stepRemainingS;
+        doc["totalRemainingS"] = woSnap_.totalRemainingS;
+    };
+
+    server.on("/api/workout/start", HTTP_POST, [this, requireProfile, workoutJson]() {
+        if (!requireProfile()) return;
+        if (!powerMap.ready() || powerMap.pointCount() == 0) {
+            NetUtil::sendError(server, 409, "Kennfläche leer — zuerst Kalibrierung");
+            return;
+        }
+        float scale = server.hasArg("scale") ? server.arg("scale").toFloat() : 1.0f;
+        if (scale <= 0.0f) scale = 1.0f;
+        if (!control.setMode(ergo::ControlMode::Workout)) {
+            NetUtil::sendError(server, 409, "Modus abgelehnt");
+            return;
+        }
+        powerCtl.reset();
+        hrCtl.reset();
+        rehaCtl.reset();
+        if (const ergo::Profile* ap = profiles.active()) {
+            workout.setFtpW(ap->ftpW);
+            rehaCtl.setLossPolicy(ap->onHrLoss);
+        }
+        workout.loadBuiltinPhysio(scale);
+        rehaCtl.setDurationS(0);
+        workout.start(millis());
+        woSnap_ = workout.tick(millis());
+        rehaCtl.setDesiredW(woSnap_.desiredW);
+        rehaCtl.setHrLimits(woSnap_.hrSoft, woSnap_.hrMax ? woSnap_.hrMax : 120);
+        rehaCtl.reset();
+        control.setPowerTargetW(woSnap_.desiredW);
+        powerCtl.setTargetW(woSnap_.desiredW);
+        JsonDocument doc;
+        workoutJson(doc);
+        doc["scale"] = scale;
+        NetUtil::sendJson(server, 200, doc);
+    });
+    server.on("/api/workout/skip", HTTP_POST, [this, workoutJson]() {
+        if (!control.allowsWorkout()) {
+            NetUtil::sendError(server, 409, "kein Workout aktiv");
+            return;
+        }
+        workout.skip(millis());
+        woSnap_ = workout.tick(millis());
+        if (woSnap_.finished) {
+            if (ble.ready(ergo::Role::Bike)) ftms.stop(millis());
+            control.setMode(ergo::ControlMode::Off);
+            powerCtl.reset();
+            rehaCtl.reset();
+            workout.stop();
+        } else {
+            rehaCtl.setDesiredW(woSnap_.desiredW);
+            rehaCtl.setHrLimits(woSnap_.hrSoft, woSnap_.hrMax ? woSnap_.hrMax : 120);
+            control.setPowerTargetW(woSnap_.desiredW);
+            powerCtl.setTargetW(woSnap_.desiredW);
+        }
+        JsonDocument doc;
+        workoutJson(doc);
+        NetUtil::sendJson(server, 200, doc);
+    });
+    server.on("/api/workout/pause", HTTP_POST, [this, workoutJson]() {
+        if (!control.allowsWorkout()) {
+            NetUtil::sendError(server, 409, "kein Workout aktiv");
+            return;
+        }
+        workout.pause(millis());
+        woSnap_.state = ergo::WorkoutState::Paused;
+        JsonDocument doc;
+        workoutJson(doc);
+        NetUtil::sendJson(server, 200, doc);
+    });
+    server.on("/api/workout/resume", HTTP_POST, [this, workoutJson]() {
+        if (!control.allowsWorkout()) {
+            NetUtil::sendError(server, 409, "kein Workout aktiv");
+            return;
+        }
+        workout.resume(millis());
+        woSnap_ = workout.tick(millis());
+        JsonDocument doc;
+        workoutJson(doc);
+        NetUtil::sendJson(server, 200, doc);
+    });
+    server.on("/api/workout/stop", HTTP_POST, [this, workoutJson]() {
+        if (ble.ready(ergo::Role::Bike)) ftms.stop(millis());
+        control.setMode(ergo::ControlMode::Off);
+        powerCtl.reset();
+        rehaCtl.reset();
+        workout.stop();
+        woSnap_ = {};
+        JsonDocument doc;
+        workoutJson(doc);
         NetUtil::sendJson(server, 200, doc);
     });
 }
@@ -1253,6 +1410,13 @@ void App::loopErg(unsigned long now) {
         rehaCtl.lossPolicy() == ergo::HrLossPolicy::Freeze) {
         return;
     }
+    if (control.allowsWorkout() && rehaCtl.lost() &&
+        rehaCtl.lossPolicy() == ergo::HrLossPolicy::Freeze) {
+        return;
+    }
+    if (control.allowsWorkout() && workout.state() == ergo::WorkoutState::Paused) {
+        return;
+    }
     if (!ble.ready(ergo::Role::Bike) || !ftms.attached()) return;
     if (sweep.running()) return;
 
@@ -1272,6 +1436,7 @@ void App::loopErg(unsigned long now) {
     if (r == ergo::FtmsClient::Result::Ok) {
         const char* tag = "ERG";
         if (control.allowsHrHold()) tag = "HR";
+        else if (control.allowsWorkout()) tag = "WO";
         else if (control.allowsReha()) tag = "REHA";
         Serial.printf("[%s] Ziel %.0f W → Stufe %d%s (Ist~%.0f W, rpm=%.0f)\n", tag, t.targetW,
                       (int)t.levelTenths, t.ceiling ? " CEILING" : "", t.smoothedW, rpm);
@@ -1330,7 +1495,53 @@ void App::loopHr(unsigned long now) {
 void App::loopReha(unsigned long now) {
     if (!control.allowsReha()) return;
     if (sweep.running()) return;
+    applyRehaCap(now, false);
+}
 
+void App::loopWorkout(unsigned long now) {
+    if (!control.allowsWorkout()) return;
+    if (sweep.running()) return;
+
+    const ergo::WorkoutEngine::Tick wt = workout.tick(now);
+    woSnap_ = wt;
+    if (wt.finished || wt.state == ergo::WorkoutState::Done) {
+        Serial.println("[WO] Programm fertig — STOP");
+        if (ble.ready(ergo::Role::Bike)) ftms.stop(now);
+        control.setMode(ergo::ControlMode::Off);
+        powerCtl.reset();
+        rehaCtl.reset();
+        workout.stop();
+        return;
+    }
+    if (wt.state == ergo::WorkoutState::Paused) {
+        // Keine neuen Wattziele; Stufe halten.
+        return;
+    }
+    if (wt.justAdvanced || fabsf(rehaCtl.desiredW() - wt.desiredW) > 0.5f) {
+        Serial.printf("[WO] Schritt %u/%u %s — %.0f W, Puls ≤ %u\n",
+                      (unsigned)(wt.stepIndex + 1), (unsigned)wt.stepCount, wt.label,
+                      wt.desiredW, (unsigned)wt.hrMax);
+        rehaCtl.setDesiredW(wt.desiredW);
+        rehaCtl.setHrLimits(wt.hrSoft ? wt.hrSoft : (wt.hrMax > 5 ? wt.hrMax - 5 : wt.hrMax),
+                            wt.hrMax ? wt.hrMax : 220);
+        rehaCtl.setDurationS(0);
+        // Integral/Zustand behalten, nur Soll nachziehen — Interventionszaehler
+        // bleibt ueber Schritte.
+        if (wt.justAdvanced && wt.stepIndex == 0) rehaCtl.reset();
+        else {
+            // desired schon gesetzt; effective nicht ueber desired
+            if (rehaCtl.effectiveW() > wt.desiredW) {
+                /* setDesiredW klemmt schon */
+            }
+        }
+        control.setPowerTargetW(wt.desiredW);
+        powerCtl.setTargetW(wt.desiredW);
+    }
+    applyRehaCap(now, true);
+}
+
+void App::applyRehaCap(unsigned long now, bool fromWorkout) {
+    const char* tag = fromWorkout ? "WO" : "REHA";
     const uint8_t hr = effectiveHr();
     const bool hrFresh = (resolveHrSource() != ergo::HrSource::None) && hr > 0;
     if (const ergo::Profile* ap = profiles.active()) {
@@ -1339,12 +1550,13 @@ void App::loopReha(unsigned long now) {
 
     const ergo::RehaController::Tick rt = rehaCtl.tick(now, hr, hrFresh);
 
-    if (rt.finished) {
-        Serial.println("[REHA] Dauer erreicht — STOP");
+    if (!fromWorkout && rt.finished) {
+        Serial.printf("[%s] Dauer erreicht — STOP\n", tag);
         if (ble.ready(ergo::Role::Bike)) ftms.stop(now);
         control.setMode(ergo::ControlMode::Off);
         powerCtl.reset();
         rehaCtl.reset();
+        workout.stop();
         return;
     }
 
@@ -1352,13 +1564,14 @@ void App::loopReha(unsigned long now) {
         static unsigned long lastLossLog = 0;
         if (now - lastLossLog > 2000) {
             lastLossLog = now;
-            Serial.printf("[REHA] Pulsverlust — Politik %d\n", (int)rt.lossPolicy);
+            Serial.printf("[%s] Pulsverlust — Politik %d\n", tag, (int)rt.lossPolicy);
         }
         if (rt.lossPolicy == ergo::HrLossPolicy::Stop) {
             if (ble.ready(ergo::Role::Bike)) ftms.stop(now);
             control.setMode(ergo::ControlMode::Off);
             powerCtl.reset();
             rehaCtl.reset();
+            workout.stop();
             return;
         }
         if (rt.lossPolicy == ergo::HrLossPolicy::Freeze) return;
@@ -1375,7 +1588,7 @@ void App::loopReha(unsigned long now) {
         static unsigned long lastCapLog = 0;
         if (now - lastCapLog > 3000) {
             lastCapLog = now;
-            Serial.printf("[REHA] Deckel: %.0f → %.0f W (HR %u, Eingriffe %u)\n", rt.desiredW,
+            Serial.printf("[%s] Deckel: %.0f → %.0f W (HR %u, Eingriffe %u)\n", tag, rt.desiredW,
                           rt.effectiveW, (unsigned)hr, (unsigned)rt.interventions);
         }
     }
@@ -1770,6 +1983,7 @@ void App::loop() {
     loopCalibration(now);
     loopHr(now);
     loopReha(now);
+    loopWorkout(now);
     loopErg(now);
 
     // Waehrend eines aktiven Links haeufiger senden — beim Fahren sind 2 s

@@ -68,9 +68,16 @@ static void test_reha(void) {
 
 static void test_unimplemented_modes(void) {
     ControlState c;
-    TEST_ASSERT_FALSE(c.setMode(ControlMode::Workout));
     TEST_ASSERT_FALSE(c.setMode(ControlMode::Sim));
     TEST_ASSERT_EQUAL_INT((int)ControlMode::Off, (int)c.mode());
+}
+
+static void test_workout_mode(void) {
+    ControlState c;
+    TEST_ASSERT_TRUE(c.setMode(ControlMode::Workout));
+    TEST_ASSERT_TRUE(c.allowsWorkout());
+    TEST_ASSERT_TRUE(c.allowsErg());
+    TEST_ASSERT_TRUE(c.setPowerTargetW(60.0f));
 }
 
 static void test_token_parse(void) {
@@ -87,6 +94,8 @@ static void test_token_parse(void) {
     TEST_ASSERT_EQUAL_INT((int)ControlMode::Reha, (int)m);
     TEST_ASSERT_TRUE(controlModeFromToken("physio", m));
     TEST_ASSERT_EQUAL_INT((int)ControlMode::Reha, (int)m);
+    TEST_ASSERT_TRUE(controlModeFromToken("workout", m));
+    TEST_ASSERT_EQUAL_INT((int)ControlMode::Workout, (int)m);
     TEST_ASSERT_FALSE(controlModeFromToken("nope", m));
 }
 
@@ -96,6 +105,7 @@ static void test_names(void) {
     TEST_ASSERT_EQUAL_STRING("MANUAL_ERG", controlModeName(ControlMode::ManualErg));
     TEST_ASSERT_EQUAL_STRING("HR_HOLD", controlModeName(ControlMode::HrHold));
     TEST_ASSERT_EQUAL_STRING("REHA", controlModeName(ControlMode::Reha));
+    TEST_ASSERT_EQUAL_STRING("WORKOUT", controlModeName(ControlMode::Workout));
 }
 
 void setUp(void) {}
@@ -108,6 +118,7 @@ int main(int, char**) {
     RUN_TEST(test_manual_erg);
     RUN_TEST(test_manual_hr);
     RUN_TEST(test_reha);
+    RUN_TEST(test_workout_mode);
     RUN_TEST(test_off_clears_target);
     RUN_TEST(test_level_while_off_denied);
     RUN_TEST(test_unimplemented_modes);

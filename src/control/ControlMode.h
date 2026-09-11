@@ -3,9 +3,9 @@
 #include <stdint.h>
 
 /**
- * Steuermodus — OFF, MANUAL_LEVEL, MANUAL_ERG, HR_HOLD, REHA.
+ * Steuermodus — OFF … REHA, WORKOUT.
  *
- * Arduino-frei. WORKOUT / SIM bleiben reserviert.
+ * Arduino-frei. SIM bleibt reserviert.
  */
 namespace ergo {
 
@@ -37,13 +37,15 @@ public:
     bool allowsLevelWrite() const { return mode_ == ControlMode::ManualLevel; }
     bool allowsErg() const {
         return mode_ == ControlMode::ManualErg || mode_ == ControlMode::HrHold ||
-               mode_ == ControlMode::Reha;
+               mode_ == ControlMode::Reha || mode_ == ControlMode::Workout;
     }
     bool allowsHrHold() const { return mode_ == ControlMode::HrHold; }
     bool allowsReha() const { return mode_ == ControlMode::Reha; }
+    bool allowsWorkout() const { return mode_ == ControlMode::Workout; }
     bool allowsAnyLoadWrite() const {
         return mode_ == ControlMode::ManualLevel || mode_ == ControlMode::ManualErg ||
-               mode_ == ControlMode::HrHold || mode_ == ControlMode::Reha;
+               mode_ == ControlMode::HrHold || mode_ == ControlMode::Reha ||
+               mode_ == ControlMode::Workout;
     }
     bool sessionActive() const { return mode_ != ControlMode::Off; }
 

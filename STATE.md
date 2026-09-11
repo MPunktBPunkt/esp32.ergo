@@ -5,8 +5,8 @@ zuerst diese Datei und danach gezielt weiter. Alle anderen Notizen in `debug/`
 sind Protokolle einzelner Arbeitsschritte und beschreiben den Stand *zu ihrem
 Zeitpunkt* — sie werden nicht nachgeführt.
 
-Stand dieser Datei: **2026-09-12**. Ride-UI-Politur
-([debug/UPDATE_RIDE_UI.md](debug/UPDATE_RIDE_UI.md)). Davor: REHA, HR_HOLD, ERG.
+Stand dieser Datei: **2026-09-12**. WorkoutEngine (Physio)
+([debug/UPDATE_WORKOUT.md](debug/UPDATE_WORKOUT.md)). Davor: Ride-UI, REHA, HR_HOLD.
 
 ---
 
@@ -106,8 +106,10 @@ für die Wirkung — und `guardAllowSim` muss dafür von `false` auf `true`.
 7. ~~**Reha-Programm**~~ — festes Watt + HR-Deckel ([debug/UPDATE_REHA.md](debug/UPDATE_REHA.md)).
 8. ~~**Ride-UI-Politur**~~ — Ist/Ziel, Deckelbalken, Start-Hinweis
    ([debug/UPDATE_RIDE_UI.md](debug/UPDATE_RIDE_UI.md)).
-9. Optional: Nachtest 3–4 (Fahrer) / WorkoutEngine (v0.2).
-10. ~~`.github/workflows/build.yml`~~ / ~~6a~~ / Profile / OFF|LEVEL — erledigt.
+9. ~~**WorkoutEngine (Physio)**~~ — 3 steady-Schritte + Deckel
+   ([debug/UPDATE_WORKOUT.md](debug/UPDATE_WORKOUT.md)).
+10. Optional: Nachtest 3–4 / LittleFS-Workouts / Editor.
+11. ~~`.github/workflows/build.yml`~~ / ~~6a~~ / Profile / OFF|LEVEL — erledigt.
 
 Noch offen aus dem Hardware-Bericht: ob `Start/Resume` am Varon wirklich nötig
 ist — der UI-Hinweis steht; Messung am Rad offen.
@@ -123,7 +125,7 @@ ist — der UI-Hinweis steht; Messung am Rad offen.
 3. **Arduino-frei und hosttestbar bleiben:** `FtmsCodec`, `FtmsCapabilities`,
    `Limiter`, `PowerMap`, `SweepRunner`, `ControlJournal`, `DebugRing`,
    `ProfileStore`, `ControlMode`, `PowerController`, `HrController`,
-   `RehaController`.
+   `RehaController`, `WorkoutEngine`.
 4. **Jeder FTMS-Write nur durch den Limiter.** Es gibt keine öffentliche Methode,
    die rohe Bytes an den Control Point schreibt; alles läuft durch
    `FtmsClient::send()`. Ein Bypass müsste die Klasse ändern, nicht sie nur

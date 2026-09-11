@@ -16,12 +16,13 @@
 #include "control/PowerMap.h"
 #include "control/RehaController.h"
 #include "control/SweepRunner.h"
+#include "control/WorkoutEngine.h"
 #include "core/ConfigStore.h"
 #include "core/HubClient.h"
 #include "core/Profile.h"
 
 /**
- * Shell, BLE, Kalibrierung, Profile, OFF / LEVEL / ERG / HR_HOLD / REHA.
+ * Shell, BLE, Kalibrierung, Profile, OFF / LEVEL / ERG / HR_HOLD / REHA / WORKOUT.
  */
 class App {
 public:
@@ -39,6 +40,7 @@ public:
     ergo::PowerController powerCtl;
     ergo::HrController hrCtl;
     ergo::RehaController rehaCtl;
+    ergo::WorkoutEngine workout;
     ergo::SweepRunner sweep;
     ergo::DebugRing ring;
     ergo::ControlJournal journal;
@@ -85,6 +87,9 @@ private:
     void loopErg(unsigned long now);
     void loopHr(unsigned long now);
     void loopReha(unsigned long now);
+    void loopWorkout(unsigned long now);
+    /** Gemeinsame Pulsdeckel-Last fuer REHA und WORKOUT. */
+    void applyRehaCap(unsigned long now, bool fromWorkout);
     /** Fertige Sweep-Punkte in die Kennflaeche uebernehmen und protokollieren. */
     void harvestSweepPoints();
     void appendCalibJson(JsonObject obj) const;
@@ -133,4 +138,5 @@ private:
     uint16_t judgedSeen_ = 0;
 
     const char* codecSelfTest_ = "nicht gelaufen";
+    ergo::WorkoutEngine::Tick woSnap_{};
 };

@@ -236,7 +236,13 @@ footer{color:var(--dim);font-size:12px;text-align:center;margin-top:26px}
         <button id="merg" class="ghost">ERG</button>
         <button id="mhr" class="ghost">HR</button>
         <button id="mreha" class="ghost">REHA</button>
+        <button id="mwo" class="ghost">PHYSIO</button>
         <button id="panic" class="danger">STOP</button>
+      </div>
+      <div class="row flat" id="worow">
+        <button id="wopause" class="ghost">Pause</button>
+        <button id="woresume" class="ghost">Weiter</button>
+        <button id="woskip" class="ghost">Schritt überspringen</button>
       </div>
       <div class="row flat">
         <label class="f" style="flex:1;margin:0"><div class="k">Zielwatt (ERG)</div>
@@ -560,7 +566,7 @@ const $=i=>document.getElementById(i);
 // Reiterfolge und -inhalt laut WEBINTERFACE.md §7. Leere Version = fertig.
 const NAV=[
  ['ride','Ride','',''],
- ['workouts','Workouts','v0.2','Bibliothek, Editor mit Live-Vorschau und Machbarkeitsprüfung, Import und Export.'],
+ ['workouts','Workouts','v0.1','Eingebaut: Physio 3 Schritte. Editor/LittleFS folgen.'],
  ['tests','Tests','v0.2','Geführte Tests: Rampe, 20 Minuten, Recovery. Ergebnis wird vorgeschlagen, nie automatisch übernommen.'],
  ['verlauf','Verlauf','v0.2','Sessions je Profil, Zonenverteilung, Physio-Progression, Ghost-Vergleich.'],
  ['profile','Profile','',''],
@@ -734,7 +740,8 @@ function renderBle(s){
   const erg=s.erg||{};
   const hh=s.hrHold||{};
   const rh=s.reha||{};
-  const loadModes={MANUAL_LEVEL:1,MANUAL_ERG:1,HR_HOLD:1,REHA:1};
+  const wo=s.workout||{};
+  const loadModes={MANUAL_LEVEL:1,MANUAL_ERG:1,HR_HOLD:1,REHA:1,WORKOUT:1};
   if(loadModes[prevMode] && mode==='OFF') afterStop=true;
   if(mode!=='OFF') afterStop=false;
   prevMode=mode;
@@ -744,7 +751,7 @@ function renderBle(s){
     sh.hidden=!show;
   }
 
-  const ceil=!!(erg.ceiling && (mode==='MANUAL_ERG'||mode==='REHA'||mode==='HR_HOLD'));
+  const ceil=!!(erg.ceiling && (mode==='MANUAL_ERG'||mode==='REHA'||mode==='HR_HOLD'||mode==='WORKOUT'));
   $('pw').className='v'+(leadHr?'':(' hero'+(ceil?' ceil':'')));
   $('hrv').className='v'+(leadHr?' hero':' big');
   $('pw').textContent=live?num(d.powerW,0,' W'):'-';
@@ -752,8 +759,9 @@ function renderBle(s){
   if(live){
     if(mode==='MANUAL_ERG' && erg.targetW){
       pwsub='Ist · Ziel '+Math.round(erg.targetW)+' W'+(ceil?' · unerreichbar':'');
-    } else if(mode==='REHA' && rh.desiredW!=null){
-      pwsub='Soll '+Math.round(rh.desiredW)+' W'
+    } else if((mode==='REHA'||mode==='WORKOUT') && (rh.desiredW!=null||wo.desiredW!=null)){
+      const des=mode==='WORKOUT'?(wo.desiredW!=null?wo.desiredW:rh.desiredW):rh.desiredW;
+      pwsub='Soll '+Math.round(des)+' W'
         +(rh.capActive?(' · wirkt '+Math.round(rh.effectiveW)+' W'):'')
         +(ceil?' · Decke':'');
     } else if(mode==='HR_HOLD' && hh.powerTargetW!=null){
@@ -781,12 +789,14 @@ function renderBle(s){
 
   // Deckel-Näherung (REHA oder Profil maxHr bei leadHr)
   const hrCapEl=$('hrcap'), hrCapI=$('hrcapi'), hrSoftM=$('hrsoftm');
-  const showCap=mode==='REHA' || (leadHr && pi && pi.maxHr);
+  const showCap=mode==='REHA'||mode==='WORKOUT' || (leadHr && pi && pi.maxHr);
   if(hrCapEl){
     hrCapEl.hidden=!showCap;
     if(showCap){
-      const hard=mode==='REHA'?(rh.hrMax||120):(pi.maxHr||120);
-      const soft=mode==='REHA'?(rh.hrSoft||(hard-5)):Math.max(40,hard-5);
+      const hard=mode==='WORKOUT'?(wo.hrMax||rh.hrMax||120)
+        :(mode==='REHA'?(rh.hrMax||120):(pi.maxHr||120));
+      const soft=mode==='WORKOUT'?(wo.hrSoft||rh.hrSoft||(hard-5))
+        :(mode==='REHA'?(rh.hrSoft||(hard-5)):Math.max(40,hard-5));
       const hr=s.heartRate||0;
       const pct=hard?Math.min(100,Math.max(0,100*hr/hard)):0;
       hrCapI.style.width=pct+'%';
@@ -812,8 +822,9 @@ function renderBle(s){
   let ziel=0, ist=live?(d.powerW||0):0;
   if(mode==='MANUAL_ERG') ziel=erg.targetW||0;
   else if(mode==='REHA') ziel=rh.capActive?(rh.effectiveW||0):(rh.desiredW||0);
+  else if(mode==='WORKOUT') ziel=rh.capActive?(rh.effectiveW||0):(wo.desiredW||rh.desiredW||0);
   else if(mode==='HR_HOLD') ziel=hh.powerTargetW||0;
-  if(mode==='MANUAL_ERG'||mode==='REHA'||mode==='HR_HOLD'){
+  if(mode==='MANUAL_ERG'||mode==='REHA'||mode==='HR_HOLD'||mode==='WORKOUT'){
     if(live) pushHist(ist, ziel);
     let line='';
     if(ziel>0){
@@ -830,9 +841,18 @@ function renderBle(s){
 
   const rp=$('rehaprogress'), rpi=$('rehaprogi'), rps=$('rehaprogsub');
   if(rp){
-    const timed=mode==='REHA' && rh.durationS>0;
-    rp.hidden=!timed;
-    if(timed){
+    const timedReha=mode==='REHA' && rh.durationS>0;
+    const timedWo=mode==='WORKOUT' && wo.state && wo.state!=='IDLE';
+    rp.hidden=!(timedReha||timedWo);
+    if(timedWo){
+      const tot=wo.totalRemainingS||0, el=wo.elapsedS||0;
+      const span=el+tot;
+      rpi.style.width=span?Math.min(100,100*el/span)+'%':'0%';
+      rps.textContent=(wo.name||'Workout')+' · Schritt '+(1+(wo.stepIndex||0))+'/'+(wo.stepCount||'?')
+        +' · '+(wo.label||'')
+        +' · noch '+(wo.stepRemainingS!=null?wo.stepRemainingS:'-')+' s'
+        +(rh.interventions?(' · Deckel '+rh.interventions+'×'):'');
+    } else if(timedReha){
       const el=rh.elapsedS||0, dur=rh.durationS||1;
       rpi.style.width=Math.min(100,100*el/dur)+'%';
       rps.textContent='Physio '+Math.round(dur/60)+' min · '
@@ -865,19 +885,32 @@ function renderBle(s){
       +(rh.durationS?(' · noch '+(rh.remainingS!=null?rh.remainingS:rh.durationS)+' s'):'')
       +(rh.lost?' · PULSVERLUST':'');
   }
+  if(mode==='WORKOUT'){
+    msub=(wo.name||'Workout')+' · '+(wo.label||'')
+      +' ('+(1+(wo.stepIndex||0))+'/'+(wo.stepCount||'?')+')'
+      +(wo.desiredW!=null?(' · '+Math.round(wo.desiredW)+' W'):'')
+      +(wo.state==='PAUSED'?' · PAUSE':'')
+      +(rh.lost?' · PULSVERLUST':'');
+  }
   $('rmodesub').textContent=msub;
   $('moff').classList.toggle('ghost', mode!=='OFF');
   $('mlvl').classList.toggle('ghost', mode!=='MANUAL_LEVEL');
   $('merg').classList.toggle('ghost', mode!=='MANUAL_ERG');
   $('mhr').classList.toggle('ghost', mode!=='HR_HOLD');
   $('mreha').classList.toggle('ghost', mode!=='REHA');
-  const ergLike=mode==='MANUAL_ERG'||mode==='HR_HOLD'||mode==='REHA';
+  $('mwo').classList.toggle('ghost', mode!=='WORKOUT');
+  const ergLike=mode==='MANUAL_ERG'||mode==='HR_HOLD'||mode==='REHA'||mode==='WORKOUT';
   $('lvlup').disabled=!hasP||ergLike;
   $('lvldn').disabled=!hasP||ergLike;
   $('mlvl').disabled=!hasP;
   $('merg').disabled=!hasP||!(erg.mapReady);
   $('mhr').disabled=!hasP||!(erg.mapReady);
   $('mreha').disabled=!hasP||!(erg.mapReady);
+  $('mwo').disabled=!hasP||!(erg.mapReady);
+  const woOn=mode==='WORKOUT';
+  $('wopause').disabled=!woOn||wo.state==='PAUSED';
+  $('woresume').disabled=!woOn||wo.state!=='PAUSED';
+  $('woskip').disabled=!woOn;
   $('erggo').disabled=!hasP||!(erg.mapReady)||mode==='HR_HOLD';
   $('hrgo').disabled=!hasP||!(erg.mapReady)||mode!=='HR_HOLD';
   if(hh.targetBpm&&document.activeElement!==$('hrbpm')) $('hrbpm').value=hh.targetBpm;
@@ -1222,6 +1255,10 @@ $('mreha').onclick=()=>{
   const dur=(min>0)?(Math.round(min*60)):0;
   post('/api/control/mode?mode=reha&watt='+w+'&hrMax='+hr+'&durationS='+dur);
 };
+$('mwo').onclick=()=>post('/api/workout/start');
+$('wopause').onclick=()=>post('/api/workout/pause');
+$('woresume').onclick=()=>post('/api/workout/resume');
+$('woskip').onclick=()=>post('/api/workout/skip');
 $('erggo').onclick=()=>{
   const w=+$('ergw').value||80;
   post('/api/control/power?watt='+w);
