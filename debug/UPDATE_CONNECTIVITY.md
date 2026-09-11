@@ -65,15 +65,23 @@ cd /home/martin/projects/esphub/nodes/esp32.ftmsprobe && ./tools/deploy.sh --bui
 
 ## Ergebnis
 
+Ausgefüllt von der Build-Instanz am 2026-09-11, Commit `bc3d042`.
+
 ```text
 pio test -e native
-  test_codec    __/22
-  test_limiter  __/21
+  test_codec    22/22 PASSED
+  test_limiter  21/21 PASSED
+  → 43/43 in ~1.4 s
 
 pio run -e ergo
-  RAM:   ____ / 327680
-  Flash: ____ / 1966080
+  → SUCCESS (~26 s)
+  RAM:   48576 / 327680  (14.8 %)
+  Flash: 1017157 / 1966080 (51.7 %)
+  Bin:   .pio/build/ergo/firmware.bin  (1017520 bytes)
 ```
+
+OTA-Routen in der Bin vorhanden (`/ota-upload` in App.cpp + UiPages) —
+`tools/deploy.sh` darf also theoretisch flashen. **Noch nicht auf `.88` ausgerollt.**
 
 Erster OTA-Versuch auf `.88`:
 
