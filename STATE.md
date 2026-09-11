@@ -5,11 +5,10 @@ zuerst diese Datei und danach gezielt weiter. Alle anderen Notizen in `debug/`
 sind Protokolle einzelner Arbeitsschritte und beschreiben den Stand *zu ihrem
 Zeitpunkt* — sie werden nicht nachgeführt.
 
-Stand dieser Datei: **2026-09-11** (Abend), nach Caps-Fix-Build/OTA durch die
-Build-Instanz. Caps auf Hardware: **`wide=true`**, Write-Bytes `04 <sint16 LE>`.
+Stand dieser Datei: **2026-09-11** (Abend), Profile+MANUAL_LEVEL auf `.88`.
 
-**Wochenende ohne Entwurfs-Instanz:** Diese Datei + `docs/ergometer/*` +
-`debug/UPDATE_CAPS_FIX.md` + `debug/HW_TEST_REPORT.md` reichen. Einstieg immer hier.
+**Wochenende:** Einstieg hier. Hand-Beweis: `tools/hand-proof.sh`.
+Details Profile/Mode: [debug/UPDATE_PROFILE_MODE.md](debug/UPDATE_PROFILE_MODE.md).
 
 ---
 
