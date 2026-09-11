@@ -102,10 +102,11 @@ button.sm{padding:8px 14px;font-size:12px;min-height:0}
 label.f{display:block;margin-bottom:14px}
 label.f.wide{grid-column:1/-1}
 label.f .k{margin-bottom:5px}
-input[type=text],input[type=number]{width:100%;font:inherit;font-size:15px;
+input[type=text],input[type=number],select{width:100%;font:inherit;font-size:15px;
   background:#0E1116;color:var(--fg);border:1px solid var(--edge);border-radius:9px;
   padding:11px 12px}
-input[type=text]:focus,input[type=number]:focus{outline:0;border-color:var(--accent)}
+input[type=text]:focus,input[type=number]:focus,select:focus{outline:0;border-color:var(--accent)}
+select{appearance:none;-webkit-appearance:none}
 .chk{display:flex;align-items:center;gap:10px;margin-bottom:14px;cursor:pointer;
   font-size:14px}
 .chk input{width:18px;height:18px;accent-color:var(--accent);margin:0}
@@ -181,10 +182,10 @@ footer{color:var(--dim);font-size:12px;text-align:center;margin-top:26px}
     <div class="card">
       <h2>Messwerte</h2>
       <div class="grid">
-        <div><div class="k">Leistung</div><div class="v hero" id="pw">-</div>
+        <div><div class="k">Leistung</div><div class="v" id="pw">-</div>
           <div class="k" id="pwsub"></div></div>
         <div><div class="k">Kadenz</div><div class="v big" id="cad">-</div></div>
-        <div><div class="k">Puls</div><div class="v big" id="hrv">-</div>
+        <div><div class="k">Puls</div><div class="v" id="hrv">-</div>
           <div class="k" id="hrvsub"></div></div>
         <div class="tile" id="ltile"><div class="k">Stufe</div>
           <div class="v big" id="lvl">-</div>
@@ -198,17 +199,29 @@ footer{color:var(--dim);font-size:12px;text-align:center;margin-top:26px}
     </div>
 
     <div class="card">
-      <h2>Handsteuerung</h2>
+      <h2>Steuerung</h2>
+      <div class="grid">
+        <div><div class="k">Profil</div><div class="v" id="rprof">-</div>
+          <div class="k" id="rprofsub"></div></div>
+        <div><div class="k">Modus</div><div class="v" id="rmode">-</div>
+          <div class="k" id="rmodesub"></div></div>
+      </div>
       <div class="row flat">
+        <button id="moff" class="ghost">OFF</button>
+        <button id="mlvl" class="ghost">LEVEL</button>
         <button id="panic" class="danger">STOP</button>
+      </div>
+      <div class="row flat">
         <button id="req" class="ghost">Steuerhoheit</button>
+        <button id="cstart" class="ghost">Start</button>
+        <button id="creset" class="ghost">Reset</button>
         <button id="lvldn" class="ghost">Stufe -1</button>
         <button id="lvlup" class="ghost">Stufe +1</button>
       </div>
       <div class="msg" id="cmsg"></div>
-      <div class="hint flat">Steuermodi und Zonen kommen noch. Bis dahin: jeder
-        Befehl läuft durch den Limiter — Profile setzen die harten Grenzen
-        (Reiter Profile).</div>
+      <div class="hint flat">Ohne aktives Profil keine Last. ERG / HR / Workout
+        warten auf den Stufen-Beweis und die Kennfläche. Start/Reset sind FTMS-
+        Freigaben — nach STOP ggf. nötig, bevor neue Stufen greifen.</div>
     </div>
   </section>
 
@@ -216,24 +229,46 @@ footer{color:var(--dim);font-size:12px;text-align:center;margin-top:26px}
     <div class="card">
       <h2>Profile</h2>
       <div class="hint flat">Kein stilles Standardprofil. Vor dem Training eines
-        wählen — Wechsel nur im Modus OFF. Grenzen gelten sofort für den Limiter.
-        Bearbeiten über die API; hier Liste und Auswahl.</div>
+        wählen — Wechsel nur im Modus OFF. Grenzen gelten sofort für den Limiter.</div>
       <table id="plist"></table>
       <div class="k" id="plnone">noch keine Profile</div>
       <div class="row tight"><button id="pclr" class="ghost sm">Auswahl aufheben</button>
+        <button id="pnew" class="ghost sm">Neu</button>
         <button id="prld" class="ghost sm">Neu laden</button></div>
       <div class="msg" id="pmsg"></div>
     </div>
     <div class="card">
-      <h2>Aktives Profil</h2>
+      <h2 id="pfh">Profil bearbeiten</h2>
       <div class="grid">
-        <div><div class="k">Name</div><div class="v" id="paname">-</div></div>
-        <div><div class="k">FTP</div><div class="v" id="paftp">-</div></div>
-        <div><div class="k">HRmax</div><div class="v" id="pahr">-</div></div>
-        <div><div class="k">max. Stufe</div><div class="v" id="palvl">-</div></div>
-        <div><div class="k">max. Watt</div><div class="v" id="papw">-</div></div>
-        <div><div class="k">max. Puls</div><div class="v" id="pamhr">-</div></div>
+        <label class="f"><div class="k">ID</div>
+          <input type="text" id="pf-id" maxlength="15" autocomplete="off"></label>
+        <label class="f"><div class="k">Name</div>
+          <input type="text" id="pf-name" maxlength="23" autocomplete="off"></label>
+        <label class="f"><div class="k">FTP (W)</div>
+          <input type="number" id="pf-ftp" min="0" max="600"></label>
+        <label class="f"><div class="k">HRmax</div>
+          <input type="number" id="pf-hrmax" min="0" max="190"></label>
+        <label class="f"><div class="k">max. Stufe</div>
+          <input type="number" id="pf-maxlvl" min="0" max="16" step="0.1"></label>
+        <label class="f"><div class="k">max. Watt</div>
+          <input type="number" id="pf-maxw" min="0" max="500"></label>
+        <label class="f"><div class="k">max. Puls</div>
+          <input type="number" id="pf-maxhr" min="0" max="190"></label>
+        <label class="f"><div class="k">Ziel-Kadenz</div>
+          <input type="number" id="pf-cad" min="0" max="120"></label>
+        <label class="f"><div class="k">Führende Zone</div>
+          <select id="pf-lead"><option value="power">Leistung</option>
+            <option value="hr">Puls</option></select></label>
+        <label class="f"><div class="k">Bei Pulsverlust</div>
+          <select id="pf-loss"><option value="reduce">Absenken</option>
+            <option value="freeze">Einfrieren</option>
+            <option value="stop">Stop</option></select></label>
       </div>
+      <div class="row tight">
+        <button id="pfsave">Speichern</button>
+        <button id="pfdel" class="danger ghost">Löschen</button>
+      </div>
+      <div class="msg" id="pfmsg"></div>
     </div>
   </section>
 
@@ -609,16 +644,34 @@ function renderBle(s){
     (s.hr&&s.hr.battery)?s.hr.battery+'%':''].filter(Boolean).join(' / '));
 
   const live=f.attached&&!f.stale;
+  const pi=s.profileInfo||null;
+  const leadHr=pi&&pi.leadingZone==='hr';
+  $('pw').className='v'+(leadHr?'':' hero');
+  $('hrv').className='v'+(leadHr?' hero':' big');
   $('pw').textContent=live?num(d.powerW,0,' W'):'-';
-  $('pwsub').textContent=live?'':'keine Daten';
+  $('pwsub').textContent=live?(leadHr?'':'führend'):'keine Daten';
   $('cad').textContent=live?num(d.cadenceRpm,0,' rpm'):'-';
   $('hrv').textContent=s.heartRate?(s.heartRate+' bpm'):'-';
-  $('hrvsub').textContent={strap:'Gurt',machine:'über das Bike',relay:'Relay'}[s.hrSource]||'';
+  $('hrvsub').textContent=({strap:'Gurt',machine:'über das Bike',relay:'Relay'}[s.hrSource]||'')
+    +(leadHr?(s.hrSource?' · ':'')+'führend':'');
   $('spd').textContent=live?num(d.speedKmh,1,' km/h'):'-';
   $('dst').textContent=live?num(d.distanceM,0,' m'):'-';
   $('kcal').textContent=live?num(d.energyKcal,0,' kcal'):'-';
   $('el').textContent=live?hms(d.elapsedS):'-';
   levelTile(li,c);
+
+  const hasP=!!s.profile;
+  $('rprof').textContent=pi?(pi.name||pi.id):(s.profile||'(keins)');
+  $('rprofsub').textContent=hasP
+    ?('max Stufe '+lvDisp(pi&&pi.maxLevelTenths)+' · max '+(pi&&pi.maxPowerW||'-')+' W')
+    :'vor LEVEL Profil wählen';
+  const mode=(s.mode||'OFF');
+  $('rmode').textContent=mode;
+  $('rmodesub').textContent=mode==='MANUAL_LEVEL'?'Handstufe':(mode==='OFF'?'keine Last':'');
+  $('moff').classList.toggle('ghost', mode!=='OFF');
+  $('mlvl').classList.toggle('ghost', mode!=='MANUAL_LEVEL');
+  $('lvlup').disabled=!hasP; $('lvldn').disabled=!hasP; $('mlvl').disabled=!hasP;
+  $('rprof').style.color=(pi&&pi.color)?('#'+('000000'+Number(pi.color).toString(16)).slice(-6)):'';
 
   const strat={'emulate-resistance':'Emulation über Widerstand','direct-target':'Wattziel direkt',
                'none':'nur Anzeige'}[c.strategy]||c.strategy;
@@ -814,13 +867,31 @@ function post(url,msg){
 }
 
 function lvDisp(t){return t==null||t<=0?'-':(t/10).toFixed(1);}
+let _plist=[];
+function fillProfileForm(p){
+  const e=!p;
+  $('pfh').textContent=e?'Neues Profil':('Profil: '+(p.name||p.id));
+  $('pf-id').value=p?p.id:'';
+  $('pf-id').disabled=!!p;
+  $('pf-name').value=p?p.name:'';
+  $('pf-ftp').value=p&&p.ftpW?p.ftpW:'';
+  $('pf-hrmax').value=p&&p.hrMax?p.hrMax:'';
+  $('pf-maxlvl').value=p&&p.maxLevelTenths? (p.maxLevelTenths/10).toFixed(1):'';
+  $('pf-maxw').value=p&&p.maxPowerW?p.maxPowerW:'';
+  $('pf-maxhr').value=p&&p.maxHr?p.maxHr:'';
+  $('pf-cad').value=p&&p.targetCadenceRpm?p.targetCadenceRpm:'';
+  $('pf-lead').value=(p&&p.leadingZone)||'power';
+  $('pf-loss').value=(p&&p.onHrLoss)||'reduce';
+  $('pfdel').disabled=!p;
+  $('pfmsg').textContent='';
+}
 function loadProfiles(){
   fetch('/api/profile/list').then(r=>r.json()).then(j=>{
     const t=$('plist'); t.innerHTML='';
     const act=j.active||null;
-    const list=j.profiles||[];
-    $('plnone').style.display=list.length?'none':'';
-    list.forEach(p=>{
+    _plist=j.profiles||[];
+    $('plnone').style.display=_plist.length?'none':'';
+    _plist.forEach(p=>{
       const tr=document.createElement('tr');
       const on=act&&act===p.id;
       tr.innerHTML='<td><span class="dot'+(on?' on':'')+'"></span><b>'+(p.name||p.id)+'</b>'
@@ -830,6 +901,10 @@ function loadProfiles(){
         +' · max '+(p.maxPowerW||'-')+' W · max HR '+(p.maxHr||'-')+'</span></td>'
         +'<td class="r"></td>';
       const td=tr.querySelector('td.r');
+      const be=document.createElement('button');
+      be.className='ghost sm'; be.textContent='Bearbeiten';
+      be.onclick=ev=>{ev.stopPropagation(); fillProfileForm(p);};
+      td.appendChild(be);
       if(!on){
         const b=document.createElement('button');
         b.className='ghost sm'; b.textContent='Wählen';
@@ -838,13 +913,9 @@ function loadProfiles(){
       }
       t.appendChild(tr);
     });
-    const ap=list.find(x=>x.id===act);
-    $('paname').textContent=ap?(ap.name||ap.id):'(keins)';
-    $('paftp').textContent=ap&&ap.ftpW?ap.ftpW+' W':'-';
-    $('pahr').textContent=ap&&ap.hrMax?ap.hrMax:'-';
-    $('palvl').textContent=ap?lvDisp(ap.maxLevelTenths):'-';
-    $('papw').textContent=ap&&ap.maxPowerW?ap.maxPowerW+' W':'-';
-    $('pamhr').textContent=ap&&ap.maxHr?ap.maxHr:'-';
+    const ap=_plist.find(x=>x.id===act);
+    if(ap) fillProfileForm(ap);
+    else if(!$('pf-id').value) fillProfileForm(null);
   }).catch(e=>{$('pmsg').className='msg err';$('pmsg').textContent=''+e;});
 }
 function selectProfile(id){
@@ -857,8 +928,40 @@ function selectProfile(id){
       loadProfiles();
     }).catch(e=>{$('pmsg').className='msg err';$('pmsg').textContent=''+e;});
 }
+function saveProfile(){
+  const id=$('pf-id').value.trim();
+  const name=$('pf-name').value.trim();
+  if(!id||!name){$('pfmsg').className='msg err';$('pfmsg').textContent='ID und Name nötig';return;}
+  const body={id:id,name:name,
+    ftpW:+$('pf-ftp').value||0, hrMax:+$('pf-hrmax').value||0,
+    maxPowerW:+$('pf-maxw').value||0, maxHr:+$('pf-maxhr').value||0,
+    maxLevelTenths:Math.round((+$('pf-maxlvl').value||0)*10),
+    targetCadenceRpm:+$('pf-cad').value||0,
+    leadingZone:$('pf-lead').value, onHrLoss:$('pf-loss').value};
+  fetch('/api/profile/put',{method:'POST',headers:{'Content-Type':'application/json'},
+    body:JSON.stringify(body)}).then(r=>r.json().then(j=>({s:r.status,j})))
+    .then(o=>{
+      $('pfmsg').className='msg '+(o.j.ok?'ok':'err');
+      $('pfmsg').textContent=o.j.ok?'gespeichert':(o.j.error||'Fehler');
+      if(o.j.ok) loadProfiles();
+    }).catch(e=>{$('pfmsg').className='msg err';$('pfmsg').textContent=''+e;});
+}
+function deleteProfile(){
+  const id=$('pf-id').value.trim();
+  if(!id||!confirm('Profil „'+id+'“ löschen?')) return;
+  fetch('/api/profile/delete?id='+encodeURIComponent(id),{method:'POST'})
+    .then(r=>r.json().then(j=>({s:r.status,j})))
+    .then(o=>{
+      $('pfmsg').className='msg '+(o.j.ok?'ok':'err');
+      $('pfmsg').textContent=o.j.ok?'gelöscht':(o.j.error||'Fehler');
+      if(o.j.ok){fillProfileForm(null); loadProfiles();}
+    }).catch(e=>{$('pfmsg').className='msg err';$('pfmsg').textContent=''+e;});
+}
 $('prld').onclick=()=>loadProfiles();
 $('pclr').onclick=()=>selectProfile('');
+$('pnew').onclick=()=>fillProfileForm(null);
+$('pfsave').onclick=()=>saveProfile();
+$('pfdel').onclick=()=>deleteProfile();
 
 $('scan').onclick=()=>{$('dmsg').textContent='suche 8 s ...';
   fetch('/api/ble/scan/start',{method:'POST'}).catch(()=>{});};
@@ -870,10 +973,18 @@ $('hdis').onclick=()=>post('/api/ble/disconnect?role=hr','rmsg');
 $('hfor').onclick=()=>post('/api/ble/forget?role=hr','rmsg');
 $('req').onclick=()=>post('/api/control/request');
 $('panic').onclick=()=>post('/api/control/stop');
+$('cstart').onclick=()=>post('/api/control/start');
+$('creset').onclick=()=>post('/api/control/reset');
+$('moff').onclick=()=>post('/api/control/mode?mode=off');
+$('mlvl').onclick=()=>post('/api/control/mode?mode=level');
 $('lvlup').onclick=()=>step(+10);
 $('lvldn').onclick=()=>step(-10);
 function step(delta){
   fetch('/api/status').then(r=>r.json()).then(s=>{
+    if(!s.profile){
+      const m=$('cmsg'); m.className='msg err';
+      m.textContent='Profil wählen (Reiter Profile)'; return;
+    }
     const li=s.limiter||{};
     let cur=li.levelTenths;
     if(cur==null||cur<0) cur=(li.minLevelTenths||10)-delta;

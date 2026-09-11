@@ -332,8 +332,22 @@ void App::buildStatusJson(JsonDocument& doc) {
     doc["time"] = NetUtil::localNowStr();
     doc["mode"] = ergo::controlModeName(control.mode());
     doc["levelTargetTenths"] = control.levelTargetTenths();
-    if (profiles.activeId()) doc["profile"] = profiles.activeId();
-    else doc["profile"] = nullptr;
+    if (const ergo::Profile* ap = profiles.active()) {
+        doc["profile"] = ap->id;
+        JsonObject po = doc["profileInfo"].to<JsonObject>();
+        po["id"] = ap->id;
+        po["name"] = ap->name;
+        po["color"] = ap->color;
+        po["ftpW"] = ap->ftpW;
+        po["hrMax"] = ap->hrMax;
+        po["maxHr"] = ap->maxHr;
+        po["maxPowerW"] = ap->maxPowerW;
+        po["maxLevelTenths"] = ap->maxLevelTenths;
+        po["leadingZone"] = (ap->leadingZone == ergo::ZoneLead::Hr) ? "hr" : "power";
+    } else {
+        doc["profile"] = nullptr;
+        doc["profileInfo"] = nullptr;
+    }
 
     // tools/deploy.sh liest dieses Feld und verweigert den OTA-Flash, solange
     // ein Bike haengt. Ein Neustart unter Last laesst das Ergometer gebremst
@@ -611,8 +625,8 @@ void App::registerBleRoutes() {
 // ───────────────────────────────────────────────────────── Steuer-Routen
 
 /**
- * OFF und MANUAL_LEVEL. Level-Schreiben verlangt MANUAL_LEVEL (oder setzt ihn
- * beim Hand-Endpunkt, damit der Kurbel-Beweis ohne Extra-Schritt geht).
+ * OFF und MANUAL_LEVEL. Last schreiben verlangt ein aktives Profil
+ * (Abnahmekriterium 18). Level-Endpunkt setzt bei Bedarf MANUAL_LEVEL.
  * Stop schaltet zurueck auf OFF.
  */
 void App::registerControlRoutes() {
@@ -632,6 +646,11 @@ void App::registerControlRoutes() {
                                                                      : 500;
         NetUtil::sendJson(server, code, doc);
     };
+    auto requireProfile = [this]() -> bool {
+        if (profiles.active()) return true;
+        NetUtil::sendError(server, 409, "Profil wählen (Reiter Profile)");
+        return false;
+    };
 
     server.on("/api/control/stop", HTTP_POST, [this, reply]() {
         const auto r = ftms.stop(millis());
@@ -643,7 +662,7 @@ void App::registerControlRoutes() {
     server.on("/api/control/reset", HTTP_POST, [this, reply]() { reply(ftms.reset(millis())); });
     server.on("/api/control/start", HTTP_POST, [this, reply]() { reply(ftms.start(millis())); });
 
-    server.on("/api/control/mode", HTTP_POST, [this]() {
+    server.on("/api/control/mode", HTTP_POST, [this, requireProfile]() {
         String token;
         int16_t tenths = -1;
         JsonDocument body;
@@ -674,6 +693,7 @@ void App::registerControlRoutes() {
             NetUtil::sendError(server, 501, "Modus noch nicht implementiert");
             return;
         }
+        if (m != ergo::ControlMode::Off && !requireProfile()) return;
         if (!control.setMode(m)) {
             NetUtil::sendError(server, 409, "Modus abgelehnt");
             return;
@@ -700,7 +720,8 @@ void App::registerControlRoutes() {
         NetUtil::sendJson(server, 200, doc);
     });
 
-    server.on("/api/control/level", HTTP_POST, [this, reply]() {
+    server.on("/api/control/level", HTTP_POST, [this, reply, requireProfile]() {
+        if (!requireProfile()) return;
         if (!server.hasArg("tenths") && !server.hasArg("level")) {
             NetUtil::sendError(server, 400, "tenths oder level fehlt");
             return;
@@ -719,7 +740,8 @@ void App::registerControlRoutes() {
         reply(ftms.setLevelTenths(tenths, millis()));
     });
 
-    server.on("/api/control/power", HTTP_POST, [this, reply]() {
+    server.on("/api/control/power", HTTP_POST, [this, reply, requireProfile]() {
+        if (!requireProfile()) return;
         if (!server.hasArg("watt")) {
             NetUtil::sendError(server, 400, "watt fehlt");
             return;

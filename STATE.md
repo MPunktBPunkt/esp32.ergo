@@ -5,11 +5,12 @@ zuerst diese Datei und danach gezielt weiter. Alle anderen Notizen in `debug/`
 sind Protokolle einzelner Arbeitsschritte und beschreiben den Stand *zu ihrem
 Zeitpunkt* — sie werden nicht nachgeführt.
 
-Stand dieser Datei: **2026-09-11** (Abend), Profile NVS + UI + CI auf `.88`.
+Stand dieser Datei: **2026-09-11** (Abend), Profilpflicht + Ride/Profil-UI auf `.88`.
 
 **Wochenende:** Einstieg hier. Hand-Beweis: `tools/hand-proof.sh`.
-Details Profile/Mode: [debug/UPDATE_PROFILE_MODE.md](debug/UPDATE_PROFILE_MODE.md),
-Persistenz/UI/CI: [debug/UPDATE_PROFILE_PERSIST.md](debug/UPDATE_PROFILE_PERSIST.md).
+Details: [debug/UPDATE_PROFILE_MODE.md](debug/UPDATE_PROFILE_MODE.md),
+[debug/UPDATE_PROFILE_PERSIST.md](debug/UPDATE_PROFILE_PERSIST.md),
+[debug/UPDATE_CONTROL_UI.md](debug/UPDATE_CONTROL_UI.md).
 
 ---
 
@@ -104,6 +105,7 @@ für die Wirkung — und `guardAllowSim` muss dafür von `false` auf `true`.
 4. ~~**Profile mit Grenzen**~~ — RAM + API + Limiter; **NVS-Persistenz + UI-Reiter**
    (`debug/UPDATE_PROFILE_PERSIST.md`). LittleFS weiterhin optional.
 5. ~~**Steuermodi OFF / MANUAL_LEVEL**~~ — gebaut; ERG/HR/WORKOUT warten auf §3.
+   Profilpflicht + Ride-UI + Profil-Editor: [debug/UPDATE_CONTROL_UI.md](debug/UPDATE_CONTROL_UI.md).
 6. ~~`.github/workflows/build.yml`~~ — native + `ergo`-Build.
 
 Noch offen aus dem Hardware-Bericht: ein UI-Hinweis, dass nach Stop
@@ -145,8 +147,9 @@ Die Liste selbst steht in [PFLICHTENHEFT.md](docs/ergometer/PFLICHTENHEFT.md) §
 | 6 | Mechanik gebaut (Sweep, Kennfläche, verworfene Punkte werden als verworfen ausgewiesen), Messung fehlt |
 | 6a | gebaut; der Fixture-Rundlauf über `tools/make-fixtures.py` ist noch nicht einmal durchgespielt |
 | 6b | gebaut und hosttestbar; auf Hardware noch nicht gesehen |
-| 7–12, 14–21 | nicht angefangen |
+| 7–12, 14–17, 19–21 | nicht angefangen |
 | 13 | erfüllt (gewollter Neustart sendet `08 01`) |
+| 18 | Profilpflicht + Wechsel-Lock gebaut (UI/API); Session-Begriff noch ohne Workout |
 
 ## 8. Welches Dokument beantwortet was
 

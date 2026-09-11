@@ -11,6 +11,11 @@ curl -fsS "$B/api/status" | python3 -c 'import json,sys;d=json.load(sys.stdin);p
 echo "== Mitschnitt an =="
 curl -fsS -X POST "$B/api/debug/ring?on=true&every=1"
 
+echo "== Profil (Pflicht vor Last) =="
+# Kein stilles Default — Hand-Beweis nimmt die Standard-Vorlage.
+curl -fsS -X POST "$B/api/control/mode?mode=off" >/dev/null || true
+curl -fsS -X POST "$B/api/profile/select?id=standard"; echo
+
 echo "== Request + Start =="
 curl -fsS -X POST "$B/api/control/request"; echo
 curl -fsS -X POST "$B/api/control/start"; echo
