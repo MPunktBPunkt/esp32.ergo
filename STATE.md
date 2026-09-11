@@ -5,8 +5,8 @@ zuerst diese Datei und danach gezielt weiter. Alle anderen Notizen in `debug/`
 sind Protokolle einzelner Arbeitsschritte und beschreiben den Stand *zu ihrem
 Zeitpunkt* — sie werden nicht nachgeführt.
 
-Stand dieser Datei: **2026-09-12**. **REHA** gebaut
-([debug/UPDATE_REHA.md](debug/UPDATE_REHA.md)). Davor: HR_HOLD, MANUAL_ERG, Test 1+2.
+Stand dieser Datei: **2026-09-12**. Ride-UI-Politur
+([debug/UPDATE_RIDE_UI.md](debug/UPDATE_RIDE_UI.md)). Davor: REHA, HR_HOLD, ERG.
 
 ---
 
@@ -104,12 +104,13 @@ für die Wirkung — und `guardAllowSim` muss dafür von `false` auf `true`.
 5. ~~**MANUAL_ERG**~~ — PowerController + UI ([debug/UPDATE_ERG.md](debug/UPDATE_ERG.md)).
 6. ~~**HR_HOLD**~~ — Puls→Watt→Stufe ([debug/UPDATE_HR_HOLD.md](debug/UPDATE_HR_HOLD.md)).
 7. ~~**Reha-Programm**~~ — festes Watt + HR-Deckel ([debug/UPDATE_REHA.md](debug/UPDATE_REHA.md)).
-8. Optional: Ride-UI-Politur / Nachtest 3–4 / WorkoutEngine (v0.2).
-9. ~~`.github/workflows/build.yml`~~ / ~~6a~~ / Profile / OFF|LEVEL — erledigt.
+8. ~~**Ride-UI-Politur**~~ — Ist/Ziel, Deckelbalken, Start-Hinweis
+   ([debug/UPDATE_RIDE_UI.md](debug/UPDATE_RIDE_UI.md)).
+9. Optional: Nachtest 3–4 (Fahrer) / WorkoutEngine (v0.2).
+10. ~~`.github/workflows/build.yml`~~ / ~~6a~~ / Profile / OFF|LEVEL — erledigt.
 
-Noch offen aus dem Hardware-Bericht: ein UI-Hinweis, dass nach Stop
-`Start/Resume` plus erneuter Tritt nötig sein können. Wartet sinnvoll auf §3,
-denn der zeigt nebenbei, ob `Start/Resume` am Varon überhaupt gebraucht wird.
+Noch offen aus dem Hardware-Bericht: ob `Start/Resume` am Varon wirklich nötig
+ist — der UI-Hinweis steht; Messung am Rad offen.
 
 ## 6. Harte Regeln
 
@@ -148,7 +149,7 @@ Die Liste selbst steht in [PFLICHTENHEFT.md](docs/ergometer/PFLICHTENHEFT.md) §
 | 6a | **erfüllt** (Host + Live-Export + CI `--verify-curated`) |
 | 6b | gebaut und hosttestbar; auf Hardware noch nicht gesehen |
 | 7 | **Mechanik da** (MANUAL_ERG); Abnahme mit Fahrer offen |
-| 8 | Ceiling-Flag gebaut; UI-Markierung grob |
+| 8 | Ceiling-Flag + UI (Hero rot, Ist/Ziel-Hinweis) |
 | 13 | erfüllt (gewollter Neustart sendet `08 01`) |
 | 18 | Profilpflicht + Wechsel-Lock gebaut (UI/API); Session-Begriff noch ohne Workout |
 

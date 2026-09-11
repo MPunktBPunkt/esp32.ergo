@@ -81,11 +81,22 @@ body.js section.on{display:block}
 .v.addr{font-size:15px}
 .v.big{font-size:26px;font-weight:700}
 .v.hero{font-size:46px;font-weight:800;line-height:1.1}
+.v.ceil{color:var(--bad)}
 .tile{border:1px solid transparent;border-radius:9px;padding:8px;margin:-8px}
 .tile.cap{border-color:var(--bad)}
 .segs{display:flex;gap:3px;margin:9px 0 7px}
 .segs i{flex:1;height:10px;border-radius:2px;background:var(--edge)}
 .segs i.on{background:var(--accent)}
+.capbar{height:8px;background:var(--edge);border-radius:4px;margin-top:8px;overflow:hidden;
+  position:relative}
+.capbar i{display:block;height:100%;background:var(--ok);width:0;transition:width .3s linear}
+.capbar.soft i{background:var(--accent)}
+.capbar.hard i{background:var(--bad)}
+.capbar .mark{position:absolute;top:0;bottom:0;width:2px;background:rgba(230,234,242,.55)}
+.reg{margin-top:16px;padding-top:14px;border-top:1px solid var(--edge)}
+.reg canvas{display:block;width:100%;height:48px;margin-top:8px;background:#0E1116;
+  border-radius:8px;border:1px solid var(--edge)}
+.msg.warn{color:var(--accent)}
 .dot{display:inline-block;width:8px;height:8px;border-radius:50%;margin-right:7px;
   vertical-align:middle;background:var(--bad)}
 .dot.on{background:var(--ok)}
@@ -181,12 +192,18 @@ footer{color:var(--dim);font-size:12px;text-align:center;margin-top:26px}
 
     <div class="card">
       <h2>Messwerte</h2>
+      <div class="msg warn" id="startHint" hidden>Nach STOP: ggf. <b>Start</b> drücken und
+        erneut treten — die Freigabe am Bike kann sonst fehlen.</div>
       <div class="grid">
-        <div><div class="k">Leistung</div><div class="v" id="pw">-</div>
+        <div id="pwtile"><div class="k">Leistung</div><div class="v" id="pw">-</div>
           <div class="k" id="pwsub"></div></div>
-        <div><div class="k">Kadenz</div><div class="v big" id="cad">-</div></div>
-        <div><div class="k">Puls</div><div class="v" id="hrv">-</div>
-          <div class="k" id="hrvsub"></div></div>
+        <div><div class="k">Kadenz</div><div class="v big" id="cad">-</div>
+          <div class="k" id="cadsub"></div></div>
+        <div id="hrtile"><div class="k">Puls</div><div class="v" id="hrv">-</div>
+          <div class="k" id="hrvsub"></div>
+          <div class="capbar" id="hrcap" hidden><i id="hrcapi"></i>
+            <span class="mark" id="hrsoftm"></span></div>
+          <div class="k" id="hrcapsub"></div></div>
         <div class="tile" id="ltile"><div class="k">Stufe</div>
           <div class="v big" id="lvl">-</div>
           <div class="segs" id="segs"></div>
@@ -195,6 +212,13 @@ footer{color:var(--dim);font-size:12px;text-align:center;margin-top:26px}
         <div><div class="k">Strecke</div><div class="v" id="dst">-</div></div>
         <div><div class="k">Energie</div><div class="v" id="kcal">-</div></div>
         <div><div class="k">Fahrzeit</div><div class="v" id="el">-</div></div>
+      </div>
+      <div class="reg" id="regstrip">
+        <div class="k">Ist / Ziel</div>
+        <div class="v" id="regline">-</div>
+        <canvas id="regcv" width="640" height="48" aria-label="Ist gegen Ziel"></canvas>
+        <div class="bar" id="rehaprogress" hidden><i id="rehaprogi"></i></div>
+        <div class="k" id="rehaprogsub"></div>
       </div>
     </div>
 
@@ -244,8 +268,7 @@ footer{color:var(--dim);font-size:12px;text-align:center;margin-top:26px}
       </div>
       <div class="msg" id="cmsg"></div>
       <div class="hint flat">Ohne aktives Profil keine Last. ERG/HR/REHA brauchen eine
-        Kennfläche. REHA: festes Watt mit Pulsdeckel (Soft-Band darunter). Start/Reset
-        sind FTMS-Freigaben — nach STOP ggf. nötig.</div>
+        Kennfläche. REHA: festes Watt mit Pulsdeckel. Nach STOP ggf. Start + Tritt.</div>
     </div>
   </section>
 
@@ -655,6 +678,42 @@ function renderDebug(s){
 }
 
 let scanPrev=false;
+let prevMode='OFF';
+let afterStop=false;
+const istHist=[], zielHist=[];
+const HIST_N=48;
+
+function pushHist(ist,ziel){
+  istHist.push(ist); zielHist.push(ziel);
+  while(istHist.length>HIST_N){istHist.shift();zielHist.shift();}
+}
+function drawRegChart(){
+  const cv=$('regcv'); if(!cv) return;
+  const ctx=cv.getContext('2d');
+  const W=cv.width, H=cv.height;
+  ctx.clearRect(0,0,W,H);
+  if(istHist.length<2) return;
+  let mx=1;
+  for(let i=0;i<istHist.length;i++){
+    mx=Math.max(mx, istHist[i]||0, zielHist[i]||0);
+  }
+  mx*=1.15;
+  const step=W/Math.max(1,HIST_N-1);
+  function stroke(arr,color,dash){
+    ctx.beginPath();
+    ctx.strokeStyle=color; ctx.lineWidth=2;
+    ctx.setLineDash(dash||[]);
+    for(let i=0;i<arr.length;i++){
+      const x=i*step, y=H-4-((arr[i]||0)/mx)*(H-8);
+      if(i===0) ctx.moveTo(x,y); else ctx.lineTo(x,y);
+    }
+    ctx.stroke();
+  }
+  stroke(zielHist,'#8A94A6',[4,4]);
+  stroke(istHist,'#E2802F',[]);
+  ctx.setLineDash([]);
+}
+
 function renderBle(s){
   const L=(s.ble&&s.ble.links)||{}, b=L.bike||{}, h=L.hr||{};
   const f=s.ftms||{}, c=f.caps||{}, d=f.data||{}, li=s.limiter||{};
@@ -671,30 +730,123 @@ function renderBle(s){
   const live=f.attached&&!f.stale;
   const pi=s.profileInfo||null;
   const leadHr=pi&&pi.leadingZone==='hr';
-  $('pw').className='v'+(leadHr?'':' hero');
+  const mode=(s.mode||'OFF');
+  const erg=s.erg||{};
+  const hh=s.hrHold||{};
+  const rh=s.reha||{};
+  const loadModes={MANUAL_LEVEL:1,MANUAL_ERG:1,HR_HOLD:1,REHA:1};
+  if(loadModes[prevMode] && mode==='OFF') afterStop=true;
+  if(mode!=='OFF') afterStop=false;
+  prevMode=mode;
+  const sh=$('startHint');
+  if(sh){
+    const show=afterStop && !!s.bikeLink && mode==='OFF';
+    sh.hidden=!show;
+  }
+
+  const ceil=!!(erg.ceiling && (mode==='MANUAL_ERG'||mode==='REHA'||mode==='HR_HOLD'));
+  $('pw').className='v'+(leadHr?'':(' hero'+(ceil?' ceil':'')));
   $('hrv').className='v'+(leadHr?' hero':' big');
   $('pw').textContent=live?num(d.powerW,0,' W'):'-';
-  $('pwsub').textContent=live?(leadHr?'':'führend'):'keine Daten';
-  $('cad').textContent=live?num(d.cadenceRpm,0,' rpm'):'-';
+  let pwsub='';
+  if(live){
+    if(mode==='MANUAL_ERG' && erg.targetW){
+      pwsub='Ist · Ziel '+Math.round(erg.targetW)+' W'+(ceil?' · unerreichbar':'');
+    } else if(mode==='REHA' && rh.desiredW!=null){
+      pwsub='Soll '+Math.round(rh.desiredW)+' W'
+        +(rh.capActive?(' · wirkt '+Math.round(rh.effectiveW)+' W'):'')
+        +(ceil?' · Decke':'');
+    } else if(mode==='HR_HOLD' && hh.powerTargetW!=null){
+      pwsub='aus Puls · ~'+Math.round(hh.powerTargetW)+' W';
+    } else if(!leadHr){
+      pwsub='führend';
+    }
+  } else pwsub='keine Daten';
+  $('pwsub').textContent=pwsub;
+
+  const rpm=live?(d.cadenceRpm||0):0;
+  $('cad').textContent=live?num(rpm,0,' rpm'):'-';
+  const tc=pi&&pi.targetCadenceRpm;
+  let cadsub='';
+  if(live && tc){
+    if(rpm<tc-5) cadsub='schneller · Ziel '+tc+' rpm';
+    else if(rpm>tc+5) cadsub='langsamer · Ziel '+tc+' rpm';
+    else cadsub='halten · '+tc+' rpm';
+  }
+  $('cadsub').textContent=cadsub;
+
   $('hrv').textContent=s.heartRate?(s.heartRate+' bpm'):'-';
   $('hrvsub').textContent=({strap:'Gurt',machine:'über das Bike',relay:'Relay'}[s.hrSource]||'')
     +(leadHr?(s.hrSource?' · ':'')+'führend':'');
+
+  // Deckel-Näherung (REHA oder Profil maxHr bei leadHr)
+  const hrCapEl=$('hrcap'), hrCapI=$('hrcapi'), hrSoftM=$('hrsoftm');
+  const showCap=mode==='REHA' || (leadHr && pi && pi.maxHr);
+  if(hrCapEl){
+    hrCapEl.hidden=!showCap;
+    if(showCap){
+      const hard=mode==='REHA'?(rh.hrMax||120):(pi.maxHr||120);
+      const soft=mode==='REHA'?(rh.hrSoft||(hard-5)):Math.max(40,hard-5);
+      const hr=s.heartRate||0;
+      const pct=hard?Math.min(100,Math.max(0,100*hr/hard)):0;
+      hrCapI.style.width=pct+'%';
+      hrCapEl.className='capbar'+(hr>=hard?' hard':(hr>=soft?' soft':''));
+      if(hrSoftM) hrSoftM.style.left=(hard?Math.min(100,100*soft/hard):0)+'%';
+      $('hrcapsub').textContent=hr
+        ?(hr>=hard?('über Deckel '+hard)
+          :(hr>=soft?('Anfahrband · Soft '+soft+' / Hard '+hard)
+            :('Deckel '+hard+(soft?' · Soft '+soft:''))))
+        :('Deckel '+hard);
+    } else {
+      $('hrcapsub').textContent='';
+    }
+  }
+
   $('spd').textContent=live?num(d.speedKmh,1,' km/h'):'-';
   $('dst').textContent=live?num(d.distanceM,0,' m'):'-';
   $('kcal').textContent=live?num(d.energyKcal,0,' kcal'):'-';
   $('el').textContent=live?hms(d.elapsedS):'-';
   levelTile(li,c);
 
+  // Ist/Ziel-Kurve
+  let ziel=0, ist=live?(d.powerW||0):0;
+  if(mode==='MANUAL_ERG') ziel=erg.targetW||0;
+  else if(mode==='REHA') ziel=rh.capActive?(rh.effectiveW||0):(rh.desiredW||0);
+  else if(mode==='HR_HOLD') ziel=hh.powerTargetW||0;
+  if(mode==='MANUAL_ERG'||mode==='REHA'||mode==='HR_HOLD'){
+    if(live) pushHist(ist, ziel);
+    let line='';
+    if(ziel>0){
+      const delta=ist-ziel;
+      line='Ist '+Math.round(ist)+' W · Ziel '+Math.round(ziel)+' W · Δ '
+        +(delta>=0?'+':'')+Math.round(delta)+' W';
+      if(ceil) line+=' · Ziel über Kennfläche';
+    } else line='kein Ziel';
+    $('regline').textContent=line;
+  } else {
+    $('regline').textContent=mode==='OFF'?'keine Regelung':'Handstufe';
+  }
+  drawRegChart();
+
+  const rp=$('rehaprogress'), rpi=$('rehaprogi'), rps=$('rehaprogsub');
+  if(rp){
+    const timed=mode==='REHA' && rh.durationS>0;
+    rp.hidden=!timed;
+    if(timed){
+      const el=rh.elapsedS||0, dur=rh.durationS||1;
+      rpi.style.width=Math.min(100,100*el/dur)+'%';
+      rps.textContent='Physio '+Math.round(dur/60)+' min · '
+        +hms(el)+' von '+hms(dur)
+        +(rh.interventions!=null?(' · Deckel griff '+rh.interventions+'×'):'');
+    } else { rps.textContent=''; }
+  }
+
   const hasP=!!s.profile;
   $('rprof').textContent=pi?(pi.name||pi.id):(s.profile||'(keins)');
   $('rprofsub').textContent=hasP
     ?('max Stufe '+lvDisp(pi&&pi.maxLevelTenths)+' · max '+(pi&&pi.maxPowerW||'-')+' W')
     :'vor LEVEL Profil wählen';
-  const mode=(s.mode||'OFF');
   $('rmode').textContent=mode;
-  const erg=s.erg||{};
-  const hh=s.hrHold||{};
-  const rh=s.reha||{};
   let msub=mode==='MANUAL_LEVEL'?'Handstufe':(mode==='OFF'?'keine Last':'');
   if(mode==='MANUAL_ERG'){
     msub=(erg.targetW?('Ziel '+Math.round(erg.targetW)+' W'):'kein Ziel')

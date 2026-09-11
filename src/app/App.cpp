@@ -387,6 +387,7 @@ void App::buildStatusJson(JsonDocument& doc) {
         po["maxHr"] = ap->maxHr;
         po["maxPowerW"] = ap->maxPowerW;
         po["maxLevelTenths"] = ap->maxLevelTenths;
+        po["targetCadenceRpm"] = ap->targetCadenceRpm;
         po["leadingZone"] = (ap->leadingZone == ergo::ZoneLead::Hr) ? "hr" : "power";
     } else {
         doc["profile"] = nullptr;
