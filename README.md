@@ -8,7 +8,7 @@
 > **Trainingsrechner und BLE-Steuerung für das Ergometer Hammer Varon XTR II** — ERG-Emulation über die Widerstandsstufe, Pulsführung, Trainingszonen, Profile und Web-UI. Anbindung an [iobroker.esp-hub](https://github.com/MPunktBPunkt/iobroker.esp-hub).
 
 > [!WARNING]
-> **Stand: Fundament im Aufbau.** Bisher existieren FTMS-Codec und Hosttests. Es läuft noch nichts auf Hardware. Was unten unter *Features* steht, ist geplant, nicht fertig.
+> **Stand: Fundament im Aufbau.** Fertig und hostgetestet sind FTMS-Codec, Capability-Ableitung und Limiter; dazu läuft eine Connectivity-Shell mit WLAN, Web, OTA und Hub-Heartbeat. **BLE ist noch nicht angebunden** — das Gerät zeigt Status und lässt sich aus der Ferne neu flashen, mehr nicht. Was unten unter *Features* steht, ist geplant, nicht fertig.
 
 ---
 
@@ -91,8 +91,19 @@ pio device monitor
 ```
 
 1. Hotspot **`ESP-Ergo-Setup`** → WLAN + Hub-IP (Port `8093`)
-2. Browser: `http://<ESP-IP>/` → **Geräte** → Scan → Bike verbinden
-3. Gerät erscheint im [ESP-Hub](https://github.com/MPunktBPunkt/iobroker.esp-hub)
+2. Browser: `http://<ESP-IP>/` → Status und OTA
+3. Gerät erscheint im [ESP-Hub](https://github.com/MPunktBPunkt/iobroker.esp-hub) mit `fwType: ergo`
+
+Schritt 2 zeigt derzeit nur die Shell; Gerätesuche und Steuerung kommen mit `BleCentral`.
+
+Ohne Kabel ausrollen:
+
+```bash
+tools/deploy.sh --ota 192.168.178.88
+tools/deploy.sh --hub 192.168.178.113:8093 --mac 68B6B329339C
+```
+
+Das Skript baut, benennt die Bin nach dem Familienschema und **weigert sich, eine Bin auszurollen, in der `/ota-upload` nicht vorkommt.** Genau dieser Fall lag bis 0.1.0-dev vor: die Firmware baute, hatte aber keinen Rückweg — ein OTA-Flash auf ein Gerät ohne Kabel wäre ein Totalverlust gewesen.
 
 | | |
 |--|--|
@@ -137,6 +148,8 @@ Heartbeat-Feld `fwType`: **`ergo`**
 ---
 
 ## API (Auswahl)
+
+Erreichbar sind bisher `/`, `/ota`, `/ota-upload`, `/api/status`, `/api/config/get` `/save`, `/api/system/restart` und `/events`. Der Rest ist die geplante Oberfläche.
 
 | Endpoint | Funktion |
 |----------|----------|
