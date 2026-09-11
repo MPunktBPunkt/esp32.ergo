@@ -137,28 +137,40 @@ Neue Endpunkte: `POST /api/debug/ring?on=1&every=5`, `POST /api/debug/clear`,
 
 ## Ergebnis
 
+Ausgefüllt von der Build-Instanz am 2026-09-11 nach Pull `6b3d86e`.
+
 ```text
 pio test -e native
-  test_codec     __/22
-  test_limiter   __/21
-  test_caps      __/13
-  test_powermap  __/19
-  test_sweep     __/17
-  test_journal   __/15
-  test_ring      __/12
-  → erwartet 119/119
+  test_codec     22/22 PASSED   (1 Assertion in test_caps_varon angepasst → Sint16)
+  test_limiter   21/21 PASSED
+  test_caps      13/13 PASSED
+  test_powermap  19/19 PASSED
+  test_sweep     17/17 PASSED
+  test_journal   15/15 PASSED
+  test_ring      12/12 PASSED
+  → 119/119
 ```
 
 ```text
 pio run -e ergo
-  RAM:   ____ / 327680
-  Flash: ____ / 1966080
+  → SUCCESS
+  RAM:   71032 / 327680  (21.7 %)
+  Flash: 1289845 / 1966080 (65.6 %)
+  UI GET /: 39640 Bytes
 ```
 
-Vorher: 79/79, RAM 18,7 %, Flash 64,9 %. Erwartet: RAM gut 2 Prozentpunkte mehr
-(der Ring), Flash etwa einen Prozentpunkt mehr (UI-Seite von 33977 auf 40487
-Byte plus die zwei neuen Bausteine). Beides weit unter der Schwelle, ab der die
-UI laut WEBINTERFACE.md §8 nach LittleFS wandern müsste.
+OTA auf `.88` OK (Bike vorher disconnect wegen `bikeLink`-Sperre in deploy.sh).
+
+### Hardware nach Flash
+
+- [x] Reconnect TC174 → `READY`, Caps `wide=true`, `levels=16`
+- [x] Mitschnitt: Write `041400` (= sint16 Stufe 2,0) und Antwort `800401` Success  
+      — **nicht** mehr die schmale `04 14`
+- [x] Journal/Debug in `/api/status`, Export JSONL liefert Zeilen
+- [ ] Hand-an-Kurbel-Beweis Stufe 1 vs 16 (Wirkung) — braucht jemanden vor Ort
+
+Lokaler Fix mitgepusht: `test/test_codec/test_codec.cpp` erwartete noch
+`needsWideResistance()==false` / `Unknown` — widerspricht dem Caps-Fix.
 
 ## Hardware-Test — und er braucht keinen Fahrer
 
@@ -166,7 +178,11 @@ Die ganze letzte Session hat nicht belegt, dass eine Stufe wirkt. Das ist der
 einzige Punkt, der zählt. Er ist aber **qualitativ**, und dafür muss niemand
 treten: die Kurbel von Hand drehen genügt.
 
-- [ ] Flashen, Bike verbinden, `POST /api/control/request`
+- [x] Flashen, Bike verbinden, `POST /api/control/request`
+- [x] Mitschnitt: Write-Bytes sind sint16 (`041400`), Success `800401`
+- [ ] Stufe 1 setzen, Kurbel ~20 s gleichmäßig von Hand drehen
+- [ ] Stufe 16 setzen, ~20 s gleichmäßig von Hand drehen
+- [ ] Handgefühl + Journal (`worked` / ggf. `contradictory`)
 - [ ] **Mitschnitt einschalten** (Debug-Reiter) — dann ist der Lauf hinterher
       auswertbar, auch wenn live niemand mitliest
 - [ ] Stufe 1 setzen, Kurbel gleichmäßig von Hand drehen, ~20 s

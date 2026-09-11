@@ -301,10 +301,11 @@ static void test_caps_varon() {
     TEST_ASSERT_TRUE(c.canSimulate);
     TEST_ASSERT_EQUAL_INT((int)PowerStrategy::EmulateResistance, (int)c.powerStrategy());
     TEST_ASSERT_EQUAL_UINT16(16, c.levelCount());
-    // 16,0 passt in uint8-Zehntel, also ist das Format aus den Metadaten
-    // allein nicht entscheidbar — es kommt aus dem Geraeteprofil.
-    TEST_ASSERT_FALSE(c.needsWideResistance());
-    TEST_ASSERT_EQUAL_INT((int)ResistanceFormat::Unknown, (int)c.resistanceFormat);
+    // Spec-Treue: sint16 ist Standard. Der Bereich passt in uint8 — genau
+    // deshalb ging frueher die wirkungslose schmale Form hinaus (siehe
+    // test_caps / UPDATE_CAPS_FIX.md).
+    TEST_ASSERT_TRUE(c.needsWideResistance());
+    TEST_ASSERT_EQUAL_INT((int)ResistanceFormat::Sint16, (int)c.resistanceFormat);
 }
 
 /** Ein echter Smarttrainer: Wattziel gemeldet UND Bereich veroeffentlicht. */

@@ -5,8 +5,11 @@ zuerst diese Datei und danach gezielt weiter. Alle anderen Notizen in `debug/`
 sind Protokolle einzelner Arbeitsschritte und beschreiben den Stand *zu ihrem
 Zeitpunkt* — sie werden nicht nachgeführt.
 
-Stand dieser Datei: **2026-09-11**, nach dem `caps.wide`-Fix und dem Einbau von
-Debug-Modus und Steuer-Journal.
+Stand dieser Datei: **2026-09-11** (Abend), nach Caps-Fix-Build/OTA durch die
+Build-Instanz. Caps auf Hardware: **`wide=true`**, Write-Bytes `04 <sint16 LE>`.
+
+**Wochenende ohne Entwurfs-Instanz:** Diese Datei + `docs/ergometer/*` +
+`debug/UPDATE_CAPS_FIX.md` + `debug/HW_TEST_REPORT.md` reichen. Einstieg immer hier.
 
 ---
 
@@ -94,19 +97,15 @@ für die Wirkung — und `guardAllowSim` muss dafür von `false` auf `true`.
 
 ## 5. Nächste Schritte
 
-1. **Kopieren und bauen.** Der Fix und die neue Messtechnik liegen in der
-   Arbeitskopie, nicht im Repo — siehe [UPDATE_CAPS_FIX.md](debug/UPDATE_CAPS_FIX.md),
-   Abschnitt „Geändert". Erwartet: `pio test -e native` → 119/119.
-2. **Der Beweis aus §3.** Ohne ihn ist jeder weitere Regler Spekulation.
-3. **Nachtest 1 und 2**, sobald jemand treten kann. Sie protokollieren sich
-   selbst über den Reiter Kalibrierung.
-4. **Profile mit Grenzen** — größter offener v0.1-Brocken, keine
-   Hardwareabhängigkeit, schaltet Zonen, FTP, HRmax und die Zonenschiene frei.
+1. **~~Kopieren und bauen.~~** Erledigt (Build-Instanz): **119/119**, Flash 65,6 %,
+   OTA auf `.88`, Caps `wide=true`, Mitschnitt zeigt `041400` (sint16).
+   Stale-Assertion in `test_codec`/`test_caps_varon` mitkorrigiert.
+2. **Der Beweis aus §3** (Hand an der Kurbel, Stufe 1 vs 16) — **als Nächstes**,
+   braucht nur jemanden vor dem Rad, keinen Fahrer.
+3. **Nachtest 1 und 2**, sobald jemand treten kann.
+4. **Profile mit Grenzen** — größter offener v0.1-Brocken ohne HW-Zwang.
 5. **Steuermodi** `OFF`, `MANUAL_LEVEL`, `MANUAL_ERG`, `HR_HOLD`, `WORKOUT`.
-   `MANUAL_LEVEL` ist reine Logik; die beiden Regler lassen sich gegen eine
-   synthetische Kennfläche hosttesten, aber nicht ohne echte Messwerte abstimmen.
-6. `.github/workflows/build.yml` hat es noch nie ins Repo geschafft — deshalb ist
-   das Build-Badge im README 404.
+6. `.github/workflows/build.yml` — Badge noch 404.
 
 Noch offen aus dem Hardware-Bericht: ein UI-Hinweis, dass nach Stop
 `Start/Resume` plus erneuter Tritt nötig sein können. Wartet sinnvoll auf §3,
