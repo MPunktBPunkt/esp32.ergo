@@ -161,10 +161,14 @@ Heartbeat-Feld `fwType`: **`ergo`**
 
 ```bash
 pio run -e ergo              # Firmware für den S3
-pio test -e native           # FTMS-Codec gegen die aufgezeichneten Pakete
+pio test -e native           # Codec und Limiter auf dem Host
 ```
 
-Der Codec ist bewusst frei von Arduino, NimBLE und Zustand, damit er auf dem Host läuft. Die Sollwerte der Fixtures stammen aus `tools/ftms.py` der Sonde, also aus einer unabhängigen zweiten Implementierung — sonst prüfte der Test sich selbst.
+Zwei Hostsuiten: `test_codec` prüft den FTMS-Decoder gegen die aufgezeichneten Pakete, `test_limiter` die Sicherheitsschicht — Whitelist, Klemmen, Rasterung, Rampe und Deadman.
+
+Beide Bausteine sind bewusst frei von Arduino, NimBLE und Zustand; der Limiter bekommt sogar die Zeit als Parameter statt `millis()` zu lesen. Bei einer Komponente, die verhindern soll, dass ein Ergometer unter einem Menschen stehen bleibt, ist ein Test der echten Logik kein Luxus.
+
+> In `platformio.ini` gibt es bewusst **keine** `[env]`-Sektion: PlatformIO vererbt sie an jedes Environment, womit `env:native` das `framework = arduino` samt Boardpflicht mitbekäme. Gemeinsame Werte stehen in `[common]` und werden explizit referenziert. Die Sollwerte der Fixtures stammen aus `tools/ftms.py` der Sonde, also aus einer unabhängigen zweiten Implementierung — sonst prüfte der Test sich selbst.
 
 Vollständigen Fixture-Satz erzeugen:
 
