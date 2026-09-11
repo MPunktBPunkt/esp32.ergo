@@ -180,19 +180,12 @@ treten: die Kurbel von Hand drehen genügt.
 
 - [x] Flashen, Bike verbinden, `POST /api/control/request`
 - [x] Mitschnitt: Write-Bytes sind sint16 (`041400`), Success `800401`
+- [ ] Mitschnitt einschalten (`POST /api/debug/ring?on=1`), dann:
 - [ ] Stufe 1 setzen, Kurbel ~20 s gleichmäßig von Hand drehen
 - [ ] Stufe 16 setzen, ~20 s gleichmäßig von Hand drehen
 - [ ] Handgefühl + Journal (`worked` / ggf. `contradictory`)
-- [ ] **Mitschnitt einschalten** (Debug-Reiter) — dann ist der Lauf hinterher
-      auswertbar, auch wenn live niemand mitliest
-- [ ] Stufe 1 setzen, Kurbel gleichmäßig von Hand drehen, ~20 s
-- [ ] Stufe 16 setzen, wieder gleichmäßig von Hand drehen, ~20 s
-- [ ] **Ist der Widerstand von Hand deutlich verschieden?** Das Journal sagt es
-      zusätzlich selbst: `wirkt` oder `keine Wirkung` im Debug-Reiter. Das Bike
-      meldet auch bei Handbetrieb Werte — im letzten Bericht 12 W bei 21 rpm.
-- [ ] Bleibt es bei `keine Wirkung` **mit** Erfolgsquittung, ist sint16
-      ebenfalls falsch. Nächster Verdacht dann: fehlende `Start/Resume`-Freigabe
-      oder ein Gerätemodus an der Konsole.
+- [ ] Bleibt es bei `keine Wirkung` **mit** Erfolgsquittung → nächster Verdacht
+      `Start/Resume` oder Konsolen-Modus (nicht wieder das Drahtformat)
 
 Die Konsole taugt nicht als Rückmeldung: laut `GERAETEPROFIL.md` ist ihr Display
 aus, solange der BLE-Link steht, und die Stufe meldet das Bike in 0x2AD2 nicht
