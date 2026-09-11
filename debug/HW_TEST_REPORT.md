@@ -65,9 +65,13 @@ Unter Last: Stufenwechsel Success; systematischer Watt-vs-Stufe-Vergleich **nich
 | Phase | Beobachtung |
 |-------|-------------|
 | Mit Kurbelimpuls | **12 W / 21 rpm**; Distanz stieg. Nach Stop kurz **73–93 W / 51–62 rpm** |
-| Späteres Fenster | Dauerhaft **0 W / 0 rpm**, Distanz+elapsed **eingefroren**, Notifies weiter ~2 Hz, Start/Stufe Success |
-| Deutung | Codec-Pfad OK, wenn das Bike Aktivität meldet. Null-Fenster = aus FTMS-Sicht kein Kurbelimpuls (oder Konsolen-Pause) — nicht als Decoder-Ausfall gewertet |
-| Stufen×Watt-Kurve | **offen** — kein Fahrer mehr |
+| Zwischenfenster mit 0 W | Distanz+elapsed eingefroren, Notifies weiter ~2 Hz |
+
+**Kontext (User):** Auf dem Rad saß ein Kind, das **nicht ständig getreten** hat.
+Die Null-Phasen sind deshalb **kein Decoder-/Firmware-Fehler**, sondern fehlender
+Kurbelimpuls. Sobald getreten wurde, lief IBD (Leistung, Kadenz, Distanz) wie erwartet.
+
+Stufen×Watt-Kurve und Sweep mit gehaltener Kadenz bleiben offen (Session beendet).
 
 ---
 
