@@ -5,11 +5,11 @@ Ziel: andere Cursor-Instanz kann ohne Chat-Historie weiterarbeiten.
 
 | Datei | Inhalt |
 |-------|--------|
-| [FIRST_BUILD.md](FIRST_BUILD.md) | Was gebaut/getestet wurde, Artefakte, Befunde |
+| **[TODO_WIFI_OTA.md](TODO_WIFI_OTA.md)** | **Nächster Auftrag: Connectivity-Shell (WiFi/OTA/Hub) — blockierend für HW** |
+| [FIRST_BUILD.md](FIRST_BUILD.md) | Erster Build (Codec-Fundament) |
+| [UPDATE_LIMITER.md](UPDATE_LIMITER.md) | Pull + Build Limiter |
 | [PLATFORMIO_FIX.md](PLATFORMIO_FIX.md) | Warum `pio test -e native` scheiterte und was geändert wurde |
-| [RECOMMENDATIONS.md](RECOMMENDATIONS.md) | Nächste sinnvolle Schritte (CI, App-Schicht, Doku) |
+| [RECOMMENDATIONS.md](RECOMMENDATIONS.md) | Weitere Schritte nach Connectivity |
 | [commands.sh](commands.sh) | Copy-paste-fähige Build-/Test-Befehle |
 
-**Stand Repo:** Clone von `MPunktBPunkt/esp32.ergo` @ `9cd918a` (Upload), lokal `platformio.ini` bereits gefixt (noch uncommitted).
-
-**Nicht committen:** `.pio/` (Build-Cache). Gehört ggf. in `.gitignore`.
+**Stand Repo:** `375e052` + lokale debug-Notizen. `.88` = FtmsProbe, **kein** Ergo-OTA ohne WiFi-Shell.
