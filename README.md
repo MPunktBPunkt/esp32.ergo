@@ -1,0 +1,210 @@
+# esp32.ergo
+
+![Version](https://img.shields.io/badge/version-0.1.0--dev-orange)
+[![License: GPL v3](https://img.shields.io/badge/License-GPLv3-blue.svg)](https://www.gnu.org/licenses/gpl-3.0)
+[![Build](https://github.com/MPunktBPunkt/esp32.ergo/actions/workflows/build.yml/badge.svg)](https://github.com/MPunktBPunkt/esp32.ergo/actions/workflows/build.yml)
+[![Donate](https://img.shields.io/badge/Donate-PayPal-00457C.svg?logo=paypal)](https://www.paypal.com/donate/?business=martin%40bchmnn.de&currency_code=EUR)
+
+> **Trainingsrechner und BLE-Steuerung für das Ergometer Hammer Varon XTR II** — ERG-Emulation über die Widerstandsstufe, Pulsführung, Trainingszonen, Profile und Web-UI. Anbindung an [iobroker.esp-hub](https://github.com/MPunktBPunkt/iobroker.esp-hub).
+
+> [!WARNING]
+> **Stand: Fundament im Aufbau.** Bisher existieren FTMS-Codec und Hosttests. Es läuft noch nichts auf Hardware. Was unten unter *Features* steht, ist geplant, nicht fertig.
+
+---
+
+## Überblick
+
+`esp32.ergo` ist ein **eigenständiger Trainings-Node** zwischen Ergometer und Fahrer. Der ESP verbindet sich als BLE Central mit dem Bike, holt sich den Puls aus einer von drei Quellen und stellt den Widerstand — die Web-UI ist während der Fahrt die **einzige** Anzeige, weil das Konsolendisplay bei bestehendem BLE-Link abschaltet.
+
+| Das ist es | Das ist es nicht |
+|------------|------------------|
+| Trainingsrechner mit ERG-Emulation | Ersatz für MyWhoosh oder Zwift |
+| Zonen, Profile, Workouts, Tests | Medizinisches Messgerät |
+| Pulsgeführtes Training inkl. Reha-Deckel | Trainingsplan-Generator |
+| Hub-Telemetrie + Session-Archiv | Cloud-Sync ohne Hub |
+
+```
+Varon XTR II ──BLE Central──┐
+                            ├──▶ ESP32-S3 ──WiFi──▶ WebUI/SSE + ESP-Hub
+HR-Relay / Polar H9 ────────┘         │
+                                      └──BLE Peripheral──▶ MyWhoosh (Bridge, v0.3)
+```
+
+Der Puls kommt wahlweise direkt vom Gurt, vom [HR-Relay](https://github.com/MPunktBPunkt/esp32.heartrate) oder aus dem `0x2AD2`-Feld des Bikes, das der Polar H9 über 5 kHz GymLink speist. Die Relay-Variante ist die interessante: der H9 lässt nur **einen** BLE-Client zu, das Relay hält ihn und bedient MyWhoosh und den Ergo-Node gleichzeitig.
+
+---
+
+## Was das Gerät kann — und was nicht
+
+Vier Befunde aus dem Sondenlauf mit [esp32.ftmsprobe](https://github.com/MPunktBPunkt/esp32.ftmsprobe) tragen die gesamte Architektur:
+
+- **Standard-FTMS mit offenem Control Point.** Kein Hersteller-Protokoll, kein Reverse Engineering nötig.
+- **Kein Set Target Power.** `0x2ACC` Target-Bit 3 ist gelöscht, `0x2AD8` fehlt ganz. Jede Wattsteuerung ist deshalb **Emulation über die Widerstandsstufe**.
+- **16 Stufen**, 1,0 bis 16,0 in Zehnteln, als `04 <sint16 LE>`. Die 1-Byte-Form wird quittiert, wirkt aber nicht.
+- **Eine Erfolgsquittung beweist nichts.** Das Bike antwortet auch auf `05 64 00` mit `80 05 01` Success, obwohl es das Feature nicht meldet.
+
+Offen und blockierend sind der Stufen-Sweep (welcher Leistungsbereich ist überhaupt fahrbar — die Extrapolation deutet auf rund 130 W) und die Kadenzabhängigkeit. Beides erledigt später die geführte Kalibrierung dieser Firmware selbst.
+
+**Nichts davon steht als Konstante im Code.** `ftms::Capabilities` leitet zur Verbindungszeit aus `0x2ACC`, `0x2AD6`, `0x2AD8` und den beobachteten `0x2AD2`-Flags ab, was das angeschlossene Gerät kann, und wählt daraus die Steuerstrategie: Wattziel direkt, Emulation über die Stufe, oder nur Dashboard. Ein anderes Ergometer ist damit ein Scan, ein Connect und ein Kalibrierlauf — kein Firmwarethema. Dasselbe gilt für den Pulsgurt: die BLE-Quellen sind reines `0x180D` und herstellerunabhängig.
+
+---
+
+## Features
+
+### v0.1 — Coach
+
+- **BLE Central (NimBLE):** Scan, Connect, Remember / Forget für Bike und Gurt
+- **Steuermodi:** `OFF`, `MANUAL_LEVEL`, `MANUAL_ERG` (emuliert), `HR_HOLD`, `WORKOUT`
+- **Profile** mit eigenem FTP, HRmax, Zonenmodell und **harten Grenzen** für Leistung, Puls und Stufe
+- **Leistungsziel mit Pulsdeckel** — das Reha-Programm: 60 W halten, Puls nicht über 120
+- **Limiter** als einziger Schreibpfad: Opcode-Whitelist, Klemmen, Rampe, Deadman
+- **Kalibrierung** der Kennfläche Stufe × Kadenz → Watt, geführt und passiv lernend
+- **Debug-Modus:** Rohbyte-Ring im JSONL-Format der Sonde, direkt als Codec-Fixtures verwertbar
+- **Web-UI** mit Zonenschiene, Ist-vs-Ziel-Chart und Stellweg-Anzeige
+- Workouts als JSON auf LittleFS, Session-Archiv, Hub-Heartbeat mit `fwType: ergo`
+
+### v0.2 — Trainingslehre
+
+Workout-Editor mit Live-Vorschau und Machbarkeitsprüfung, geführte Tests (Rampe, 20 Minuten, Recovery), Physio-Progression, Ghost-Vergleich gegen die eigene Bestleistung.
+
+### v0.3 — Bridge
+
+FTMS-Peripheral mit aufgewertetem Feature-Satz: MyWhoosh verbindet sich mit dem ESP32 statt mit dem Bike und bekommt ein echtes Wattziel, das die Firmware in Stufen übersetzt.
+
+---
+
+## Hardware
+
+| Board | PlatformIO-Env | Hinweis |
+|-------|----------------|---------|
+| ESP32-S3 | `ergo` | zwei BLE-Links im Coach, drei in der Bridge |
+
+Kein D1 Mini: der Coach braucht zwei gleichzeitige Verbindungen, die Bridge drei. Kein PSRAM — `heartrate-s3` fährt drei Links plus WiFi und SSE ohne.
+
+---
+
+## Quickstart
+
+```bash
+pio run -e ergo --target upload
+pio device monitor
+```
+
+1. Hotspot **`ESP-Ergo-Setup`** → WLAN + Hub-IP (Port `8093`)
+2. Browser: `http://<ESP-IP>/` → **Geräte** → Scan → Bike verbinden
+3. Gerät erscheint im [ESP-Hub](https://github.com/MPunktBPunkt/iobroker.esp-hub)
+
+| | |
+|--|--|
+| mDNS | `ergo-XXXXXX.local` |
+| OTA | `POST /ota-upload` (multipart `firmware`) |
+| Bin-Schema | `ergo.<semver>.esp32s3.bin` |
+| WLAN zurücksetzen | BOOT / GPIO0 ca. 3 s halten |
+
+---
+
+## Libraries
+
+| Library | Autor | Version |
+|---------|-------|---------|
+| WiFiManager | tzapu | ≥ 2.0.17 |
+| ArduinoJson | bblanchon | ≥ 7.2 |
+| NimBLE-Arduino | h2zero | ≥ 1.4.3 |
+
+Platform: `espressif32@6.4.0`, Framework Arduino. NimBLE ist auf 1.4.x gepinnt — gleiche API wie `esp32.heartrate` und `esp32.ftmsprobe`, damit Code zwischen den dreien wandern kann.
+
+---
+
+## Hub-IO-Werte
+
+Heartbeat-Feld `fwType`: **`ergo`**
+
+| Key / Feld | Bedeutung |
+|------------|-----------|
+| `ergo_state` / `control_mode` | BLE-Zustand, aktiver Steuermodus |
+| `profile` | aktives Nutzerprofil |
+| `power` / `power_target` | Ist- und Zielleistung in W |
+| `level` / `level_target` | Widerstandsstufe — **Schattenwert**, siehe unten |
+| `cadence` / `speed` / `distance` | rpm, km/h, m |
+| `heart_rate` / `hr_source` / `hr_zone` | BPM, Quelle, Zone 1–5 |
+| `work_kj` / `calories` | kJ, kcal |
+| `np` / `if` / `tss` | Normalized Power, Intensity Factor, Training Stress Score |
+| `workout_name` / `workout_step` / `workout_remaining` | laufendes Programm |
+| `target_reachable` | 0, wenn das Wattziel über der Stufendecke liegt |
+
+`level` ist der Schattenwert des ESP, keine Rückmeldung des Bikes: `0x2AD2` liefert bei diesem Gerät kein Resistance-Level-Feld.
+
+---
+
+## API (Auswahl)
+
+| Endpoint | Funktion |
+|----------|----------|
+| `GET /api/status` | Gesamtstatus, Live-Werte, Session |
+| `GET /api/history` | Chart-Historie |
+| `GET /api/ble/devices` · `POST /api/ble/scan/start` `/stop` | Scan |
+| `POST /api/ble/connect` `/disconnect` `/remember` `/forget` | Verbindung |
+| `POST /api/control/mode` | `off` / `level` / `erg` / `hr` / `workout` / `sim` |
+| `POST /api/control/target` · `POST /api/control/stop` | Zielwert, Not-Stop |
+| `GET/POST /api/profile/list` `/get` `/put` `/select` | Profile |
+| `GET/POST /api/workout/list` `/load` `/start` `/pause` `/skip` | Programme |
+| `POST /api/workout/put` · `GET /api/workout/download` `/validate` | Editor (v0.2) |
+| `GET/POST /api/test/list` `/start` `/result` `/accept-ftp` | Geführte Tests (v0.2) |
+| `GET/POST /api/calib/…` | Kennfläche, Sweep |
+| `GET /api/debug/export` | NDJSON-Rohbytes im Sondenformat |
+| `GET/POST /api/config/get` `/save` | Config |
+| `/events` | SSE (Live-Updates) |
+
+---
+
+## Build und Tests
+
+```bash
+pio run -e ergo              # Firmware für den S3
+pio test -e native           # FTMS-Codec gegen die aufgezeichneten Pakete
+```
+
+Der Codec ist bewusst frei von Arduino, NimBLE und Zustand, damit er auf dem Host läuft. Die Sollwerte der Fixtures stammen aus `tools/ftms.py` der Sonde, also aus einer unabhängigen zweiten Implementierung — sonst prüfte der Test sich selbst.
+
+Vollständigen Fixture-Satz erzeugen:
+
+```bash
+python tools/make-fixtures.py \
+    --scan ../esp32.ftmsprobe/docs/ergometer/scan-20260910 \
+    --ftms ../esp32.ftmsprobe/tools/ftms.py
+```
+
+`test/test_codec/fixtures_synth.h` wird davon **nicht** überschrieben. Es deckt die Feldkombinationen ab, die der Varon nie sendet: über 832 aufgezeichnete Pakete hinweg schickt das Gerät ausschließlich `flags = 0x0B54` mit 19 Byte. Ohne die konstruierten Pakete hätte man einen Varon-Decoder statt eines FTMS-Decoders.
+
+---
+
+## Docs
+
+Die Planungsunterlagen liegen derzeit noch im Projektordner `private/docs/ergometer/` und ziehen mit dem ersten Release hierher um:
+
+| Dokument | Inhalt |
+|----------|--------|
+| `PFLICHTENHEFT.md` | Zielbild, Steuerung, Regelung, Versionen — Revision 4 |
+| `WEBINTERFACE.md` | Designkonzept der Web-UI: Zonen, Profile, Editor, Tests |
+| `GERAETEPROFIL.md` | was am Gerät gemessen wurde, inkl. Abweichungen vom Standard |
+| `NACHTESTS.md` | sechs offene Messungen mit Kommandos und Entscheidungslogik |
+
+---
+
+## Verwandte Projekte
+
+| Projekt | Rolle |
+|---------|-------|
+| [esp32.ftmsprobe](https://github.com/MPunktBPunkt/esp32.ftmsprobe) | Laborsonde; `BleProbe` wird hier zu `BleCentral` + `FtmsClient`, `tools/ftms.py` ist die Referenz für `FtmsCodec` |
+| [esp32.heartrate](https://github.com/MPunktBPunkt/esp32.heartrate) | HR-Relay als Pulsquelle; `HrServer` ist die Vorlage für den `FtmsServer` der Bridge |
+| [iobroker.esp-hub](https://github.com/MPunktBPunkt/iobroker.esp-hub) | Registrierung, IO-Werte, OTA-Verteilung |
+
+---
+
+## Lizenz & Support
+
+GNU General Public License v3.0 © MPunktBPunkt — siehe [LICENSE](LICENSE).
+
+Wenn dir das Projekt hilft, freue ich mich über einen Kaffee:
+
+[![Donate](https://img.shields.io/badge/Donate-PayPal-00457C.svg?logo=paypal)](https://www.paypal.com/donate/?business=martin%40bchmnn.de&currency_code=EUR)
