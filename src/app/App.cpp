@@ -36,6 +36,7 @@ void App::begin() {
     }
 
     applyLimiterConfig();
+    seedDefaultProfiles();
     loadPowerMap();
     journal.begin(ergo::JournalConfig{});
     // Der Ring bleibt nach dem Booten aus und wird bewusst nicht in der
@@ -78,7 +79,38 @@ void App::applyLimiterConfig() {
     // der nichts zu bewachen hat, wuerde nur Stop-Kommandos erzeugen.
     lc.deadmanMs = 0;
     lc.allowSimulation = false;  // bis Nachtest 4
+    profiles.applyTo(lc);
     limiter.begin(lc);
+}
+
+void App::seedDefaultProfiles() {
+    // Zwei Vorlagen, keines aktiv — kein stilles Defaultprofil.
+    ergo::Profile std;
+    ergo::profileCopyId(std.id, sizeof(std.id), "standard");
+    ergo::profileCopyId(std.name, sizeof(std.name), "Standard");
+    std.color = 0x4EC9A5;
+    std.ftpW = 200;
+    std.hrMax = 180;
+    std.maxPowerW = 300;
+    std.maxLevelTenths = 160;
+    std.maxHr = 180;
+    std.targetCadenceRpm = 80;
+    profiles.put(std);
+
+    ergo::Profile reha;
+    ergo::profileCopyId(reha.id, sizeof(reha.id), "reha");
+    ergo::profileCopyId(reha.name, sizeof(reha.name), "Reha");
+    reha.color = 0xF0A13A;
+    reha.ftpW = 80;
+    reha.hrMax = 130;
+    reha.maxPowerW = 100;
+    reha.maxLevelTenths = 80;  // Stufe 8,0
+    reha.maxHr = 120;
+    reha.targetCadenceRpm = 60;
+    reha.onHrLoss = ergo::HrLossPolicy::Stop;
+    reha.leadingZone = ergo::ZoneLead::Hr;
+    profiles.put(reha);
+    Serial.printf("[PROFILE] %u Vorlagen (kein aktives Profil)\n", (unsigned)profiles.count());
 }
 
 // ─────────────────────────────────────────────────────────────── BLE-Ereignis
@@ -260,6 +292,10 @@ void App::buildStatusJson(JsonDocument& doc) {
     doc["hubOk"] = hub.lastOk();
     doc["codecSelfTest"] = codecSelfTest_;
     doc["time"] = NetUtil::localNowStr();
+    doc["mode"] = ergo::controlModeName(control.mode());
+    doc["levelTargetTenths"] = control.levelTargetTenths();
+    if (profiles.activeId()) doc["profile"] = profiles.activeId();
+    else doc["profile"] = nullptr;
 
     // tools/deploy.sh liest dieses Feld und verweigert den OTA-Flash, solange
     // ein Bike haengt. Ein Neustart unter Last laesst das Ergometer gebremst
@@ -281,6 +317,8 @@ void App::buildStatusJson(JsonDocument& doc) {
     lim["writes"] = limiter.writeCount();
     lim["denies"] = limiter.denyCount();
     lim["armed"] = limiter.armed();
+    lim["profileMaxLevelTenths"] = limiter.config().profileMaxLevelTenths;
+    lim["profileMaxPowerW"] = limiter.config().profileMaxPowerW;
 
     appendCalibJson(doc["calib"].to<JsonObject>());
     appendDebugJson(doc["debug"].to<JsonObject>());
@@ -305,6 +343,17 @@ void App::buildHeartbeat(JsonDocument& doc) {
     st["type"] = "sensor";
     st["value"] = ergo::linkStateName(ble.link(ergo::Role::Bike).state);
     st["unit"] = "";
+
+    JsonObject cm = ios["control_mode"].to<JsonObject>();
+    cm["type"] = "sensor";
+    cm["value"] = ergo::controlModeName(control.mode());
+    cm["unit"] = "";
+    if (profiles.activeId()) {
+        JsonObject pr = ios["profile"].to<JsonObject>();
+        pr["type"] = "sensor";
+        pr["value"] = profiles.activeId();
+        pr["unit"] = "";
+    }
 
     ftms.appendIoValues(ios);
 
@@ -431,6 +480,7 @@ void App::registerRoutes() {
 
     registerBleRoutes();
     registerControlRoutes();
+    registerProfileRoutes();
     registerCalibRoutes();
     registerDebugRoutes();
 }
@@ -523,9 +573,9 @@ void App::registerBleRoutes() {
 // ───────────────────────────────────────────────────────── Steuer-Routen
 
 /**
- * Handsteuerung, kein Modusautomat. Der Zweck dieser drei Endpunkte ist der
- * Nachweis, dass die Kette UI -> Limiter -> Control Point haelt. Die
- * Steuermodi aus dem Pflichtenheft setzen darauf auf, sobald das belegt ist.
+ * OFF und MANUAL_LEVEL. Level-Schreiben verlangt MANUAL_LEVEL (oder setzt ihn
+ * beim Hand-Endpunkt, damit der Kurbel-Beweis ohne Extra-Schritt geht).
+ * Stop schaltet zurueck auf OFF.
  */
 void App::registerControlRoutes() {
     auto reply = [this](ergo::FtmsClient::Result r) {
@@ -537,6 +587,7 @@ void App::registerControlRoutes() {
             doc["reason"] = ftms.lastDenyReason();
         }
         doc["levelTenths"] = limiter.currentLevelTenths();
+        doc["mode"] = ergo::controlModeName(control.mode());
         const int code = (r == ergo::FtmsClient::Result::Ok) ? 200
                          : (r == ergo::FtmsClient::Result::Denied) ? 409
                          : (r == ergo::FtmsClient::Result::Deferred) ? 202
@@ -544,11 +595,72 @@ void App::registerControlRoutes() {
         NetUtil::sendJson(server, code, doc);
     };
 
-    server.on("/api/control/stop", HTTP_POST, [this, reply]() { reply(ftms.stop(millis())); });
+    server.on("/api/control/stop", HTTP_POST, [this, reply]() {
+        const auto r = ftms.stop(millis());
+        control.setMode(ergo::ControlMode::Off);
+        reply(r);
+    });
     server.on("/api/control/request", HTTP_POST,
               [this, reply]() { reply(ftms.requestControl(millis())); });
     server.on("/api/control/reset", HTTP_POST, [this, reply]() { reply(ftms.reset(millis())); });
     server.on("/api/control/start", HTTP_POST, [this, reply]() { reply(ftms.start(millis())); });
+
+    server.on("/api/control/mode", HTTP_POST, [this]() {
+        String token;
+        int16_t tenths = -1;
+        JsonDocument body;
+        const bool hasBody = server.hasArg("plain") && server.arg("plain").length() > 0;
+        if (hasBody) {
+            if (!NetUtil::readJsonBody(server, body)) return;
+            if (!body["mode"].isNull()) token = String(body["mode"].as<const char*>());
+            if (!body["tenths"].isNull()) tenths = (int16_t)body["tenths"].as<int>();
+            else if (!body["value"].isNull())
+                tenths = (int16_t)lroundf(body["value"].as<float>() * 10.0f);
+            else if (!body["level"].isNull())
+                tenths = (int16_t)lroundf(body["level"].as<float>() * 10.0f);
+        }
+        if (!token.length() && server.hasArg("mode")) token = server.arg("mode");
+        if (tenths < 0 && server.hasArg("tenths")) tenths = (int16_t)server.arg("tenths").toInt();
+        if (tenths < 0 && (server.hasArg("value") || server.hasArg("level"))) {
+            const float v = server.hasArg("value") ? server.arg("value").toFloat()
+                                                   : server.arg("level").toFloat();
+            tenths = (int16_t)lroundf(v * 10.0f);
+        }
+
+        ergo::ControlMode m;
+        if (!ergo::controlModeFromToken(token.c_str(), m)) {
+            NetUtil::sendError(server, 400, "mode fehlt oder unbekannt (off|level|…)");
+            return;
+        }
+        if (m != ergo::ControlMode::Off && m != ergo::ControlMode::ManualLevel) {
+            NetUtil::sendError(server, 501, "Modus noch nicht implementiert");
+            return;
+        }
+        if (!control.setMode(m)) {
+            NetUtil::sendError(server, 409, "Modus abgelehnt");
+            return;
+        }
+
+        JsonDocument doc;
+        doc["ok"] = true;
+        doc["mode"] = ergo::controlModeName(control.mode());
+        if (m == ergo::ControlMode::ManualLevel && tenths >= 0) {
+            control.setLevelTargetTenths(tenths);
+            doc["levelTargetTenths"] = tenths;
+            if (ble.ready(ergo::Role::Bike)) {
+                const auto r = ftms.setLevelTenths(tenths, millis());
+                doc["write"] = ergo::FtmsClient::resultName(r);
+                if (r == ergo::FtmsClient::Result::Denied ||
+                    r == ergo::FtmsClient::Result::Deferred)
+                    doc["reason"] = ftms.lastDenyReason();
+            }
+        }
+        if (m == ergo::ControlMode::Off && ble.ready(ergo::Role::Bike)) {
+            ftms.stop(millis());
+            doc["stopSent"] = true;
+        }
+        NetUtil::sendJson(server, 200, doc);
+    });
 
     server.on("/api/control/level", HTTP_POST, [this, reply]() {
         if (!server.hasArg("tenths") && !server.hasArg("level")) {
@@ -561,6 +673,11 @@ void App::registerControlRoutes() {
         } else {
             tenths = (int16_t)lroundf(server.arg("level").toFloat() * 10.0f);
         }
+        // Hand-Beweis / UI: Level-Endpunkt schaltet bei Bedarf auf MANUAL_LEVEL.
+        if (control.mode() != ergo::ControlMode::ManualLevel) {
+            control.setMode(ergo::ControlMode::ManualLevel);
+        }
+        control.setLevelTargetTenths(tenths);
         reply(ftms.setLevelTenths(tenths, millis()));
     });
 
@@ -569,12 +686,169 @@ void App::registerControlRoutes() {
             NetUtil::sendError(server, 400, "watt fehlt");
             return;
         }
-        // Am Varon lehnt der Limiter das ab, weil 0x2AD8 fehlt. Der Endpunkt
-        // existiert trotzdem: an einem Geraet, das einen Wattbereich
-        // veroeffentlicht, ist es der direkte Weg.
         reply(ftms.setPowerW((int16_t)server.arg("watt").toInt(), millis()));
     });
 }
+
+// ───────────────────────────────────────────────────────── Profile
+
+void App::profileToJson(const ergo::Profile& p, JsonObject obj) const {
+    obj["id"] = p.id;
+    obj["name"] = p.name;
+    obj["color"] = p.color;
+    obj["initial"] = p.initial;
+    obj["ftpW"] = p.ftpW;
+    obj["ftpDateUnix"] = p.ftpDateUnix;
+    obj["hrMax"] = p.hrMax;
+    obj["restingHr"] = p.restingHr;
+    obj["lthr"] = p.lthr;
+    obj["weightKg"] = p.weightKg;
+    obj["maxPowerW"] = p.maxPowerW;
+    obj["maxHr"] = p.maxHr;
+    obj["maxLevelTenths"] = p.maxLevelTenths;
+    obj["targetCadenceRpm"] = p.targetCadenceRpm;
+    obj["leadingZone"] = (p.leadingZone == ergo::ZoneLead::Hr) ? "hr" : "power";
+    obj["zoneBasis"] = (p.zoneBasis == ergo::ZoneBasis::Lthr) ? "lthr" : "hrmax";
+    const char* loss = "reduce";
+    if (p.onHrLoss == ergo::HrLossPolicy::Freeze) loss = "freeze";
+    else if (p.onHrLoss == ergo::HrLossPolicy::Stop) loss = "stop";
+    obj["onHrLoss"] = loss;
+}
+
+bool App::profileFromJson(JsonVariantConst v, ergo::Profile& out) const {
+    if (v["id"].isNull() || v["name"].isNull()) return false;
+    out = ergo::Profile{};
+    ergo::profileCopyId(out.id, sizeof(out.id), v["id"].as<const char*>());
+    ergo::profileCopyId(out.name, sizeof(out.name), v["name"].as<const char*>());
+    if (!v["initial"].isNull())
+        ergo::profileCopyId(out.initial, sizeof(out.initial), v["initial"].as<const char*>());
+    if (!v["color"].isNull()) out.color = v["color"].as<uint32_t>();
+    if (!v["ftpW"].isNull()) out.ftpW = (uint16_t)v["ftpW"].as<int>();
+    if (!v["ftpDateUnix"].isNull()) out.ftpDateUnix = v["ftpDateUnix"].as<uint32_t>();
+    if (!v["hrMax"].isNull()) out.hrMax = (uint8_t)v["hrMax"].as<int>();
+    if (!v["restingHr"].isNull()) out.restingHr = (uint8_t)v["restingHr"].as<int>();
+    if (!v["lthr"].isNull()) out.lthr = (uint8_t)v["lthr"].as<int>();
+    if (!v["weightKg"].isNull()) out.weightKg = (uint8_t)v["weightKg"].as<int>();
+    if (!v["maxPowerW"].isNull()) out.maxPowerW = (int16_t)v["maxPowerW"].as<int>();
+    if (!v["maxHr"].isNull()) out.maxHr = (uint8_t)v["maxHr"].as<int>();
+    if (!v["maxLevelTenths"].isNull()) out.maxLevelTenths = (int16_t)v["maxLevelTenths"].as<int>();
+    if (!v["targetCadenceRpm"].isNull())
+        out.targetCadenceRpm = (uint8_t)v["targetCadenceRpm"].as<int>();
+    if (!v["leadingZone"].isNull()) {
+        const char* z = v["leadingZone"].as<const char*>();
+        out.leadingZone = (z && strcmp(z, "hr") == 0) ? ergo::ZoneLead::Hr : ergo::ZoneLead::Power;
+    }
+    if (!v["zoneBasis"].isNull()) {
+        const char* z = v["zoneBasis"].as<const char*>();
+        out.zoneBasis = (z && strcmp(z, "lthr") == 0) ? ergo::ZoneBasis::Lthr : ergo::ZoneBasis::HrMax;
+    }
+    if (!v["onHrLoss"].isNull()) {
+        const char* z = v["onHrLoss"].as<const char*>();
+        if (z && strcmp(z, "freeze") == 0) out.onHrLoss = ergo::HrLossPolicy::Freeze;
+        else if (z && strcmp(z, "stop") == 0) out.onHrLoss = ergo::HrLossPolicy::Stop;
+        else out.onHrLoss = ergo::HrLossPolicy::Reduce;
+    }
+    return ergo::ProfileStore::sanitize(out);
+}
+
+void App::registerProfileRoutes() {
+    server.on("/api/profile/list", HTTP_GET, [this]() {
+        JsonDocument doc;
+        JsonArray arr = doc["profiles"].to<JsonArray>();
+        for (uint8_t i = 0; i < profiles.count(); ++i) {
+            const ergo::Profile* p = profiles.at(i);
+            if (!p) continue;
+            profileToJson(*p, arr.add<JsonObject>());
+        }
+        if (profiles.activeId()) doc["active"] = profiles.activeId();
+        else doc["active"] = nullptr;
+        NetUtil::sendJson(server, 200, doc);
+    });
+
+    server.on("/api/profile/get", HTTP_GET, [this]() {
+        const String id = server.arg("id");
+        ergo::Profile p;
+        if (!profiles.get(id.c_str(), p)) {
+            NetUtil::sendError(server, 404, "Profil nicht gefunden");
+            return;
+        }
+        JsonDocument doc;
+        profileToJson(p, doc.to<JsonObject>());
+        NetUtil::sendJson(server, 200, doc);
+    });
+
+    server.on("/api/profile/put", HTTP_POST, [this]() {
+        JsonDocument body;
+        if (!NetUtil::readJsonBody(server, body)) {
+            NetUtil::sendError(server, 400, "JSON erwartet");
+            return;
+        }
+        ergo::Profile p;
+        if (!profileFromJson(body.as<JsonVariantConst>(), p)) {
+            NetUtil::sendError(server, 400, "Profil ungueltig");
+            return;
+        }
+        if (!profiles.put(p)) {
+            NetUtil::sendError(server, 409, "Profil nicht speicherbar (voll?)");
+            return;
+        }
+        if (profiles.activeId() && strcmp(profiles.activeId(), p.id) == 0) applyLimiterConfig();
+        JsonDocument doc;
+        doc["ok"] = true;
+        profileToJson(p, doc["profile"].to<JsonObject>());
+        NetUtil::sendJson(server, 200, doc);
+    });
+
+    server.on("/api/profile/delete", HTTP_POST, [this]() {
+        String id = server.arg("id");
+        if (server.hasArg("plain") && server.arg("plain").length()) {
+            JsonDocument body;
+            if (NetUtil::readJsonBody(server, body) && !body["id"].isNull())
+                id = String(body["id"].as<const char*>());
+            else if (!id.length()) return;
+        }
+        if (!id.length()) {
+            NetUtil::sendError(server, 400, "id fehlt");
+            return;
+        }
+        if (!profiles.remove(id.c_str())) {
+            NetUtil::sendError(server, 404, "Profil nicht gefunden");
+            return;
+        }
+        applyLimiterConfig();
+        JsonDocument doc;
+        doc["ok"] = true;
+        NetUtil::sendJson(server, 200, doc);
+    });
+
+    server.on("/api/profile/select", HTTP_POST, [this]() {
+        String id = server.arg("id");
+        if (server.hasArg("plain") && server.arg("plain").length()) {
+            JsonDocument body;
+            if (NetUtil::readJsonBody(server, body) && !body["id"].isNull())
+                id = String(body["id"].as<const char*>());
+            else if (!id.length() && !server.hasArg("id")) {
+                /* empty body already errored */
+            }
+        }
+        const bool locked = control.sessionActive();
+        if (!profiles.select(id.length() ? id.c_str() : "", locked)) {
+            NetUtil::sendError(server, locked ? 409 : 404,
+                               locked ? "Profilwechsel nur im Modus OFF" : "Profil nicht gefunden");
+            return;
+        }
+        applyLimiterConfig();
+        JsonDocument doc;
+        doc["ok"] = true;
+        if (profiles.activeId()) doc["active"] = profiles.activeId();
+        else doc["active"] = nullptr;
+        doc["limiter"]["profileMaxLevelTenths"] = limiter.config().profileMaxLevelTenths;
+        doc["limiter"]["profileMaxPowerW"] = limiter.config().profileMaxPowerW;
+        NetUtil::sendJson(server, 200, doc);
+    });
+}
+
+// ───────────────────────────────────────────────────────── Kalibrierung (marker)
 
 // ───────────────────────────────────────────────────────── Kalibrierung
 

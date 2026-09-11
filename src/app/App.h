@@ -9,21 +9,19 @@
 #include "ble/HrClient.h"
 #include "ble/DebugRing.h"
 #include "control/ControlJournal.h"
+#include "control/ControlMode.h"
 #include "control/Limiter.h"
 #include "control/PowerMap.h"
 #include "control/SweepRunner.h"
 #include "core/ConfigStore.h"
 #include "core/HubClient.h"
+#include "core/Profile.h"
 
 /**
- * Shell, BLE-Fundament und Kalibrierung: WiFi, Web, OTA, Hub, zwei BLE-Links,
- * der Limiter als einziger Schreibpfad, der gefuehrte Sweep und die
- * Kennflaeche.
+ * Shell, BLE, Kalibrierung, Profile und Steuermodus OFF/MANUAL_LEVEL.
  *
- * Noch keine Steuermodi. Die kommen erst, wenn der Schreibweg am Geraet
- * nachweislich haelt — ein Modus, der auf eine ungepruefte Kette aufsetzt,
- * verschleiert nur, an welcher Stelle es klemmt. Und MANUAL_ERG wie HR_HOLD
- * brauchen ohnehin zuerst die Kennflaeche, die dieser Stand aufnimmt.
+ * MANUAL_ERG und HR_HOLD warten auf den Hand-Beweis der Stufe und die
+ * Kennflaeche (STATE.md §3 / §5).
  */
 class App {
 public:
@@ -41,6 +39,8 @@ public:
     ergo::SweepRunner sweep;
     ergo::DebugRing ring;
     ergo::ControlJournal journal;
+    ergo::ProfileStore profiles;
+    ergo::ControlState control;
 
     void begin();
     void loop();
@@ -61,10 +61,15 @@ private:
     void registerRoutes();
     void registerBleRoutes();
     void registerControlRoutes();
+    void registerProfileRoutes();
     void registerCalibRoutes();
     void registerDebugRoutes();
     void runCodecSelfTest();
     void applyLimiterConfig();
+    void seedDefaultProfiles();
+
+    void profileToJson(const ergo::Profile& p, JsonObject obj) const;
+    bool profileFromJson(JsonVariantConst v, ergo::Profile& out) const;
 
     /** Welcher Puls gilt gerade, und woher. */
     ergo::HrSource resolveHrSource() const;

@@ -97,14 +97,13 @@ für die Wirkung — und `guardAllowSim` muss dafür von `false` auf `true`.
 
 ## 5. Nächste Schritte
 
-1. **~~Kopieren und bauen.~~** Erledigt (Build-Instanz): **119/119**, Flash 65,6 %,
-   OTA auf `.88`, Caps `wide=true`, Mitschnitt zeigt `041400` (sint16).
-   Stale-Assertion in `test_codec`/`test_caps_varon` mitkorrigiert.
-2. **Der Beweis aus §3** (Hand an der Kurbel, Stufe 1 vs 16) — **als Nächstes**,
-   braucht nur jemanden vor dem Rad, keinen Fahrer.
-3. **Nachtest 1 und 2**, sobald jemand treten kann.
-4. **Profile mit Grenzen** — größter offener v0.1-Brocken ohne HW-Zwang.
-5. **Steuermodi** `OFF`, `MANUAL_LEVEL`, `MANUAL_ERG`, `HR_HOLD`, `WORKOUT`.
+1. ~~Kopieren und bauen.~~ / ~~Caps-Fix OTA.~~
+2. **Der Beweis aus §3** (Hand an der Kurbel) — wenn du daheim bist:
+   `tools/hand-proof.sh` oder Debug-Reiter + Stufe 1 vs 16.
+3. Nachtest 1 und 2 mit Fahrer.
+4. ~~**Profile mit Grenzen**~~ — RAM-Store + API + Limiter-Verdrahtung
+   (`debug/UPDATE_PROFILE_MODE.md`), Persistenz LittleFS noch offen.
+5. ~~**Steuermodi OFF / MANUAL_LEVEL**~~ — gebaut; ERG/HR/WORKOUT warten auf §3.
 6. `.github/workflows/build.yml` — Badge noch 404.
 
 Noch offen aus dem Hardware-Bericht: ein UI-Hinweis, dass nach Stop
