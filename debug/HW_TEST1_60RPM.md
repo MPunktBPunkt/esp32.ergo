@@ -22,26 +22,22 @@ Kennfläche: 14 Punkte, **8 Sweep-Zellen**, 9 Stufen belegt.
 
 (Zusätzlich passive Zellen bei Stufe 1 in anderen Bändern.)
 
-## Lesart
+## Lesart (nach Fahrer-Rückmeldung)
+
+Fahrer hat **kein Profil umgestellt**. Trotzdem war `reha` aktiv — Rest aus
+früheren Agenten-Tests (NVS-Persistenz). Das passt exakt zum Gefühl „ab irgendwann
+kein schwererer Widerstand mehr": ab Plan-Stufe 10 hat der Limiter auf **8,0**
+geklemmt. Das Training an der Konsole kann trotzdem schwerer gehen (andere
+Programme / Watt-Modus).
 
 1. **Stufe wirkt zumindest bis ~8.** 28 W → 91 W bei ~60 rpm ist kein
-   Quittungs-Phantom. Das stützt den Stufenkanal stärker als der noch offene
-   Hand-Beweis allein.
-2. **Plateau ~90 W ab Stufe 8…16.** Entweder Decke des Bikes / der Fahrleistung,
-   **oder** stilles Klemmen durch Profil `reha` (Limiter max 8,0): der Sweep
-   *plante* 10…16, schrieb aber 8, und speicherte die Plan-Stufe in die Map.
-3. Kadenz driftete zeitweise aufs **50-rpm-Band** (Stufen 4 und 6) — Punkte
-   trotzdem gültig (Drift-Regel).
+   Quittungs-Phantom.
+2. **Plateau ~90 W ab „Stufe 8…16"** = Messartefakt durch Reha-Deckel, kein
+   Beweis für eine echte Stufendecke des Bikes.
+3. Kadenz driftete zeitweise aufs **50-rpm-Band** (Stufen 4 und 6).
 
-## Folge
+## Folge / Reset 2026-09-11
 
-- Firmware: Sweep-Plan wird auf `limiter.effectiveMaxLevelTenths()` gekürzt;
-  UI/API meldet `clipped`.
-- **Empfehlung:** Profil **standard** wählen, Kennfläche verwerfen, Test 1
-  wiederholen — sonst sind 10…16 in der Map nicht vertrauenswürdig.
-- Wenn mit `standard` dasselbe Plateau kommt: Decke ~90–100 W bei 60 rpm →
-  Nachtest-Entscheidung „um 130 W Extrapolation / Deckel", Simulation `0x11`
-  wird wichtiger.
-
-Hand-Beweis §3 bleibt formal offen, ist aber durch den Anstieg 1→8 weniger
-dringlich als vorher.
+- Firmware: Sweep-Plan wird auf Profil-Max gekürzt (kein stilles Vergiften mehr).
+- Gerät zurückgesetzt: Profil **standard** (max 16,0 / 300 W), Kennfläche **leer**.
+- **Nächster Schritt:** Test 1 (60 rpm) erneut fahren.

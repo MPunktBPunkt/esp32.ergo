@@ -101,9 +101,9 @@ für die Wirkung — und `guardAllowSim` muss dafür von `false` auf `true`.
 1. ~~Kopieren und bauen.~~ / ~~Caps-Fix OTA.~~
 2. **Der Beweis aus §3** (Hand an der Kurbel) — weniger dringlich nach Test 1
    (Anstieg 1→8 sichtbar); formal noch offen.
-3. **Test 1 Nacharbeit:** wenn mit `reha` gefahren → Map leeren, `standard`,
-   Sweep wiederholen. Sonst **Test 2** (80 rpm). Details:
-   [debug/HW_TEST1_60RPM.md](debug/HW_TEST1_60RPM.md).
+3. **Test 1 erneut** mit Profil `standard` (Map geleert 2026-09-11) — der erste
+   Lauf lief unter versehentlich aktivem `reha` (NVS). Siehe
+   [debug/HW_TEST1_60RPM.md](debug/HW_TEST1_60RPM.md). Danach Test 2 (80 rpm).
 4. ~~**Profile mit Grenzen**~~ — RAM + API + Limiter; **NVS-Persistenz + UI-Reiter**
    (`debug/UPDATE_PROFILE_PERSIST.md`). LittleFS weiterhin optional.
 5. ~~**Steuermodi OFF / MANUAL_LEVEL**~~ — gebaut; ERG/HR/WORKOUT warten auf §3.
