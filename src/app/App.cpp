@@ -6,6 +6,7 @@
 #include <WiFi.h>
 #include <WiFiManager.h>
 #include <esp_system.h>
+#include <math.h>
 #include <time.h>
 
 #include "ble/FtmsCodec.h"
@@ -42,6 +43,7 @@ void App::begin() {
     }
     applyLimiterConfig();
     loadPowerMap();
+    powerCtl.begin({});
     journal.begin(ergo::JournalConfig{});
     // Der Ring bleibt nach dem Booten aus und wird bewusst nicht in der
     // Konfiguration gemerkt. Ein Mitschnitt, der einen Neustart ueberlebt und
@@ -332,6 +334,13 @@ void App::buildStatusJson(JsonDocument& doc) {
     doc["time"] = NetUtil::localNowStr();
     doc["mode"] = ergo::controlModeName(control.mode());
     doc["levelTargetTenths"] = control.levelTargetTenths();
+    doc["powerTargetW"] = control.powerTargetW();
+    JsonObject erg = doc["erg"].to<JsonObject>();
+    erg["targetW"] = powerCtl.targetW();
+    erg["smoothedW"] = powerCtl.smoothedW();
+    erg["ceiling"] = powerCtl.ceiling();
+    erg["levelTenths"] = powerCtl.lastLevelTenths();
+    erg["mapReady"] = powerMap.ready() && powerMap.pointCount() > 0;
     if (const ergo::Profile* ap = profiles.active()) {
         doc["profile"] = ap->id;
         JsonObject po = doc["profileInfo"].to<JsonObject>();
@@ -625,8 +634,7 @@ void App::registerBleRoutes() {
 // ───────────────────────────────────────────────────────── Steuer-Routen
 
 /**
- * OFF und MANUAL_LEVEL. Last schreiben verlangt ein aktives Profil
- * (Abnahmekriterium 18). Level-Endpunkt setzt bei Bedarf MANUAL_LEVEL.
+ * OFF, MANUAL_LEVEL, MANUAL_ERG. Last schreiben verlangt ein aktives Profil.
  * Stop schaltet zurueck auf OFF.
  */
 void App::registerControlRoutes() {
@@ -655,6 +663,7 @@ void App::registerControlRoutes() {
     server.on("/api/control/stop", HTTP_POST, [this, reply]() {
         const auto r = ftms.stop(millis());
         control.setMode(ergo::ControlMode::Off);
+        powerCtl.reset();
         reply(r);
     });
     server.on("/api/control/request", HTTP_POST,
@@ -665,6 +674,7 @@ void App::registerControlRoutes() {
     server.on("/api/control/mode", HTTP_POST, [this, requireProfile]() {
         String token;
         int16_t tenths = -1;
+        float watt = -1.0f;
         JsonDocument body;
         const bool hasBody = server.hasArg("plain") && server.arg("plain").length() > 0;
         if (hasBody) {
@@ -675,6 +685,7 @@ void App::registerControlRoutes() {
                 tenths = (int16_t)lroundf(body["value"].as<float>() * 10.0f);
             else if (!body["level"].isNull())
                 tenths = (int16_t)lroundf(body["level"].as<float>() * 10.0f);
+            if (!body["watt"].isNull()) watt = body["watt"].as<float>();
         }
         if (!token.length() && server.hasArg("mode")) token = server.arg("mode");
         if (tenths < 0 && server.hasArg("tenths")) tenths = (int16_t)server.arg("tenths").toInt();
@@ -683,17 +694,24 @@ void App::registerControlRoutes() {
                                                    : server.arg("level").toFloat();
             tenths = (int16_t)lroundf(v * 10.0f);
         }
+        if (watt < 0.0f && server.hasArg("watt")) watt = server.arg("watt").toFloat();
 
         ergo::ControlMode m;
         if (!ergo::controlModeFromToken(token.c_str(), m)) {
-            NetUtil::sendError(server, 400, "mode fehlt oder unbekannt (off|level|…)");
+            NetUtil::sendError(server, 400, "mode fehlt oder unbekannt (off|level|erg|…)");
             return;
         }
-        if (m != ergo::ControlMode::Off && m != ergo::ControlMode::ManualLevel) {
+        if (m != ergo::ControlMode::Off && m != ergo::ControlMode::ManualLevel &&
+            m != ergo::ControlMode::ManualErg) {
             NetUtil::sendError(server, 501, "Modus noch nicht implementiert");
             return;
         }
         if (m != ergo::ControlMode::Off && !requireProfile()) return;
+        if (m == ergo::ControlMode::ManualErg &&
+            (!powerMap.ready() || powerMap.pointCount() == 0)) {
+            NetUtil::sendError(server, 409, "Kennfläche leer — zuerst Kalibrierung");
+            return;
+        }
         if (!control.setMode(m)) {
             NetUtil::sendError(server, 409, "Modus abgelehnt");
             return;
@@ -713,8 +731,18 @@ void App::registerControlRoutes() {
                     doc["reason"] = ftms.lastDenyReason();
             }
         }
+        if (m == ergo::ControlMode::ManualErg) {
+            powerCtl.reset();
+            if (watt > 0.0f) {
+                control.setPowerTargetW(watt);
+                powerCtl.setTargetW(watt);
+            }
+            doc["powerTargetW"] = control.powerTargetW();
+            doc["mapPoints"] = powerMap.pointCount();
+        }
         if (m == ergo::ControlMode::Off && ble.ready(ergo::Role::Bike)) {
             ftms.stop(millis());
+            powerCtl.reset();
             doc["stopSent"] = true;
         }
         NetUtil::sendJson(server, 200, doc);
@@ -732,7 +760,6 @@ void App::registerControlRoutes() {
         } else {
             tenths = (int16_t)lroundf(server.arg("level").toFloat() * 10.0f);
         }
-        // Hand-Beweis / UI: Level-Endpunkt schaltet bei Bedarf auf MANUAL_LEVEL.
         if (control.mode() != ergo::ControlMode::ManualLevel) {
             control.setMode(ergo::ControlMode::ManualLevel);
         }
@@ -746,7 +773,31 @@ void App::registerControlRoutes() {
             NetUtil::sendError(server, 400, "watt fehlt");
             return;
         }
-        reply(ftms.setPowerW((int16_t)server.arg("watt").toInt(), millis()));
+        const float wattIn = server.arg("watt").toFloat();
+        float watt = wattIn;
+        if (const ergo::Profile* ap = profiles.active()) {
+            if (ap->maxPowerW > 0 && watt > (float)ap->maxPowerW) watt = (float)ap->maxPowerW;
+        }
+        // Emuliertes ERG-Ziel (nicht Opcode 0x05 — der ist am Varon tot).
+        if (server.arg("raw") == "1") {
+            reply(ftms.setPowerW((int16_t)wattIn, millis()));
+            return;
+        }
+        if (control.mode() != ergo::ControlMode::ManualErg) {
+            if (!powerMap.ready() || powerMap.pointCount() == 0) {
+                NetUtil::sendError(server, 409, "Kennfläche leer — zuerst Kalibrierung");
+                return;
+            }
+            control.setMode(ergo::ControlMode::ManualErg);
+        }
+        control.setPowerTargetW(watt);
+        powerCtl.setTargetW(watt);
+        JsonDocument doc;
+        doc["ok"] = true;
+        doc["mode"] = "MANUAL_ERG";
+        doc["powerTargetW"] = watt;
+        doc["ceiling"] = powerCtl.ceiling();
+        NetUtil::sendJson(server, 200, doc);
     });
 }
 
@@ -1009,6 +1060,34 @@ void App::loopCalibration(unsigned long now) {
     }
 
     if (mapDirty_ && now - mapSaved_ >= kMapSaveMs) savePowerMap();
+}
+
+void App::loopErg(unsigned long now) {
+    if (control.mode() != ergo::ControlMode::ManualErg) return;
+    if (!ble.ready(ergo::Role::Bike) || !ftms.attached()) return;
+    if (sweep.running()) return;  // Kalibrierung hat Vorrang
+
+    const bool fresh = ftms.hasLive() && !ftms.stale(now);
+    const float rpm = fresh ? ftms.live().cadenceRpm() : 0.0f;
+    const float watt = fresh ? (float)ftms.live().powerW : 0.0f;
+
+    // Ziel aus ControlState nachziehen (API kann es aendern).
+    if (control.powerTargetW() > 0.0f &&
+        fabsf(control.powerTargetW() - powerCtl.targetW()) > 0.5f) {
+        powerCtl.setTargetW(control.powerTargetW());
+    }
+
+    const ergo::PowerController::Tick t = powerCtl.tick(now, rpm, watt, fresh, powerMap);
+    if (!t.wantWrite || t.levelTenths < 0) return;
+
+    const ergo::FtmsClient::Result r = ftms.setLevelTenths(t.levelTenths, now);
+    if (r == ergo::FtmsClient::Result::Ok) {
+        Serial.printf("[ERG] Ziel %.0f W → Stufe %d%s (Ist~%.0f W, rpm=%.0f)\n", t.targetW,
+                      (int)t.levelTenths, t.ceiling ? " CEILING" : "", t.smoothedW, rpm);
+    } else if (r != ergo::FtmsClient::Result::Deferred) {
+        Serial.printf("[ERG] Write abgelehnt: %s (%s)\n", ergo::FtmsClient::resultName(r),
+                      ftms.lastDenyReason());
+    }
 }
 
 void App::loadPowerMap() {
@@ -1395,6 +1474,7 @@ void App::loop() {
     const unsigned long now = millis();
     loopDebug(now);
     loopCalibration(now);
+    loopErg(now);
 
     // Waehrend eines aktiven Links haeufiger senden — beim Fahren sind 2 s
     // eine Ewigkeit, im Leerlauf waere 1 Hz reine Verschwendung.

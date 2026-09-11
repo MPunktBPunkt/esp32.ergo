@@ -5,10 +5,8 @@ zuerst diese Datei und danach gezielt weiter. Alle anderen Notizen in `debug/`
 sind Protokolle einzelner Arbeitsschritte und beschreiben den Stand *zu ihrem
 Zeitpunkt* — sie werden nicht nachgeführt.
 
-Stand dieser Datei: **2026-09-11** ~21:44. Test 1 + Test 2 leicht **ok**.
-Kennlinie linear bis 170 W @ 60 rpm; bei Stufe 8: 89 W@60 → 123 W@80 (+37 %).
-Details: [HW_TEST1_60RPM.md](debug/HW_TEST1_60RPM.md),
-[HW_TEST2_LIGHT.md](debug/HW_TEST2_LIGHT.md).
+Stand dieser Datei: **2026-09-11** Nacht. Test 1+2 ok → **MANUAL_ERG** gebaut
+([debug/UPDATE_ERG.md](debug/UPDATE_ERG.md)). Kennlinie / Kadenz: HW_TEST1/2.
 
 ---
 
@@ -102,12 +100,10 @@ für die Wirkung — und `guardAllowSim` muss dafür von `false` auf `true`.
 3. ~~**Test 2 leicht**~~ — Kadenzabhängigkeit bestätigt (+37 % W bei Stufe 8,
    60→80 rpm). [debug/HW_TEST2_LIGHT.md](debug/HW_TEST2_LIGHT.md).
    Voller Test 2 optional.
-4. Optional: Nachtest 3 (`0x05` tot) / 4 (`0x11` Simulation) — ohne langen Sweep.
-5. ~~**Steuermodi OFF / MANUAL_LEVEL**~~ — gebaut; ERG/HR/WORKOUT warten auf §3.
-   Profilpflicht + Ride-UI + Profil-Editor: [debug/UPDATE_CONTROL_UI.md](debug/UPDATE_CONTROL_UI.md).
-6. ~~`.github/workflows/build.yml`~~ — native + `ergo`-Build + Fixture-Verify.
-7. ~~**Abnahme 6a**~~ — Export→`make-fixtures.py` Roundtrip
-   ([debug/UPDATE_FIXTURE_6A.md](debug/UPDATE_FIXTURE_6A.md)).
+4. Optional: Nachtest 3 (`0x05` tot, API `power?raw=1`) / 4 (`0x11`).
+5. ~~**MANUAL_ERG**~~ — PowerController + UI ([debug/UPDATE_ERG.md](debug/UPDATE_ERG.md)).
+6. **HR_HOLD** / Reha-Programm — nächstes großes Paket.
+7. ~~`.github/workflows/build.yml`~~ / ~~6a~~ / Profile / OFF|LEVEL — erledigt.
 
 Noch offen aus dem Hardware-Bericht: ein UI-Hinweis, dass nach Stop
 `Start/Resume` plus erneuter Tritt nötig sein können. Wartet sinnvoll auf §3,
@@ -148,7 +144,8 @@ Die Liste selbst steht in [PFLICHTENHEFT.md](docs/ergometer/PFLICHTENHEFT.md) §
 | 6 | **erfüllt für Architektur** (60 rpm voll + 80 rpm leicht); dichtere Map optional |
 | 6a | **erfüllt** (Host + Live-Export + CI `--verify-curated`) |
 | 6b | gebaut und hosttestbar; auf Hardware noch nicht gesehen |
-| 7–12, 14–17, 19–21 | nicht angefangen |
+| 7 | **Mechanik da** (MANUAL_ERG); Abnahme mit Fahrer offen |
+| 8 | Ceiling-Flag gebaut; UI-Markierung grob |
 | 13 | erfüllt (gewollter Neustart sendet `08 01`) |
 | 18 | Profilpflicht + Wechsel-Lock gebaut (UI/API); Session-Begriff noch ohne Workout |
 

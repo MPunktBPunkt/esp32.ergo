@@ -209,8 +209,15 @@ footer{color:var(--dim);font-size:12px;text-align:center;margin-top:26px}
       <div class="row flat">
         <button id="moff" class="ghost">OFF</button>
         <button id="mlvl" class="ghost">LEVEL</button>
+        <button id="merg" class="ghost">ERG</button>
         <button id="panic" class="danger">STOP</button>
       </div>
+      <div class="row flat">
+        <label class="f" style="flex:1;margin:0"><div class="k">Zielwatt (ERG)</div>
+          <input type="number" id="ergw" min="20" max="300" step="5" value="80"></label>
+        <button id="erggo" class="ghost">Ziel setzen</button>
+      </div>
+      <div class="k" id="ergsub"></div>
       <div class="row flat">
         <button id="req" class="ghost">Steuerhoheit</button>
         <button id="cstart" class="ghost">Start</button>
@@ -219,9 +226,9 @@ footer{color:var(--dim);font-size:12px;text-align:center;margin-top:26px}
         <button id="lvlup" class="ghost">Stufe +1</button>
       </div>
       <div class="msg" id="cmsg"></div>
-      <div class="hint flat">Ohne aktives Profil keine Last. ERG / HR / Workout
-        warten auf den Stufen-Beweis und die Kennfläche. Start/Reset sind FTMS-
-        Freigaben — nach STOP ggf. nötig, bevor neue Stufen greifen.</div>
+      <div class="hint flat">Ohne aktives Profil keine Last. ERG braucht eine
+        Kennfläche (Kalibrierung). HR_HOLD folgt später. Start/Reset sind FTMS-
+        Freigaben — nach STOP ggf. nötig.</div>
     </div>
   </section>
 
@@ -668,10 +675,25 @@ function renderBle(s){
     :'vor LEVEL Profil wählen';
   const mode=(s.mode||'OFF');
   $('rmode').textContent=mode;
-  $('rmodesub').textContent=mode==='MANUAL_LEVEL'?'Handstufe':(mode==='OFF'?'keine Last':'');
+  const erg=s.erg||{};
+  let msub=mode==='MANUAL_LEVEL'?'Handstufe':(mode==='OFF'?'keine Last':'');
+  if(mode==='MANUAL_ERG'){
+    msub=(erg.targetW?('Ziel '+Math.round(erg.targetW)+' W'):'kein Ziel')
+      +(erg.ceiling?' · Decke':'')
+      +(erg.smoothedW!=null?(' · Ist~'+Math.round(erg.smoothedW)+' W'):'');
+  }
+  $('rmodesub').textContent=msub;
   $('moff').classList.toggle('ghost', mode!=='OFF');
   $('mlvl').classList.toggle('ghost', mode!=='MANUAL_LEVEL');
-  $('lvlup').disabled=!hasP; $('lvldn').disabled=!hasP; $('mlvl').disabled=!hasP;
+  $('merg').classList.toggle('ghost', mode!=='MANUAL_ERG');
+  $('lvlup').disabled=!hasP||mode==='MANUAL_ERG';
+  $('lvldn').disabled=!hasP||mode==='MANUAL_ERG';
+  $('mlvl').disabled=!hasP;
+  $('merg').disabled=!hasP||!(erg.mapReady);
+  $('erggo').disabled=!hasP||!(erg.mapReady);
+  $('ergsub').textContent=erg.mapReady
+    ?(mode==='MANUAL_ERG'&&erg.ceiling?'Ziel oberhalb der Kennfläche — höchste Stufe':'')
+    :'ERG: zuerst Kalibrierung (Kennfläche)';
   $('rprof').style.color=(pi&&pi.color)?('#'+('000000'+Number(pi.color).toString(16)).slice(-6)):'';
 
   const strat={'emulate-resistance':'Emulation über Widerstand','direct-target':'Wattziel direkt',
@@ -968,6 +990,14 @@ $('cstart').onclick=()=>post('/api/control/start');
 $('creset').onclick=()=>post('/api/control/reset');
 $('moff').onclick=()=>post('/api/control/mode?mode=off');
 $('mlvl').onclick=()=>post('/api/control/mode?mode=level');
+$('merg').onclick=()=>{
+  const w=+$('ergw').value||80;
+  post('/api/control/mode?mode=erg&watt='+w);
+};
+$('erggo').onclick=()=>{
+  const w=+$('ergw').value||80;
+  post('/api/control/power?watt='+w);
+};
 $('lvlup').onclick=()=>step(+10);
 $('lvldn').onclick=()=>step(-10);
 function step(delta){

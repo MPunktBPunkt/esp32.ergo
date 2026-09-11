@@ -34,9 +34,19 @@ static void test_level_while_off_denied(void) {
     TEST_ASSERT_FALSE(c.setLevelTargetTenths(50));
 }
 
+static void test_manual_erg(void) {
+    ControlState c;
+    TEST_ASSERT_TRUE(c.setMode(ControlMode::ManualErg));
+    TEST_ASSERT_TRUE(c.allowsErg());
+    TEST_ASSERT_TRUE(c.allowsAnyLoadWrite());
+    TEST_ASSERT_FALSE(c.allowsLevelWrite());
+    TEST_ASSERT_TRUE(c.setPowerTargetW(100.0f));
+    TEST_ASSERT_FLOAT_WITHIN(0.1f, 100.0f, c.powerTargetW());
+    TEST_ASSERT_FALSE(c.setLevelTargetTenths(80));
+}
+
 static void test_unimplemented_modes(void) {
     ControlState c;
-    TEST_ASSERT_FALSE(c.setMode(ControlMode::ManualErg));
     TEST_ASSERT_FALSE(c.setMode(ControlMode::HrHold));
     TEST_ASSERT_FALSE(c.setMode(ControlMode::Workout));
     TEST_ASSERT_FALSE(c.setMode(ControlMode::Sim));
@@ -57,6 +67,7 @@ static void test_token_parse(void) {
 static void test_names(void) {
     TEST_ASSERT_EQUAL_STRING("OFF", controlModeName(ControlMode::Off));
     TEST_ASSERT_EQUAL_STRING("MANUAL_LEVEL", controlModeName(ControlMode::ManualLevel));
+    TEST_ASSERT_EQUAL_STRING("MANUAL_ERG", controlModeName(ControlMode::ManualErg));
 }
 
 void setUp(void) {}
@@ -66,6 +77,7 @@ int main(int, char**) {
     UNITY_BEGIN();
     RUN_TEST(test_boot_off);
     RUN_TEST(test_manual_level);
+    RUN_TEST(test_manual_erg);
     RUN_TEST(test_off_clears_target);
     RUN_TEST(test_level_while_off_denied);
     RUN_TEST(test_unimplemented_modes);
