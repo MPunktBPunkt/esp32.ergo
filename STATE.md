@@ -5,12 +5,11 @@ zuerst diese Datei und danach gezielt weiter. Alle anderen Notizen in `debug/`
 sind Protokolle einzelner Arbeitsschritte und beschreiben den Stand *zu ihrem
 Zeitpunkt* — sie werden nicht nachgeführt.
 
-Stand dieser Datei: **2026-09-11** (Abend), Profilpflicht + Ride/Profil-UI auf `.88`.
+Stand dieser Datei: **2026-09-11** (Abend), Fixture-Roundtrip 6a + Sweep-Profilpflicht.
 
 **Wochenende:** Einstieg hier. Hand-Beweis: `tools/hand-proof.sh`.
-Details: [debug/UPDATE_PROFILE_MODE.md](debug/UPDATE_PROFILE_MODE.md),
-[debug/UPDATE_PROFILE_PERSIST.md](debug/UPDATE_PROFILE_PERSIST.md),
-[debug/UPDATE_CONTROL_UI.md](debug/UPDATE_CONTROL_UI.md).
+Details: [debug/UPDATE_CONTROL_UI.md](debug/UPDATE_CONTROL_UI.md),
+[debug/UPDATE_FIXTURE_6A.md](debug/UPDATE_FIXTURE_6A.md).
 
 ---
 
@@ -106,7 +105,9 @@ für die Wirkung — und `guardAllowSim` muss dafür von `false` auf `true`.
    (`debug/UPDATE_PROFILE_PERSIST.md`). LittleFS weiterhin optional.
 5. ~~**Steuermodi OFF / MANUAL_LEVEL**~~ — gebaut; ERG/HR/WORKOUT warten auf §3.
    Profilpflicht + Ride-UI + Profil-Editor: [debug/UPDATE_CONTROL_UI.md](debug/UPDATE_CONTROL_UI.md).
-6. ~~`.github/workflows/build.yml`~~ — native + `ergo`-Build.
+6. ~~`.github/workflows/build.yml`~~ — native + `ergo`-Build + Fixture-Verify.
+7. ~~**Abnahme 6a**~~ — Export→`make-fixtures.py` Roundtrip
+   ([debug/UPDATE_FIXTURE_6A.md](debug/UPDATE_FIXTURE_6A.md)).
 
 Noch offen aus dem Hardware-Bericht: ein UI-Hinweis, dass nach Stop
 `Start/Resume` plus erneuter Tritt nötig sein können. Wartet sinnvoll auf §3,
@@ -145,7 +146,7 @@ Die Liste selbst steht in [PFLICHTENHEFT.md](docs/ergometer/PFLICHTENHEFT.md) §
 | 1–4 | erfüllt und auf Hardware gesehen |
 | 5 | **offen** — genau der Beweis aus §3 |
 | 6 | Mechanik gebaut (Sweep, Kennfläche, verworfene Punkte werden als verworfen ausgewiesen), Messung fehlt |
-| 6a | gebaut; der Fixture-Rundlauf über `tools/make-fixtures.py` ist noch nicht einmal durchgespielt |
+| 6a | **erfüllt** (Host + Live-Export + CI `--verify-curated`) |
 | 6b | gebaut und hosttestbar; auf Hardware noch nicht gesehen |
 | 7–12, 14–17, 19–21 | nicht angefangen |
 | 13 | erfüllt (gewollter Neustart sendet `08 01`) |

@@ -1096,6 +1096,10 @@ void App::appendCalibJson(JsonObject obj) const {
  */
 void App::registerCalibRoutes() {
     server.on("/api/calib/sweep/start", HTTP_POST, [this]() {
+        if (!profiles.active()) {
+            NetUtil::sendError(server, 409, "Profil wählen (Reiter Profile)");
+            return;
+        }
         if (!ble.ready(ergo::Role::Bike) || !ftms.attached()) {
             NetUtil::sendError(server, 409, "kein Bike verbunden");
             return;

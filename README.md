@@ -194,9 +194,11 @@ Beide Bausteine sind bewusst frei von Arduino, NimBLE und Zustand; der Limiter b
 Vollständigen Fixture-Satz erzeugen:
 
 ```bash
-python tools/make-fixtures.py \
-    --scan ../esp32.ftmsprobe/docs/ergometer/scan-20260910 \
-    --ftms ../esp32.ftmsprobe/tools/ftms.py
+# Stichprobe aus Debug-Export (Abnahme 6a) — CI und lokal:
+python tools/make-fixtures.py --verify-curated
+
+# Optional voller Laborlauf (schreibt Temp-Header; fixtures_ibd.h nur mit --write-curated):
+python tools/make-fixtures.py --scan ../nodes/esp32.ftmsprobe/docs/ergometer/scan-20260910
 ```
 
 `test/test_codec/fixtures_synth.h` wird davon **nicht** überschrieben. Es deckt die Feldkombinationen ab, die der Varon nie sendet: über 832 aufgezeichnete Pakete hinweg schickt das Gerät ausschließlich `flags = 0x0B54` mit 19 Byte. Ohne die konstruierten Pakete hätte man einen Varon-Decoder statt eines FTMS-Decoders.
