@@ -112,6 +112,58 @@ static void test_update_same_id(void) {
     TEST_ASSERT_EQUAL_INT16(80, out.maxLevelTenths);
 }
 
+static void test_save_load_roundtrip(void) {
+    ProfileStore a;
+    Profile p = make("reha", "Reha", 80, 100, 120);
+    p.color = 0xF0A13A;
+    p.ftpW = 80;
+    p.targetCadenceRpm = 60;
+    p.onHrLoss = HrLossPolicy::Stop;
+    p.leadingZone = ZoneLead::Hr;
+    TEST_ASSERT_TRUE(a.put(p));
+    TEST_ASSERT_TRUE(a.put(make("standard", "Standard", 160, 300, 180)));
+    TEST_ASSERT_TRUE(a.select("reha"));
+
+    uint8_t buf[ProfileStore::kMaxBytes];
+    const size_t n = a.save(buf, sizeof(buf));
+    TEST_ASSERT_TRUE(n > 0);
+    TEST_ASSERT_TRUE(n <= ProfileStore::kMaxBytes);
+
+    ProfileStore b;
+    TEST_ASSERT_TRUE(b.load(buf, n));
+    TEST_ASSERT_EQUAL_UINT8(2, b.count());
+    TEST_ASSERT_EQUAL_STRING("reha", b.activeId());
+    Profile out;
+    TEST_ASSERT_TRUE(b.get("reha", out));
+    TEST_ASSERT_EQUAL_STRING("Reha", out.name);
+    TEST_ASSERT_EQUAL_UINT32(0xF0A13A, out.color);
+    TEST_ASSERT_EQUAL_UINT16(80, out.ftpW);
+    TEST_ASSERT_EQUAL_INT16(80, out.maxLevelTenths);
+    TEST_ASSERT_EQUAL_INT16(100, out.maxPowerW);
+    TEST_ASSERT_EQUAL_UINT8(120, out.maxHr);
+    TEST_ASSERT_EQUAL_UINT8(60, out.targetCadenceRpm);
+    TEST_ASSERT_EQUAL_UINT8(static_cast<uint8_t>(HrLossPolicy::Stop), static_cast<uint8_t>(out.onHrLoss));
+    TEST_ASSERT_EQUAL_UINT8(static_cast<uint8_t>(ZoneLead::Hr), static_cast<uint8_t>(out.leadingZone));
+}
+
+static void test_load_rejects_bad_magic(void) {
+    ProfileStore s;
+    uint8_t junk[32] = {0};
+    TEST_ASSERT_FALSE(s.load(junk, sizeof(junk)));
+    TEST_ASSERT_EQUAL_UINT8(0, s.count());
+}
+
+static void test_save_empty_store(void) {
+    ProfileStore s;
+    uint8_t buf[ProfileStore::kMaxBytes];
+    const size_t n = s.save(buf, sizeof(buf));
+    TEST_ASSERT_EQUAL(22u, n);  // Header only
+    ProfileStore t;
+    TEST_ASSERT_TRUE(t.load(buf, n));
+    TEST_ASSERT_EQUAL_UINT8(0, t.count());
+    TEST_ASSERT_NULL(t.activeId());
+}
+
 void setUp(void) {}
 void tearDown(void) {}
 
@@ -127,5 +179,8 @@ int main(int, char**) {
     RUN_TEST(test_remove_clears_active);
     RUN_TEST(test_full_rejects_fifth);
     RUN_TEST(test_update_same_id);
+    RUN_TEST(test_save_load_roundtrip);
+    RUN_TEST(test_load_rejects_bad_magic);
+    RUN_TEST(test_save_empty_store);
     return UNITY_END();
 }

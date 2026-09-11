@@ -67,6 +67,8 @@ private:
     void runCodecSelfTest();
     void applyLimiterConfig();
     void seedDefaultProfiles();
+    void loadProfiles();
+    void saveProfiles();
 
     void profileToJson(const ergo::Profile& p, JsonObject obj) const;
     bool profileFromJson(JsonVariantConst v, ergo::Profile& out) const;

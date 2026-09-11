@@ -9,9 +9,8 @@
 /**
  * Nutzerprofil — Grenzen, Zonenparameter, Verhalten bei Pulsverlust.
  *
- * Arduino-frei und hosttestbar. Persistenz (LittleFS) kommt spaeter; dieser
- * Stand haelt die Profile im RAM, damit Limiter und Steuermodus schon jetzt
- * gegen echte Grenzen laufen.
+ * Arduino-frei und hosttestbar. Persistenz als Byte-Blob (NVS via App),
+ * Roundtrip ueber save()/load() — gleiche Idee wie PowerMap.
  *
  * Die Kennflaeche Stufe × Kadenz → Watt gehoert NICHT hierher.
  */
@@ -65,6 +64,7 @@ public:
     static constexpr uint8_t kMaxProfiles = 4;
     /** Absolute Pulsdeckel — auch ein fehlerhaftes Profil darf nicht hoeher. */
     static constexpr uint8_t kHrCeilingMax = 190;
+    static constexpr size_t kMaxBytes = 320;
 
     uint8_t count() const { return count_; }
     const Profile* at(uint8_t i) const { return i < count_ ? &items_[i] : nullptr; }
@@ -84,12 +84,17 @@ public:
      */
     bool select(const char* id, bool sessionLocked = false);
     void clearActive();
+    void clearAll();
 
     /** Schreibt Profilgrenzen in die Limiter-Config (0 bleibt 0). */
     void applyTo(LimiterConfig& lc) const;
 
     /** Klemmt maxHr auf kHrCeilingMax; leere id/name → false. */
     static bool sanitize(Profile& p);
+
+    /** Byte-Blob fuer NVS. 0 = Puffer zu klein / leer. */
+    size_t save(uint8_t* out, size_t cap) const;
+    bool load(const uint8_t* in, size_t len);
 
 private:
     int findIndex(const char* id) const;

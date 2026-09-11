@@ -206,9 +206,34 @@ footer{color:var(--dim);font-size:12px;text-align:center;margin-top:26px}
         <button id="lvlup" class="ghost">Stufe +1</button>
       </div>
       <div class="msg" id="cmsg"></div>
-      <div class="hint flat">Steuermodi, Zonen und Workout-Anzeige kommen mit den
-        Profilen. Bis dahin ist das hier der geprüfte Schreibweg: jeder Befehl
-        läuft durch den Limiter, jede Ablehnung steht oben mit Begründung.</div>
+      <div class="hint flat">Steuermodi und Zonen kommen noch. Bis dahin: jeder
+        Befehl läuft durch den Limiter — Profile setzen die harten Grenzen
+        (Reiter Profile).</div>
+    </div>
+  </section>
+
+  <section id="t-profile">
+    <div class="card">
+      <h2>Profile</h2>
+      <div class="hint flat">Kein stilles Standardprofil. Vor dem Training eines
+        wählen — Wechsel nur im Modus OFF. Grenzen gelten sofort für den Limiter.
+        Bearbeiten über die API; hier Liste und Auswahl.</div>
+      <table id="plist"></table>
+      <div class="k" id="plnone">noch keine Profile</div>
+      <div class="row tight"><button id="pclr" class="ghost sm">Auswahl aufheben</button>
+        <button id="prld" class="ghost sm">Neu laden</button></div>
+      <div class="msg" id="pmsg"></div>
+    </div>
+    <div class="card">
+      <h2>Aktives Profil</h2>
+      <div class="grid">
+        <div><div class="k">Name</div><div class="v" id="paname">-</div></div>
+        <div><div class="k">FTP</div><div class="v" id="paftp">-</div></div>
+        <div><div class="k">HRmax</div><div class="v" id="pahr">-</div></div>
+        <div><div class="k">max. Stufe</div><div class="v" id="palvl">-</div></div>
+        <div><div class="k">max. Watt</div><div class="v" id="papw">-</div></div>
+        <div><div class="k">max. Puls</div><div class="v" id="pamhr">-</div></div>
+      </div>
     </div>
   </section>
 
@@ -455,7 +480,7 @@ const NAV=[
  ['workouts','Workouts','v0.2','Bibliothek, Editor mit Live-Vorschau und Machbarkeitsprüfung, Import und Export.'],
  ['tests','Tests','v0.2','Geführte Tests: Rampe, 20 Minuten, Recovery. Ergebnis wird vorgeschlagen, nie automatisch übernommen.'],
  ['verlauf','Verlauf','v0.2','Sessions je Profil, Zonenverteilung, Physio-Progression, Ghost-Vergleich.'],
- ['profile','Profile','v0.1','Zwei Menschen, ein Bike: Zonen, FTP, HRmax und harte Grenzen je Profil. Kein stilles Standardprofil.'],
+ ['profile','Profile','',''],
  ['dev','Geräte','',''],
  ['calib','Kalibrierung','',''],
  ['debug','Debug','',''],
@@ -488,6 +513,7 @@ function tab(n){
   if(n==='dev') devs();
   if(n==='cfg') loadCfg();
   if(n==='calib') loadMap();
+  if(n==='profile') loadProfiles();
 }
 
 function num(v,d,u){return (v==null)?'-':(d?v.toFixed(d):Math.round(v))+(u||'');}
@@ -786,6 +812,53 @@ function post(url,msg){
       m.textContent=(o.j.result||o.j.error||'ok')+(o.j.reason?(' - '+o.j.reason):'');return o.j;})
     .catch(e=>{m.className='msg err';m.textContent=''+e;});
 }
+
+function lvDisp(t){return t==null||t<=0?'-':(t/10).toFixed(1);}
+function loadProfiles(){
+  fetch('/api/profile/list').then(r=>r.json()).then(j=>{
+    const t=$('plist'); t.innerHTML='';
+    const act=j.active||null;
+    const list=j.profiles||[];
+    $('plnone').style.display=list.length?'none':'';
+    list.forEach(p=>{
+      const tr=document.createElement('tr');
+      const on=act&&act===p.id;
+      tr.innerHTML='<td><span class="dot'+(on?' on':'')+'"></span><b>'+(p.name||p.id)+'</b>'
+        +(on?' <span class="tag">aktiv</span>':'')
+        +'<br><span class="k">'+p.id
+        +' · FTP '+(p.ftpW||'-')+' W · max Stufe '+lvDisp(p.maxLevelTenths)
+        +' · max '+(p.maxPowerW||'-')+' W · max HR '+(p.maxHr||'-')+'</span></td>'
+        +'<td class="r"></td>';
+      const td=tr.querySelector('td.r');
+      if(!on){
+        const b=document.createElement('button');
+        b.className='ghost sm'; b.textContent='Wählen';
+        b.onclick=ev=>{ev.stopPropagation(); selectProfile(p.id);};
+        td.appendChild(b);
+      }
+      t.appendChild(tr);
+    });
+    const ap=list.find(x=>x.id===act);
+    $('paname').textContent=ap?(ap.name||ap.id):'(keins)';
+    $('paftp').textContent=ap&&ap.ftpW?ap.ftpW+' W':'-';
+    $('pahr').textContent=ap&&ap.hrMax?ap.hrMax:'-';
+    $('palvl').textContent=ap?lvDisp(ap.maxLevelTenths):'-';
+    $('papw').textContent=ap&&ap.maxPowerW?ap.maxPowerW+' W':'-';
+    $('pamhr').textContent=ap&&ap.maxHr?ap.maxHr:'-';
+  }).catch(e=>{$('pmsg').className='msg err';$('pmsg').textContent=''+e;});
+}
+function selectProfile(id){
+  const q=id?('?id='+encodeURIComponent(id)):'';
+  fetch('/api/profile/select'+q,{method:'POST'}).then(r=>r.json().then(j=>({s:r.status,j})))
+    .then(o=>{
+      $('pmsg').className='msg '+(o.j.ok?'ok':'err');
+      $('pmsg').textContent=o.j.ok?(o.j.active?('aktiv: '+o.j.active):'Auswahl aufgehoben')
+        :(o.j.error||'Fehler');
+      loadProfiles();
+    }).catch(e=>{$('pmsg').className='msg err';$('pmsg').textContent=''+e;});
+}
+$('prld').onclick=()=>loadProfiles();
+$('pclr').onclick=()=>selectProfile('');
 
 $('scan').onclick=()=>{$('dmsg').textContent='suche 8 s ...';
   fetch('/api/ble/scan/start',{method:'POST'}).catch(()=>{});};

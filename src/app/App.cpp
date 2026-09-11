@@ -35,8 +35,12 @@ void App::begin() {
         if (MDNS.begin(mdns.c_str())) Serial.printf("[mDNS] %s.local\n", mdns.c_str());
     }
 
+    loadProfiles();
+    if (profiles.count() == 0) {
+        seedDefaultProfiles();
+        saveProfiles();
+    }
     applyLimiterConfig();
-    seedDefaultProfiles();
     loadPowerMap();
     journal.begin(ergo::JournalConfig{});
     // Der Ring bleibt nach dem Booten aus und wird bewusst nicht in der
@@ -85,6 +89,7 @@ void App::applyLimiterConfig() {
 
 void App::seedDefaultProfiles() {
     // Zwei Vorlagen, keines aktiv — kein stilles Defaultprofil.
+    // Nur wenn NVS leer ist (loadProfiles hat nichts geliefert).
     ergo::Profile std;
     ergo::profileCopyId(std.id, sizeof(std.id), "standard");
     ergo::profileCopyId(std.name, sizeof(std.name), "Standard");
@@ -111,6 +116,39 @@ void App::seedDefaultProfiles() {
     reha.leadingZone = ergo::ZoneLead::Hr;
     profiles.put(reha);
     Serial.printf("[PROFILE] %u Vorlagen (kein aktives Profil)\n", (unsigned)profiles.count());
+}
+
+void App::loadProfiles() {
+    Preferences p;
+    if (!p.begin("ergoprofs", true)) return;
+    const size_t len = p.getBytesLength("profs");
+    if (len == 0 || len > ergo::ProfileStore::kMaxBytes) {
+        p.end();
+        return;
+    }
+    static uint8_t buf[ergo::ProfileStore::kMaxBytes];
+    const size_t got = p.getBytes("profs", buf, len);
+    p.end();
+    if (got != len) return;
+    if (profiles.load(buf, got)) {
+        Serial.printf("[PROFILE] geladen: %u Profile%s%s\n", (unsigned)profiles.count(),
+                      profiles.activeId() ? ", aktiv=" : "",
+                      profiles.activeId() ? profiles.activeId() : "");
+    } else {
+        Serial.println("[PROFILE] gespeicherte Profile unlesbar — verworfen");
+    }
+}
+
+void App::saveProfiles() {
+    static uint8_t buf[ergo::ProfileStore::kMaxBytes];
+    const size_t n = profiles.save(buf, sizeof(buf));
+    if (n == 0) return;
+    Preferences p;
+    if (!p.begin("ergoprofs", false)) return;
+    const bool ok = p.putBytes("profs", buf, n) == n;
+    p.end();
+    Serial.printf("[PROFILE] %s (%u Byte, %u Profile)\n", ok ? "gesichert" : "Sicherung fehlgeschlagen",
+                  (unsigned)n, (unsigned)profiles.count());
 }
 
 // ─────────────────────────────────────────────────────────────── BLE-Ereignis
@@ -793,6 +831,7 @@ void App::registerProfileRoutes() {
             return;
         }
         if (profiles.activeId() && strcmp(profiles.activeId(), p.id) == 0) applyLimiterConfig();
+        saveProfiles();
         JsonDocument doc;
         doc["ok"] = true;
         profileToJson(p, doc["profile"].to<JsonObject>());
@@ -816,6 +855,7 @@ void App::registerProfileRoutes() {
             return;
         }
         applyLimiterConfig();
+        saveProfiles();
         JsonDocument doc;
         doc["ok"] = true;
         NetUtil::sendJson(server, 200, doc);
@@ -838,6 +878,7 @@ void App::registerProfileRoutes() {
             return;
         }
         applyLimiterConfig();
+        saveProfiles();
         JsonDocument doc;
         doc["ok"] = true;
         if (profiles.activeId()) doc["active"] = profiles.activeId();

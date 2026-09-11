@@ -5,10 +5,11 @@ zuerst diese Datei und danach gezielt weiter. Alle anderen Notizen in `debug/`
 sind Protokolle einzelner Arbeitsschritte und beschreiben den Stand *zu ihrem
 Zeitpunkt* — sie werden nicht nachgeführt.
 
-Stand dieser Datei: **2026-09-11** (Abend), Profile+MANUAL_LEVEL auf `.88`.
+Stand dieser Datei: **2026-09-11** (Abend), Profile NVS + UI + CI auf `.88`.
 
 **Wochenende:** Einstieg hier. Hand-Beweis: `tools/hand-proof.sh`.
-Details Profile/Mode: [debug/UPDATE_PROFILE_MODE.md](debug/UPDATE_PROFILE_MODE.md).
+Details Profile/Mode: [debug/UPDATE_PROFILE_MODE.md](debug/UPDATE_PROFILE_MODE.md),
+Persistenz/UI/CI: [debug/UPDATE_PROFILE_PERSIST.md](debug/UPDATE_PROFILE_PERSIST.md).
 
 ---
 
@@ -100,10 +101,10 @@ für die Wirkung — und `guardAllowSim` muss dafür von `false` auf `true`.
 2. **Der Beweis aus §3** (Hand an der Kurbel) — wenn du daheim bist:
    `tools/hand-proof.sh` oder Debug-Reiter + Stufe 1 vs 16.
 3. Nachtest 1 und 2 mit Fahrer.
-4. ~~**Profile mit Grenzen**~~ — RAM-Store + API + Limiter-Verdrahtung
-   (`debug/UPDATE_PROFILE_MODE.md`), Persistenz LittleFS noch offen.
+4. ~~**Profile mit Grenzen**~~ — RAM + API + Limiter; **NVS-Persistenz + UI-Reiter**
+   (`debug/UPDATE_PROFILE_PERSIST.md`). LittleFS weiterhin optional.
 5. ~~**Steuermodi OFF / MANUAL_LEVEL**~~ — gebaut; ERG/HR/WORKOUT warten auf §3.
-6. `.github/workflows/build.yml` — Badge noch 404.
+6. ~~`.github/workflows/build.yml`~~ — native + `ergo`-Build.
 
 Noch offen aus dem Hardware-Bericht: ein UI-Hinweis, dass nach Stop
 `Start/Resume` plus erneuter Tritt nötig sein können. Wartet sinnvoll auf §3,
@@ -118,7 +119,8 @@ denn der zeigt nebenbei, ob `Start/Resume` am Varon überhaupt gebraucht wird.
    `build_src_filter` von `env:native` ist eine **Positivliste** und muss es
    bleiben.
 3. **Arduino-frei und hosttestbar bleiben:** `FtmsCodec`, `FtmsCapabilities`,
-   `Limiter`, `PowerMap`, `SweepRunner`, `ControlJournal`, `DebugRing`.
+   `Limiter`, `PowerMap`, `SweepRunner`, `ControlJournal`, `DebugRing`,
+   `ProfileStore`, `ControlMode`.
 4. **Jeder FTMS-Write nur durch den Limiter.** Es gibt keine öffentliche Methode,
    die rohe Bytes an den Control Point schreibt; alles läuft durch
    `FtmsClient::send()`. Ein Bypass müsste die Klasse ändern, nicht sie nur
