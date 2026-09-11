@@ -5,12 +5,11 @@ zuerst diese Datei und danach gezielt weiter. Alle anderen Notizen in `debug/`
 sind Protokolle einzelner Arbeitsschritte und beschreiben den Stand *zu ihrem
 Zeitpunkt* — sie werden nicht nachgeführt.
 
-Stand dieser Datei: **2026-09-11** (Abend), Test 1 gefahren — siehe
-[debug/HW_TEST1_60RPM.md](debug/HW_TEST1_60RPM.md).
+Stand dieser Datei: **2026-09-11** ~20:55, Test 1 (standard) **gültig** —
+[~170 W bei Stufe 16 / 60 rpm](debug/HW_TEST1_60RPM.md). Nächster Lauf: Test 2
+(80 rpm).
 
-**Wochenende / nächster Schritt am Rad:** Profil **standard**, Map leeren,
-Test 1 wiederholen (oder Test 2 bei 80 rpm, wenn Test 1 mit standard lief).
-Hand-Beweis: `tools/hand-proof.sh` (durch Anstieg 1→8 weniger kritisch).
+**Hand-Beweis §3:** durch Journal WORKS + lineare Kennlinie praktisch erledigt.
 
 ---
 
@@ -99,11 +98,10 @@ für die Wirkung — und `guardAllowSim` muss dafür von `false` auf `true`.
 ## 5. Nächste Schritte
 
 1. ~~Kopieren und bauen.~~ / ~~Caps-Fix OTA.~~
-2. **Der Beweis aus §3** (Hand an der Kurbel) — weniger dringlich nach Test 1
-   (Anstieg 1→8 sichtbar); formal noch offen.
-3. **Test 1 erneut** mit Profil `standard` (Map geleert 2026-09-11) — der erste
-   Lauf lief unter versehentlich aktivem `reha` (NVS). Siehe
-   [debug/HW_TEST1_60RPM.md](debug/HW_TEST1_60RPM.md). Danach Test 2 (80 rpm).
+2. ~~Hand-Beweis / Stufenwirkung~~ — bestätigt durch Test 1 (Journal WORKS,
+   lineare Kennlinie).
+3. **Test 2** (80 rpm, Stufen 4/8/12/16) — Kadenzabhängigkeit.
+   Test 1: [debug/HW_TEST1_60RPM.md](debug/HW_TEST1_60RPM.md).
 4. ~~**Profile mit Grenzen**~~ — RAM + API + Limiter; **NVS-Persistenz + UI-Reiter**
    (`debug/UPDATE_PROFILE_PERSIST.md`). LittleFS weiterhin optional.
 5. ~~**Steuermodi OFF / MANUAL_LEVEL**~~ — gebaut; ERG/HR/WORKOUT warten auf §3.
@@ -147,8 +145,8 @@ Die Liste selbst steht in [PFLICHTENHEFT.md](docs/ergometer/PFLICHTENHEFT.md) §
 | Nr. | Stand |
 |---|---|
 | 1–4 | erfüllt und auf Hardware gesehen |
-| 5 | **teilweise** — Anstieg Stufe 1→8 in Test 1 sichtbar; Hand-Beweis formal offen |
-| 6 | Mechanik + erster 60-rpm-Lauf; Punkte ab Stufe 10 unter Reha-Verdacht |
+| 5 | **erfüllt** (Test 1: linear bis 170 W @ Stufe 16; Journal WORKS) |
+| 6 | **erster Lauf ok** (60 rpm); Test 2 (80 rpm) fehlt noch |
 | 6a | **erfüllt** (Host + Live-Export + CI `--verify-curated`) |
 | 6b | gebaut und hosttestbar; auf Hardware noch nicht gesehen |
 | 7–12, 14–17, 19–21 | nicht angefangen |

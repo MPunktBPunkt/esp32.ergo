@@ -1,43 +1,41 @@
-# Test 1 — Stufen-Sweep 60 rpm (Hardware)
+# Test 1 — Stufen-Sweep 60 rpm (Hardware), 2. Lauf
 
-Stand: **2026-09-11** Abend. Fahrer meldet: Test 1 abgeschlossen.
+Stand: **2026-09-11** ~20:55. Profil **standard** (max Stufe 16 / 300 W).
+Erster Lauf war unter versehentlich aktivem `reha` ungültig
+(siehe Abschnitt unten / ältere Notiz).
 
-## Abgelesen von `.88` nach dem Lauf
+## Sweep-Ergebnis (aus `/api/status` → `calib.sweep`)
 
-Profil **jetzt:** `reha` (max Stufe **8,0** / 100 W).  
-Kennfläche: 14 Punkte, **8 Sweep-Zellen**, 9 Stufen belegt.
+Zielkadenz 60 rpm. 8 von 9 Punkten gültig. Stufe 1 verworfen
+(„Kadenz nicht gehalten").
 
-| Stufe | Band | Watt | Sweep? |
-|------:|------|-----:|:------:|
-| 1,0 | 60 rpm | 28 | |
-| 2,0 | 60 rpm | 32 | |
-| 2,0 | 50 rpm | 30 | * |
-| 4,0 | 50 rpm | 50 | * |
-| 6,0 | 50 rpm | 69 | * |
-| 8,0 | 60 rpm | 91 | * |
-| 10,0 | 60 rpm | 92 | * |
-| 12,0 | 60 rpm | 92 | * |
-| 14,0 | 60 rpm | 93 | * |
-| 16,0 | 60 rpm | 90 | * |
+| Stufe | Mittel-W | Mittel-rpm | rpm min…max | gültig |
+|------:|---------:|-----------:|-------------|:------:|
+| 1,0 | 26,0 | 61,6 | 56…64 | nein |
+| 2,0 | 30,7 | 61,9 | 60…63 | ja |
+| 4,0 | 50,0 | 60,0 | 58…61 | ja |
+| 6,0 | 69,3 | 59,6 | 58…61 | ja |
+| 8,0 | 89,4 | 59,7 | 58…61 | ja |
+| 10,0 | 109,7 | 59,8 | 59…62 | ja |
+| 12,0 | 129,4 | 60,0 | 57…62 | ja |
+| 14,0 | 150,1 | 60,0 | 58…62 | ja |
+| 16,0 | 170,2 | 60,1 | 57…62 | ja |
 
-(Zusätzlich passive Zellen bei Stufe 1 in anderen Bändern.)
+Δ je zwei Stufen (2→4→…→16): ca. **+20 W**. Nahezu linear bis Stufe 16.
 
-## Lesart (nach Fahrer-Rückmeldung)
+## Steuer-Journal
 
-Fahrer hat **kein Profil umgestellt**. Trotzdem war `reha` aktiv — Rest aus
-früheren Agenten-Tests (NVS-Persistenz). Das passt exakt zum Gefühl „ab irgendwann
-kein schwererer Widerstand mehr": ab Plan-Stufe 10 hat der Limiter auf **8,0**
-geklemmt. Das Training an der Konsole kann trotzdem schwerer gehen (andere
-Programme / Watt-Modus).
+12 beurteilt: **8× WORKS**, 0× NO_EFFECT, 0 Widersprüche, 4 unjudged
+(u. a. Kadenz zu niedrig). Der Widerstandskanal wirkt.
 
-1. **Stufe wirkt zumindest bis ~8.** 28 W → 91 W bei ~60 rpm ist kein
-   Quittungs-Phantom.
-2. **Plateau ~90 W ab „Stufe 8…16"** = Messartefakt durch Reha-Deckel, kein
-   Beweis für eine echte Stufendecke des Bikes.
-3. Kadenz driftete zeitweise aufs **50-rpm-Band** (Stufen 4 und 6).
+## Entscheidung laut NACHTESTS.md Test 1
 
-## Folge / Reset 2026-09-11
+Stufe 16 bei 60 rpm: **~170 W** → Band **130–200 W**.
 
-- Firmware: Sweep-Plan wird auf Profil-Max gekürzt (kein stilles Vergiften mehr).
-- Gerät zurückgesetzt: Profil **standard** (max 16,0 / 300 W), Kennfläche **leer**.
-- **Nächster Schritt:** Test 1 (60 rpm) erneut fahren.
+- Widerstandskanal trägt Grundlage und Intervalle bis Schwelle.
+- Spitzen deutlich über ~170 W bei 60 rpm brauchen höhere Kadenz und/oder
+  Simulation `0x11` (Nachtest 4) — kein Totalausfall des Stufenkanals.
+
+## Nächster Schritt
+
+**Test 2** — verkürzter Sweep bei **80 rpm** (Stufen 4, 8, 12, 16).
