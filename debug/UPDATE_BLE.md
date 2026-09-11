@@ -204,7 +204,11 @@ verbinden, dann erst Last stellen.
 - [x] `POST /api/control/stop` → sofort, Schattenstufe zurück auf 10, `StopPause` Success
 - [x] Leerer-Sattel-Sweep `coarse=1&settleS=3&windowS=5` → startet, Punkt verworfen
       „Kadenz zu niedrig“, dann **ABORTED**, Stop gesendet, Map `levels=16` leer
-- [ ] Live-Leistung/Kadenz unter Tritt (Sattel war leer → 0 W / 0 rpm)
+- [x] Live-Leistung/Kadenz unter Tritt: **teilweise** — gesehen z. B. 12 W/21 rpm
+      und nach Stop 73–93 W / 51–62 rpm (`stale=false`, Distanz stieg).
+      Später Fenster mit dauerhaft 0 W / Distanz+elapsed eingefroren trotz Notifies
+      (~2 Hz) und Success auf Start/Stufe — aus FTMS-Sicht kein Kurbelimpuls.
+      Bitte am Konsolendisplay gegenprüfen und erneut treten lassen.
 - [ ] Bike aus/an → LOST / Reconnect
 - [ ] Pulsgurt
 - [ ] Sweep Test 1/2 **mit Fahrer**
