@@ -214,44 +214,23 @@ verbinden, dann erst Last stellen.
 - [ ] Sweep Test 1/2 **mit Fahrer**
 
 Hinweis: `caps.wide=false` (Checkliste erwartete wide/sint16). Writes wurden trotzdem
-mit Success quittiert — Wirkung unter Last noch mit Fahrer bestätigen.
+mit Success quittiert — Wirkung der Laststufe unter stabiler Kadenz noch offen
+(siehe [HW_TEST_REPORT.md](HW_TEST_REPORT.md)).
 
-Hub: MAC `68B6B329339C`, `ios.ergo_state` wechselt mit Link (IDLE→…).
+Hub: MAC `68B6B329339C`, `ios.ergo_state` wechselt mit Link.
 
-**Risiko:** erste Last-stellende Firmware — Rampe und Stop am Gerät verifiziert (leer).
-Fahrer-Sweep und Reconnect noch offen.
+### Sweep mit Fahrer — noch offen
 
-### Sweep erst danach, und erst dann mit jemandem auf dem Rad
+Leerer Kurz-Sweep ist durch (ABORTED / Kadenz zu niedrig). Mit Fahrer:
 
-Der Sweep ist der einzige Vorgang, der von sich aus Stufen stellt. Er wird erst
-gefahren, wenn die Liste oben durch ist.
+- [ ] `Test 1 · 60 rpm` → Heatmap-Spalte 60 gefüllt
+- [ ] Neustart → Map aus NVS geladen
+- [ ] `Test 2 · 80 rpm` → zweite Spalte
 
-- [ ] Reiter **Kalibrierung** öffnen, ohne Bike: beide Test-Knöpfe sind grau,
-      die Heatmap sagt „kein Stellweg bekannt"
-- [ ] Bike verbunden, leerer Sattel: `POST /api/calib/sweep/start?coarse=1&settleS=3&windowS=5`
-      — verkürzt, nur um den Ablauf zu sehen. Erwartung: vier Stufen werden
-      gestellt, alle vier Punkte als „keine Daten" oder „Kadenz zu niedrig"
-      verworfen, am Ende `ABORTED` mit Grund und ein Stop
-- [ ] `GET /api/calib/map` liefert `levels = 16` und leere Zellen
-- [ ] Dann erst mit Fahrer: `Test 1 · 60 rpm`. Metronom oder die Kadenzanzeige
-      im Reiter benutzen — die Anzeige wird rot, sobald mehr als 4 rpm daneben
-- [ ] Nach dem Lauf: Punktliste vollständig, Heatmap in Spalte „60" gefüllt,
-      `map.sweepCells` entspricht der Zahl gültiger Punkte
-- [ ] Neustart → `[MAP] geladen: ...` im Log, Heatmap unverändert
-- [ ] `Test 2 · 80 rpm` — danach zwei gefüllte Spalten. Das ist die Antwort auf
-      die Frage „Tabelle oder Fläche"
+Vollständiger Bericht: **[HW_TEST_REPORT.md](HW_TEST_REPORT.md)**.
 
 ## Danach
 
-Nachtest 1 und 2 aus `docs/ergometer/NACHTESTS.md` sind damit gefahren und
-protokolliert. Ihr Ergebnis ist die Kennfläche Stufe × Kadenz → Watt und damit
-die Voraussetzung für `MANUAL_ERG` und `HR_HOLD`. Die entscheidende Zahl ist
-die Leistung bei Stufe 16: deutlich über 200 W heißt, der Widerstandskanal
-trägt v0.1 vollständig; um 130 W heißt, `0x11` wird Pflicht und Nachtest 4
-rückt nach vorn.
-
-Offen bleiben Nachtest 3 (Watt-Nachtest, Erwartung: `80 05 01` ohne Wirkung),
-4 (Simulation `0x11`), 5 (Dual-Link über 10 Minuten — mit dieser Firmware nur
-noch eine Frage der Laufzeit) und 6 (Crash unter Last). Test 6 kann auf den
-Watchdog zurückschlagen: bleibt die Last stehen und ist nicht bedienbar, muss
-der Hub-Watchdog aus, statt wie jetzt vorher Stop zu senden.
+Nachtest 1 und 2 aus `docs/ergometer/NACHTESTS.md` sind damit **noch nicht**
+als gültige Kennfläche abgeschlossen (Fahrer fehlte). Offene Nachtests 3–6
+unverändert.

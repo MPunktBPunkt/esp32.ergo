@@ -1,27 +1,19 @@
 # Empfehlungen (Handoff)
 
-## 0. Erledigt
+## Erledigt auf Hardware (`.88`)
 
-- Connectivity-Shell auf `.88` (siehe `UPDATE_CONNECTIVITY.md`)
-- Codec + Limiter hostgetestet
+Siehe **[HW_TEST_REPORT.md](HW_TEST_REPORT.md)**: OTA, Caps, Limiter-Rampe, Power-Deny,
+Stop, Live-IBD (teilweise unter Tritt), leerer Sweep-Abort.
 
-## 1. Jetzt (Entwurfs-Instanz)
+## Als Nächstes (Entwurf / nächste HW-Session)
 
-→ **[TODO_PFLICHTENHEFT.md](TODO_PFLICHTENHEFT.md)** — Pflichtenheft Rev. 4 einarbeiten,
-Beginn: `BleCentral` + `FtmsClient` + Limiter verdrahten. Shell/OTA nicht anfassen.
+1. `caps.wide=false` vs. dokumentiertes sint16 klären
+2. Mit Fahrer: Wattmittel Stufe 4 vs. 8, dann Sweep 60/80 rpm
+3. Reconnect (Bike aus/an), Pulsgurt
+4. Steuermodi laut Pflichtenheft (`OFF` / `MANUAL_LEVEL` / `MANUAL_ERG` / …)
+5. CI `build.yml` (Badge noch 404)
 
-## 2. Hygiene (nebenbei ok)
+## Nicht brechen
 
-1. GitHub Actions `build.yml` (Badge ist noch 404)
-2. Docs aus `private/docs/ergometer/` nach `docs/` spiegeln
-
-## 3. Danach
-
-| Priorität | Baustein |
-|-----------|----------|
-| hoch | Live-Werte Status/SSE/Hub-ios |
-| hoch | Steuermodi OFF / LEVEL / ERG(emuliert) / HR |
-| später | Web-UI Charts, Kalibrierung, Workouts (v0.2) |
-| später | FTMS-Bridge Peripheral (v0.3) |
-
-Kein `0x05`-Wattziel am Varon. Native-Tests und `[common]`-Muster beibehalten.
+Shell/`/ota-upload`, kein `[env]`-Block, Codec/Limiter/PowerMap/Sweep hosttestbar,
+jeder Write nur durch Limiter, kein `0x05`-Steuerweg am Varon.
