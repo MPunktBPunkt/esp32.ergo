@@ -8,7 +8,7 @@
 > **Trainingsrechner und BLE-Steuerung für das Ergometer Hammer Varon XTR II** — ERG-Emulation über die Widerstandsstufe, Pulsführung, Trainingszonen, Profile und Web-UI. Anbindung an [iobroker.esp-hub](https://github.com/MPunktBPunkt/iobroker.esp-hub).
 
 > [!WARNING]
-> **Stand: Fundament im Aufbau.** Fertig und hostgetestet sind FTMS-Codec, Capability-Ableitung und Limiter; dazu läuft eine Connectivity-Shell mit WLAN, Web, OTA und Hub-Heartbeat. **BLE ist noch nicht angebunden** — das Gerät zeigt Status und lässt sich aus der Ferne neu flashen, mehr nicht. Was unten unter *Features* steht, ist geplant, nicht fertig.
+> **Stand: Fundament und Messtechnik stehen, Trainingslogik fehlt.** Hostgetestet sind FTMS-Codec, Capability-Ableitung, Limiter, Kennfläche und Sweep-Ablauf (79 Fälle). Auf Hardware laufen WLAN, Web, OTA, Hub-Heartbeat sowie BLE-Central mit zwei Links, FTMS-Client, Handsteuerung über den Limiter und die geführte Kalibrierung. **Noch nicht da:** Steuermodi, Zonen, Profile, Workouts — also alles, was aus dem Gerät einen Trainingsrechner macht.
 
 ---
 
@@ -43,7 +43,7 @@ Vier Befunde aus dem Sondenlauf mit [esp32.ftmsprobe](https://github.com/MPunktB
 - **16 Stufen**, 1,0 bis 16,0 in Zehnteln, als `04 <sint16 LE>`. Die 1-Byte-Form wird quittiert, wirkt aber nicht.
 - **Eine Erfolgsquittung beweist nichts.** Das Bike antwortet auch auf `05 64 00` mit `80 05 01` Success, obwohl es das Feature nicht meldet.
 
-Offen und blockierend sind der Stufen-Sweep (welcher Leistungsbereich ist überhaupt fahrbar — die Extrapolation deutet auf rund 130 W) und die Kadenzabhängigkeit. Beides erledigt später die geführte Kalibrierung dieser Firmware selbst.
+Offen und blockierend sind der Stufen-Sweep (welcher Leistungsbereich ist überhaupt fahrbar — die Extrapolation deutet auf rund 130 W) und die Kadenzabhängigkeit. Beides fährt die geführte Kalibrierung dieser Firmware inzwischen selbst, inklusive der Verwerfung von Punkten mit weggelaufener Kadenz.
 
 **Nichts davon steht als Konstante im Code.** `ftms::Capabilities` leitet zur Verbindungszeit aus `0x2ACC`, `0x2AD6`, `0x2AD8` und den beobachteten `0x2AD2`-Flags ab, was das angeschlossene Gerät kann, und wählt daraus die Steuerstrategie: Wattziel direkt, Emulation über die Stufe, oder nur Dashboard. Ein anderes Ergometer ist damit ein Scan, ein Connect und ein Kalibrierlauf — kein Firmwarethema. Dasselbe gilt für den Pulsgurt: die BLE-Quellen sind reines `0x180D` und herstellerunabhängig.
 
@@ -91,10 +91,10 @@ pio device monitor
 ```
 
 1. Hotspot **`ESP-Ergo-Setup`** → WLAN + Hub-IP (Port `8093`)
-2. Browser: `http://<ESP-IP>/` → Status und OTA
+2. Browser: `http://<ESP-IP>/` → Reiter **Geräte** → Suchen → Zeile mit `FTMS`-Marke antippen
 3. Gerät erscheint im [ESP-Hub](https://github.com/MPunktBPunkt/iobroker.esp-hub) mit `fwType: ergo`
 
-Schritt 2 zeigt derzeit nur die Shell; Gerätesuche und Steuerung kommen mit `BleCentral`.
+Die Rolle wird aus dem Advertising abgeleitet: was `0x1826` bewirbt, wird als Bike verbunden, was nur `0x180D` hat, als Pulsgurt. Beides wird gemerkt und nach einem Verbindungsverlust mit ansteigendem Abstand (2, 5, 10, 20, 30 s) neu versucht.
 
 Ohne Kabel ausrollen:
 
@@ -149,7 +149,9 @@ Heartbeat-Feld `fwType`: **`ergo`**
 
 ## API (Auswahl)
 
-Erreichbar sind bisher `/`, `/ota`, `/ota-upload`, `/api/status`, `/api/config/get` `/save`, `/api/system/restart` und `/events`. Der Rest ist die geplante Oberfläche.
+Die Oberfläche hat die zehn Reiter aus [WEBINTERFACE.md](docs/ergometer/WEBINTERFACE.md) §7 — **Ride, Workouts, Tests, Verlauf, Profile, Geräte, Kalibrierung, Debug, Einstellungen, OTA**. Sechs davon tragen Inhalt, vier sind Platzhalter mit Zielversion. Ohne JavaScript zeigt die Seite alle Abschnitte untereinander und das OTA-Formular sendet native; diese Seite ist der Rückweg nach einem Fehlflash und darf nicht an einem Skriptfehler hängen.
+
+Erreichbar sind bisher die Shell (`/`, `/ota`, `/ota-upload`, `/api/status`, `/api/config/get` `/save`, `/api/system/restart`, `/events`), die BLE-Endpunkte (`/api/ble/scan/start` `/stop`, `/api/ble/devices`, `/api/ble/connect` `/disconnect` `/forget` `/reconnect`), die Handsteuerung (`/api/control/request` `/reset` `/start` `/stop` `/level` `/power`) und die Kalibrierung (`/api/calib/sweep/start` `/stop`, `/api/calib/map`, `/api/calib/clear`).
 
 | Endpoint | Funktion |
 |----------|----------|
@@ -159,6 +161,8 @@ Erreichbar sind bisher `/`, `/ota`, `/ota-upload`, `/api/status`, `/api/config/g
 | `POST /api/ble/connect` `/disconnect` `/remember` `/forget` | Verbindung |
 | `POST /api/control/mode` | `off` / `level` / `erg` / `hr` / `workout` / `sim` |
 | `POST /api/control/target` · `POST /api/control/stop` | Zielwert, Not-Stop |
+| `POST /api/calib/sweep/start` `/stop` | Geführter Stufen-Sweep |
+| `GET /api/calib/map` · `POST /api/calib/clear` | Kennfläche Stufe × Kadenz → Watt |
 | `GET/POST /api/profile/list` `/get` `/put` `/select` | Profile |
 | `GET/POST /api/workout/list` `/load` `/start` `/pause` `/skip` | Programme |
 | `POST /api/workout/put` · `GET /api/workout/download` `/validate` | Editor (v0.2) |
@@ -197,14 +201,15 @@ python tools/make-fixtures.py \
 
 ## Docs
 
-Die Planungsunterlagen liegen derzeit noch im Projektordner `private/docs/ergometer/` und ziehen mit dem ersten Release hierher um:
+Die Planungsunterlagen liegen unter [`docs/ergometer/`](docs/ergometer/):
 
 | Dokument | Inhalt |
 |----------|--------|
-| `PFLICHTENHEFT.md` | Zielbild, Steuerung, Regelung, Versionen — Revision 4 |
-| `WEBINTERFACE.md` | Designkonzept der Web-UI: Zonen, Profile, Editor, Tests |
-| `GERAETEPROFIL.md` | was am Gerät gemessen wurde, inkl. Abweichungen vom Standard |
-| `NACHTESTS.md` | sechs offene Messungen mit Kommandos und Entscheidungslogik |
+| [PFLICHTENHEFT.md](docs/ergometer/PFLICHTENHEFT.md) | Zielbild, Steuerung, Regelung, Versionen — Revision 4 |
+| [WEBINTERFACE.md](docs/ergometer/WEBINTERFACE.md) | Designkonzept der Web-UI: Zonen, Profile, Editor, Tests |
+| [GERAETEPROFIL.md](docs/ergometer/GERAETEPROFIL.md) | was am Gerät gemessen wurde, inkl. Abweichungen vom Standard |
+| [NACHTESTS.md](docs/ergometer/NACHTESTS.md) | sechs offene Messungen mit Kommandos und Entscheidungslogik |
+| [BLE-SCAN.md](docs/ergometer/BLE-SCAN.md) | Vorgehen beim Erkunden eines unbekannten Geräts |
 
 ---
 

@@ -15,6 +15,13 @@ void ConfigStore::applyDefaults() {
     enableNtp = true;
     ntpServer = NTP_SERVER_DEFAULT;
     tz = TZ_DEFAULT;
+    bikeMac = "";
+    bikeName = "";
+    bikeAddrType = -1;
+    hrMac = "";
+    hrName = "";
+    hrAddrType = -1;
+    autoConnect = false;
 }
 
 void ConfigStore::begin() {
@@ -42,6 +49,15 @@ void ConfigStore::load() {
     enableNtp = prefs.getBool("en_ntp", enableNtp);
     ntpServer = prefs.getString("ntp", ntpServer);
     tz = prefs.getString("tz", tz);
+    // v2: fehlende Schluessel behalten ihren Default, deshalb braucht der
+    // Sprung von v1 keinen Factory-Reset.
+    bikeMac = prefs.getString("bk_mac", bikeMac);
+    bikeName = prefs.getString("bk_name", bikeName);
+    bikeAddrType = (int8_t)prefs.getChar("bk_at", bikeAddrType);
+    hrMac = prefs.getString("hr_mac", hrMac);
+    hrName = prefs.getString("hr_name", hrName);
+    hrAddrType = (int8_t)prefs.getChar("hr_at", hrAddrType);
+    autoConnect = prefs.getBool("auto_c", false);  // fehlt der Schluessel: aus
     prefs.end();
 
     if (heartbeatIntervalS < 5) heartbeatIntervalS = 5;
@@ -65,6 +81,13 @@ void ConfigStore::save() {
     prefs.putBool("en_ntp", enableNtp);
     prefs.putString("ntp", ntpServer);
     prefs.putString("tz", tz);
+    prefs.putString("bk_mac", bikeMac);
+    prefs.putString("bk_name", bikeName);
+    prefs.putChar("bk_at", (int8_t)bikeAddrType);
+    prefs.putString("hr_mac", hrMac);
+    prefs.putString("hr_name", hrName);
+    prefs.putChar("hr_at", (int8_t)hrAddrType);
+    prefs.putBool("auto_c", autoConnect);
     prefs.end();
 }
 
@@ -89,6 +112,13 @@ void ConfigStore::toJson(JsonObject obj) const {
     obj["enableNtp"] = enableNtp;
     obj["ntpServer"] = ntpServer;
     obj["tz"] = tz;
+    obj["bikeMac"] = bikeMac;
+    obj["bikeName"] = bikeName;
+    obj["bikeAddrType"] = bikeAddrType;
+    obj["hrMac"] = hrMac;
+    obj["hrName"] = hrName;
+    obj["hrAddrType"] = hrAddrType;
+    obj["autoConnect"] = autoConnect;
     obj["board"] = ERGO_BOARD_ID;
     obj["boardLabel"] = ERGO_BOARD_LABEL;
 }
@@ -111,6 +141,13 @@ bool ConfigStore::fromJson(JsonVariantConst obj) {
     if (!obj["enableNtp"].isNull()) enableNtp = obj["enableNtp"].as<bool>();
     ntpServer = jsonString(obj["ntpServer"], ntpServer);
     tz = jsonString(obj["tz"], tz);
+    bikeMac = jsonString(obj["bikeMac"], bikeMac);
+    bikeName = jsonString(obj["bikeName"], bikeName);
+    if (!obj["bikeAddrType"].isNull()) bikeAddrType = obj["bikeAddrType"].as<int8_t>();
+    hrMac = jsonString(obj["hrMac"], hrMac);
+    hrName = jsonString(obj["hrName"], hrName);
+    if (!obj["hrAddrType"].isNull()) hrAddrType = obj["hrAddrType"].as<int8_t>();
+    if (!obj["autoConnect"].isNull()) autoConnect = obj["autoConnect"].as<bool>();
 
     if (heartbeatIntervalS < 5) heartbeatIntervalS = 5;
     if (hubPort < 1 || hubPort > 65535) hubPort = HUB_PORT_DEFAULT;

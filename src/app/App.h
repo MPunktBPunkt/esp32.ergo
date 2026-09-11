@@ -4,16 +4,24 @@
 #include <WebServer.h>
 #include <WiFiClient.h>
 
+#include "ble/BleCentral.h"
+#include "ble/FtmsClient.h"
+#include "ble/HrClient.h"
+#include "control/Limiter.h"
+#include "control/PowerMap.h"
+#include "control/SweepRunner.h"
 #include "core/ConfigStore.h"
 #include "core/HubClient.h"
 
 /**
- * Connectivity-Shell: WiFi, Web, OTA, Hub. Noch kein BLE.
+ * Shell, BLE-Fundament und Kalibrierung: WiFi, Web, OTA, Hub, zwei BLE-Links,
+ * der Limiter als einziger Schreibpfad, der gefuehrte Sweep und die
+ * Kennflaeche.
  *
- * Die Reihenfolge ist Absicht — eine Firmware ohne `/ota-upload` auf ein
- * Geraet zu flashen, an dem kein Kabel haengt, waere ein Remote-Brick.
- * BleCentral, FtmsClient und die Verdrahtung des Limiters kommen erst,
- * wenn dieser Weg nachweislich steht.
+ * Noch keine Steuermodi. Die kommen erst, wenn der Schreibweg am Geraet
+ * nachweislich haelt — ein Modus, der auf eine ungepruefte Kette aufsetzt,
+ * verschleiert nur, an welcher Stelle es klemmt. Und MANUAL_ERG wie HR_HOLD
+ * brauchen ohnehin zuerst die Kennflaeche, die dieser Stand aufnimmt.
  */
 class App {
 public:
@@ -23,12 +31,22 @@ public:
     HubClient hub;
     WebServer server{80};
 
+    ergo::BleCentral ble;
+    ergo::FtmsClient ftms;
+    ergo::HrClient hrc;
+    ergo::Limiter limiter;
+    ergo::PowerMap powerMap;
+    ergo::SweepRunner sweep;
+
     void begin();
     void loop();
 
     void buildStatusJson(JsonDocument& doc);
     void buildHeartbeat(JsonDocument& doc);
     String statusString();
+
+    /** Von BleCentral aus loop() gerufen. */
+    void onLink(ergo::Role role, bool up);
 
 private:
     App() {}
@@ -37,7 +55,27 @@ private:
     void setupWifi();
     void setupWeb();
     void registerRoutes();
+    void registerBleRoutes();
+    void registerControlRoutes();
+    void registerCalibRoutes();
     void runCodecSelfTest();
+    void applyLimiterConfig();
+
+    /** Welcher Puls gilt gerade, und woher. */
+    ergo::HrSource resolveHrSource() const;
+    uint8_t effectiveHr() const;
+
+    // ── Kalibrierung ────────────────────────────────────────────────────────
+    void loopCalibration(unsigned long now);
+    /** Fertige Sweep-Punkte in die Kennflaeche uebernehmen und protokollieren. */
+    void harvestSweepPoints();
+    void appendCalibJson(JsonObject obj) const;
+    void loadPowerMap();
+    void savePowerMap();
+    /** Zeitstempel fuer die Kennflaeche. Unixzeit wenn NTP steht, sonst
+     *  Laufzeit — dann ist „Alter" relativ zum Boot, und das ist besser als
+     *  ein erfundenes Datum. */
+    static uint32_t mapNowS();
 
     void handleMain();
     void handleOtaUpload();
@@ -51,6 +89,14 @@ private:
     bool restartPending_ = false;
     unsigned long restartAt_ = 0;
 
-    /** "ok" oder eine Fehlerbeschreibung — landet in /api/status. */
+    uint8_t sweepSeen_ = 0;
+    ergo::SweepState sweepWas_ = ergo::SweepState::Idle;
+    /** Fuer passives Lernen: seit wann steht die Stufe unveraendert. */
+    int16_t levelWas_ = -32768;
+    unsigned long levelStableSince_ = 0;
+    unsigned long lastPassive_ = 0;
+    bool mapDirty_ = false;
+    unsigned long mapSaved_ = 0;
+
     const char* codecSelfTest_ = "nicht gelaufen";
 };

@@ -39,6 +39,29 @@ public:
     String ntpServer = NTP_SERVER_DEFAULT;
     String tz = TZ_DEFAULT;
 
+    // ── gemerkte Geraete ────────────────────────────────────────────────────
+    //
+    // Der Adresstyp wird mitgespeichert, weil er die haeufigste Ursache fuer
+    // einen fehlgeschlagenen Reconnect ist: dasselbe Geraet unter public statt
+    // random angesprochen antwortet einfach nicht. -1 heisst "unbekannt, beide
+    // Varianten probieren".
+    String bikeMac;
+    String bikeName;
+    int8_t bikeAddrType = -1;
+
+    String hrMac;
+    String hrName;
+    int8_t hrAddrType = -1;
+
+    /**
+     * Nach dem Booten selbstaendig verbinden.
+     *
+     * Default aus: ein Ergometer, das sich beim Stromausfall-Neustart
+     * unaufgefordert wieder ankoppelt, waehrend niemand daneben steht, ist
+     * kein Komfortgewinn. Der Nutzer startet die Fahrt.
+     */
+    bool autoConnect = false;
+
     void begin();
     void load();
     void save();
@@ -48,5 +71,5 @@ public:
     bool fromJson(JsonVariantConst obj);
 
 private:
-    static constexpr uint8_t kConfigVersion = 1;
+    static constexpr uint8_t kConfigVersion = 2;  // 2: gemerkte Geraete
 };

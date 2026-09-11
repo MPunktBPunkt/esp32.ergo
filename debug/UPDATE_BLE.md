@@ -1,0 +1,255 @@
+# Update — BleCentral + FtmsClient + Kalibrierung (Antwort auf TODO_PFLICHTENHEFT.md)
+
+Schritte 1 bis 4 des Auftrags sind umgesetzt. Schritt 5 (Steuermodi) bewusst
+nicht — siehe unten. Dazugekommen ist die **Kalibrierung**: der geführte
+Stufen-Sweep und die Kennfläche, weil Nachtest 1 und 2 sonst wieder von Hand
+protokolliert würden und wieder Punkte verlorengingen.
+
+Diese Instanz kann nicht bauen. **Ergebnis unten ist auszufüllen.**
+
+## Neue Dateien
+
+| Datei | Inhalt |
+| --- | --- |
+| `src/ble/BleTypes.h` | Rollen, Linkzustände, Scan-Eintrag, `HrSample`, `HrSource` |
+| `src/ble/BleCentral.{h,cpp}` | Scan, Connect, Merken, Reconnect-Backoff — zwei Rollen |
+| `src/ble/FtmsClient.{h,cpp}` | GATT `0x1826`, Capabilities, Notify `0x2AD2`/`0x2AD9`, Schreiben |
+| `src/ble/HrClient.{h,cpp}` | `0x180D`/`0x2A37` plus einmalig Batterie |
+| `src/control/PowerMap.{h,cpp}` | Kennfläche Stufe × Kadenz → Watt, Interpolation, NVS-Blob |
+| `src/control/SweepRunner.{h,cpp}` | Geführter Sweep nach NACHTESTS.md Test 1 und 2 |
+| `test/test_powermap/` | 19 Fälle: Interpolation, Gewichtung, Roundtrip |
+| `test/test_sweep/` | 17 Fälle: Ablauf, Verwerfungsregeln, Abbrüche |
+| `docs/ergometer/*` | Pflichtenheft, Webinterface, Geräteprofil, Nachtests, BLE-Scan gespiegelt |
+
+Geändert: `src/app/App.{h,cpp}`, `src/core/ConfigStore.{h,cpp}` (`cfg_ver = 2`),
+`src/web/UiPages.h`, `platformio.ini`, `README.md`, `.gitignore`,
+neu `.gitattributes`.
+
+**`platformio.ini`:** `env:native` hat zwei Einträge mehr im
+`build_src_filter` — `control/PowerMap.cpp` und `control/SweepRunner.cpp`.
+Beide sind Arduino-frei, das ist die Bedingung. Die Positivliste bleibt eine
+Positivliste; `+<*>` würde das Environment sofort zerlegen.
+
+## Die Oberfläche hat jetzt die Reiterstruktur des Konzepts
+
+`UiPages.h` ist von einer Karten-Kolonne auf die zehn Reiter aus
+`docs/ergometer/WEBINTERFACE.md` §7 umgebaut: **Ride, Workouts, Tests, Verlauf,
+Profile, Geräte, Kalibrierung, Debug, Einstellungen, OTA**. Fünf tragen Inhalt,
+fünf sind Platzhalter mit Zielversion und einem Satz, was dort hinkommt.
+
+Der Grund für die Platzhalter: die Navigation ist die eine Entscheidung, die man
+nicht zweimal treffen will. Ein Reiter, der später dazukommt, soll ein
+gelöschtes Flag in der `NAV`-Liste sein und kein Umbau — und der Nutzer sieht,
+was geplant ist, statt es zu erraten.
+
+Drei Dinge daran sind mehr als Kosmetik:
+
+- **Die Stufen-Kachel** ist gebaut wie im Konzept beschrieben: Segmente nach
+  `caps.levels`, gestellte Stufe gefüllt, Reserve beziffert, roter Rand bei
+  erreichter Decke, und ein `~` vor dem Wert, weil das Bike die Stufe nicht
+  zurückmeldet. Kein stilles Klemmen.
+- **Der Debug-Reiter** zeigt die Rohkennungen (`0x2ACC`, `0x2AD6`, `0x2AD8`),
+  Notify- und Antwortzähler, die letzte Control-Point-Antwort und die letzte
+  Limiter-Ablehnung. Genau das braucht man bei der ersten Fahrt.
+- **Ohne JavaScript** zeigt die Seite alle Abschnitte untereinander und das
+  OTA-Formular sendet native `multipart/form-data` an `/ota-upload`. Das ist
+  Absicht: diese Seite ist der Rückweg nach einem Fehlflash und darf nicht an
+  einem Skriptfehler hängen. Deshalb `body.js` per CSS statt `hidden`-Attribute.
+
+Nicht umgesetzt und **nicht erfunden**: Zonenschiene, Hero-Zonenfarbe und der
+Kadenz-Hinweis („halten / schneller / langsamer"). Alle drei brauchen Profile
+beziehungsweise einen laufenden Regler; eine Zielspanne ohne Regler wäre eine
+ausgedachte Zahl.
+
+Die Seite wächst damit von 6,4 kB (Shell) über 12,5 kB auf **26,1 kB**. Das
+Konzept §8 nennt als Vergleich „heartrate braucht für eine einfachere UI schon
+etwa 27 kB" — wir liegen also im erwarteten Rahmen, aber der Editor und das
+Debug-Panel sollen laut §8 später **nachgeladen** werden, nicht mit in diese
+Seite. Beim Flash-Ergebnis bitte darauf achten.
+
+`src/ble/FtmsCodec.*`, `src/ble/FtmsCapabilities.*`, `src/control/Limiter.*` und
+beide Testsuiten sind **unverändert**. `platformio.ini` ebenfalls — `env:ergo`
+hat keinen `build_src_filter`, die neuen Dateien kommen automatisch mit, und
+`env:native` listet weiterhin nur die drei Arduino-freien Übersetzungseinheiten.
+
+## Die harten Regeln, Punkt für Punkt
+
+1. **`/ota-upload` und die Shell bleiben.** Unverändert, plus: `/api/status`
+   liefert jetzt `bikeLink`, das `tools/deploy.sh` schon vorher gelesen hat.
+   Der Flash bricht damit ab, solange ein Bike hängt.
+2. **Kein `[env]`-Block.** `platformio.ini` nicht angefasst.
+3. **Codec und Limiter bleiben Arduino-frei.** Kein neuer Include in den drei
+   Dateien, `build_src_filter` unverändert.
+4. **Jeder Write nur durch den Limiter.** Strukturell, nicht durch Disziplin:
+   `FtmsClient` hat keine öffentliche Methode, die rohe Bytes schreibt. Alles
+   läuft durch das private `send()`, und das fragt zuerst `limiter_->check()`.
+   Ein Bypass müsste die Klasse ändern, nicht sie nur falsch benutzen.
+5. **Kein Steuerweg über `0x05`.** `setPowerW()` existiert und ruft den Codec,
+   aber der Limiter lehnt ab, solange `powerTargetTrusted` nicht gilt — und das
+   gilt nur mit veröffentlichter `0x2AD8`, die der Varon nicht hat. Der Endpunkt
+   bleibt trotzdem erreichbar, damit die Ablehnung **mit Begründung** in der UI
+   landet statt still zu verschwinden.
+6. **Shell-Routen angefasst?** Nein, nur ergänzt. Review vor Flash trotzdem
+   sinnvoll, weil `main.cpp` und `App` jetzt BLE initialisieren.
+7. **Kein Blind-Restart unter Last.** Der Hub-Watchdog sendet bei stehendem
+   Bike-Link erst `08 01`, wartet 300 ms und startet dann neu. Gleiches gilt für
+   `/api/system/restart`, `/api/ble/disconnect` und `/api/ble/forget`.
+
+## Zwei Entscheidungen, die Erklärung brauchen
+
+**Der Aufstieg eines Links wird nicht im BLE-Callback verarbeitet.**
+`connectRole()` setzt nur ein Flag, `loop()` ruft danach `attach()`. Eine
+GATT-Leseoperation im NimBLE-Callback-Kontext blockiert den Host-Task und läuft
+in den Watchdog — und `attach()` liest drei Characteristics.
+
+**Abonniert wird nach Properties, nicht nach Spec.** Der Control Point ist laut
+Standard Indicate, der Varon liefert ihn als Notify. `subscribeTo()` fragt
+deshalb `canNotify()` / `canIndicate()` und richtet sich danach. Genau das ist
+der Unterschied, wenn später ein anderes Ergometer dranhängt.
+
+## Was bewusst fehlt
+
+Schritt 5 des Auftrags — `OFF`, `MANUAL_LEVEL`, `MANUAL_ERG`, `HR_HOLD`,
+`WORKOUT` — ist **nicht** umgesetzt. Stattdessen gibt es eine Handsteuerung mit
+fünf Endpunkten und vier Knöpfen in der UI. Begründung: der Auftrag sagt selbst
+„erst wenn Write-Pfad steht", und ob er steht, weiß niemand vor der ersten
+Fahrt. Ein Modusautomat darüber würde im Fehlerfall nur verschleiern, ob es an
+der Regelung, am Limiter oder am Gerät liegt.
+
+Ebenfalls nicht dabei: Profile, Workouts, Zonen, LittleFS, Debug-Ring, Relay
+als Pulsquelle (`HrSource::Relay` ist definiert, aber nicht gefüllt).
+
+## Kalibrierung: geführter Sweep und Kennfläche
+
+`NACHTESTS.md` schreibt, Test 1 und 2 würden mit der Sonde gefahren und „erst
+danach lohnt das `esp32.ergo`-Repo". Das ist überholt: Ergo hat
+`/api/control/level` und ein `/api/status` mit Leistung und Kadenz. Die
+Messungen mit der Zielfirmware zu fahren ist sogar besser, weil dann der
+Limiter mitgemessen wird und nicht die Labor-Guards der Sonde.
+
+**Warum das automatisiert ist und nicht per Hand protokolliert wird:** zwei der
+drei Wirkungsmessungen des ersten Sondenlaufs sind wertlos, weil die Kadenz
+weggelaufen ist und es niemandem aufgefallen ist. Eine Verwerfungsregel, an die
+man sich erinnern muss, ist keine.
+
+`SweepRunner` fährt je Stufe 20 s einschwingen und 40 s mitteln und verwirft
+ein Fenster, wenn die mittlere Kadenz unter der Schwelle liegt oder die Spanne
+im Fenster mehr als 10 % des Mittels beträgt. Verworfene Punkte erscheinen mit
+Grund in der UI und im Log — sie verschwinden nicht.
+
+Drei Punkte, die im Entwurf Absicht sind:
+
+- **Das Messfenster beginnt erst nach dem bestätigten Write.** Der Limiter
+  lehnt während der Rampe mit `Deferred` ab; würde man diese Sekunden
+  mitmessen, wäre jeder erste Wert zu klein. Nativ getestet.
+- **Der Runner schreibt nicht selbst.** Wie der Limiter trifft er nur
+  Entscheidungen, `App` setzt sie um — durch `FtmsClient` und damit durch den
+  Limiter, wie jeder andere Schreibweg. Deshalb ist der komplette Ablauf
+  hostseitig prüfbar, inklusive Zeitverhalten.
+- **Ein Sweep-Punkt wird von passivem Lernen nur mit 1/32 nachgezogen.** Er
+  entstand unter gehaltener Kadenz; eine einzige unruhige Fahrt darf ihn nicht
+  verwaschen. Umgekehrt ersetzt ein Sweep-Punkt passiv Gelerntes vollständig.
+
+Passives Lernen läuft nebenher: alle 5 s ein Punkt, aber erst 20 s nachdem die
+Stufe zuletzt gewechselt hat — vorher beschreibt der Wert einen Übergang und
+keinen Beharrungszustand.
+
+Die Fläche liegt als 1160-Byte-Blob im NVS-Namensraum `ergomap`, versioniert
+und byteweise serialisiert. Gesichert wird nach jedem Sweep sofort und sonst
+höchstens alle 5 Minuten. Meldet das Bike beim Verbinden einen anderen
+Stellweg, wird die Fläche verworfen: Stufe 8 von 16 ist nicht Stufe 8 von 24.
+
+Neue Endpunkte: `POST /api/calib/sweep/start?coarse=0|1[&rpm=&settleS=&windowS=]`,
+`POST /api/calib/sweep/stop`, `GET /api/calib/map`, `POST /api/calib/clear`.
+Der Reiter **Kalibrierung** ist damit vom Platzhalter zum Inhalt geworden:
+Sweep-Steuerung mit Kadenz-Coach, Punktliste und die Fläche als Heatmap, in der
+geführt gemessene Zellen einen hellen Rand tragen und gelernte nicht.
+
+## Ergebnis
+
+```text
+pio test -e native
+  test_codec     __/22
+  test_limiter   __/21
+  test_powermap  __/19
+  test_sweep     __/17
+```
+
+```text
+pio run -e ergo
+  RAM:   ____ / 327680
+  Flash: ____ / 1966080
+```
+
+Vorherige Messung ohne BLE: RAM 48576 (14,8 %), Flash 1017157 (51,7 %).
+NimBLE kommt jetzt dazu, die UI-Seite wächst von 6,4 kB über 26,1 kB auf
+**34,7 kB** — der Kalibrierreiter mit Heatmap und Sweep-Panel kostet gut 8 kB.
+Erwartung grob 66 bis 80 % Flash. **Wenn es über 85 % geht, bitte melden** —
+dann muss vor dem Rest der Web-UI über die Partitionierung geredet werden,
+nicht danach. Die Entscheidung „UI nach LittleFS statt in den Anwendungsflash"
+steht im Konzept §8 ausdrücklich unter „wird gemessen, nicht geraten" — diese
+Messung ist der erste Datenpunkt dafür, und der Sprung um 8 kB für **einen**
+Reiter ist das Argument dafür, dass Workout-Editor und Verlauf nicht mehr
+hineinpassen werden.
+
+## Hardware-Test auf `.88`
+
+Reihenfolge ist wichtig: erst ohne Bike prüfen, dass die Shell noch lebt, dann
+verbinden, dann erst Last stellen.
+
+- [ ] `tools/deploy.sh --ota 192.168.178.88` (das Skript prüft `bikeLink` selbst)
+- [ ] `curl http://192.168.178.88/api/status` → `codecSelfTest=ok`, `ble.linkCount=0`
+- [ ] `POST /api/ble/scan/start`, dann `GET /api/ble/devices` → TC174 mit `ftms:true`
+- [ ] `POST /api/ble/connect` mit `{"mac":"c2:32:a5:1e:bf:b5","role":"bike"}`
+- [ ] `/api/status` → `ftms.caps.levels = 16`, `strategy = emulate-resistance`,
+      `powerTrusted = false`, `resistanceHex = 0A00A0000A00`, `powerRangeHex = fehlt`
+- [ ] treten → `ftms.data.powerW` und `cadenceRpm` bewegen sich, `stale = false`
+- [ ] `POST /api/control/request` → `controlGranted = true`
+- [ ] `POST /api/control/level?tenths=60` → erwartet `deferred` oder `ok`;
+      bei `deferred` nach 2 s erneut (Rampe), Stufe steigt in Einzelschritten
+- [ ] `POST /api/control/power?watt=100` → erwartet **`denied`** mit Begründung
+      „Wattziel ohne 0x2AD8"; das ist der gewünschte Ausgang, kein Fehler
+- [ ] `POST /api/control/stop` → Last fällt sofort, ohne Rampe
+- [ ] Bike ausschalten → Zustand `LOST`, Reconnect-Versuche im Log, nach dem
+      Wiedereinschalten `READY` ohne Neustart
+- [ ] Pulsgurt verbinden → `hr.attached`, `hrSource = strap`
+
+**Risiko:** das ist die erste Firmware, die an diesem Gerät Last stellt. Nicht
+mit jemandem auf dem Rad testen. Erster Versuch mit leerem Sattel und Hand am
+Netzschalter — die Rampe begrenzt den Anstieg auf eine Stufe pro zwei Sekunden,
+aber getestet ist das bisher nur nativ, nicht am Gerät.
+
+### Sweep erst danach, und erst dann mit jemandem auf dem Rad
+
+Der Sweep ist der einzige Vorgang, der von sich aus Stufen stellt. Er wird erst
+gefahren, wenn die Liste oben durch ist.
+
+- [ ] Reiter **Kalibrierung** öffnen, ohne Bike: beide Test-Knöpfe sind grau,
+      die Heatmap sagt „kein Stellweg bekannt"
+- [ ] Bike verbunden, leerer Sattel: `POST /api/calib/sweep/start?coarse=1&settleS=3&windowS=5`
+      — verkürzt, nur um den Ablauf zu sehen. Erwartung: vier Stufen werden
+      gestellt, alle vier Punkte als „keine Daten" oder „Kadenz zu niedrig"
+      verworfen, am Ende `ABORTED` mit Grund und ein Stop
+- [ ] `GET /api/calib/map` liefert `levels = 16` und leere Zellen
+- [ ] Dann erst mit Fahrer: `Test 1 · 60 rpm`. Metronom oder die Kadenzanzeige
+      im Reiter benutzen — die Anzeige wird rot, sobald mehr als 4 rpm daneben
+- [ ] Nach dem Lauf: Punktliste vollständig, Heatmap in Spalte „60" gefüllt,
+      `map.sweepCells` entspricht der Zahl gültiger Punkte
+- [ ] Neustart → `[MAP] geladen: ...` im Log, Heatmap unverändert
+- [ ] `Test 2 · 80 rpm` — danach zwei gefüllte Spalten. Das ist die Antwort auf
+      die Frage „Tabelle oder Fläche"
+
+## Danach
+
+Nachtest 1 und 2 aus `docs/ergometer/NACHTESTS.md` sind damit gefahren und
+protokolliert. Ihr Ergebnis ist die Kennfläche Stufe × Kadenz → Watt und damit
+die Voraussetzung für `MANUAL_ERG` und `HR_HOLD`. Die entscheidende Zahl ist
+die Leistung bei Stufe 16: deutlich über 200 W heißt, der Widerstandskanal
+trägt v0.1 vollständig; um 130 W heißt, `0x11` wird Pflicht und Nachtest 4
+rückt nach vorn.
+
+Offen bleiben Nachtest 3 (Watt-Nachtest, Erwartung: `80 05 01` ohne Wirkung),
+4 (Simulation `0x11`), 5 (Dual-Link über 10 Minuten — mit dieser Firmware nur
+noch eine Frage der Laufzeit) und 6 (Crash unter Last). Test 6 kann auf den
+Watchdog zurückschlagen: bleibt die Last stehen und ist nicht bedienbar, muss
+der Hub-Watchdog aus, statt wie jetzt vorher Stop zu senden.
