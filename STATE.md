@@ -5,8 +5,8 @@ zuerst diese Datei und danach gezielt weiter. Alle anderen Notizen in `debug/`
 sind Protokolle einzelner Arbeitsschritte und beschreiben den Stand *zu ihrem
 Zeitpunkt* — sie werden nicht nachgeführt.
 
-Stand dieser Datei: **2026-09-11** Nacht. **HR_HOLD** gebaut
-([debug/UPDATE_HR_HOLD.md](debug/UPDATE_HR_HOLD.md)). Davor: MANUAL_ERG, Test 1+2.
+Stand dieser Datei: **2026-09-12**. **REHA** gebaut
+([debug/UPDATE_REHA.md](debug/UPDATE_REHA.md)). Davor: HR_HOLD, MANUAL_ERG, Test 1+2.
 
 ---
 
@@ -103,8 +103,9 @@ für die Wirkung — und `guardAllowSim` muss dafür von `false` auf `true`.
 4. Optional: Nachtest 3 (`0x05` tot, API `power?raw=1`) / 4 (`0x11`).
 5. ~~**MANUAL_ERG**~~ — PowerController + UI ([debug/UPDATE_ERG.md](debug/UPDATE_ERG.md)).
 6. ~~**HR_HOLD**~~ — Puls→Watt→Stufe ([debug/UPDATE_HR_HOLD.md](debug/UPDATE_HR_HOLD.md)).
-7. **Reha-Programm** — festes Watt + HR-Deckel (ERG + HR_HOLD).
-8. ~~`.github/workflows/build.yml`~~ / ~~6a~~ / Profile / OFF|LEVEL — erledigt.
+7. ~~**Reha-Programm**~~ — festes Watt + HR-Deckel ([debug/UPDATE_REHA.md](debug/UPDATE_REHA.md)).
+8. Optional: Ride-UI-Politur / Nachtest 3–4 / WorkoutEngine (v0.2).
+9. ~~`.github/workflows/build.yml`~~ / ~~6a~~ / Profile / OFF|LEVEL — erledigt.
 
 Noch offen aus dem Hardware-Bericht: ein UI-Hinweis, dass nach Stop
 `Start/Resume` plus erneuter Tritt nötig sein können. Wartet sinnvoll auf §3,
@@ -120,7 +121,8 @@ denn der zeigt nebenbei, ob `Start/Resume` am Varon überhaupt gebraucht wird.
    bleiben.
 3. **Arduino-frei und hosttestbar bleiben:** `FtmsCodec`, `FtmsCapabilities`,
    `Limiter`, `PowerMap`, `SweepRunner`, `ControlJournal`, `DebugRing`,
-   `ProfileStore`, `ControlMode`, `PowerController`, `HrController`.
+   `ProfileStore`, `ControlMode`, `PowerController`, `HrController`,
+   `RehaController`.
 4. **Jeder FTMS-Write nur durch den Limiter.** Es gibt keine öffentliche Methode,
    die rohe Bytes an den Control Point schreibt; alles läuft durch
    `FtmsClient::send()`. Ein Bypass müsste die Klasse ändern, nicht sie nur

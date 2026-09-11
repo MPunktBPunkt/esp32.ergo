@@ -10,6 +10,7 @@ const char* controlModeName(ControlMode m) {
         case ControlMode::ManualLevel: return "MANUAL_LEVEL";
         case ControlMode::ManualErg: return "MANUAL_ERG";
         case ControlMode::HrHold: return "HR_HOLD";
+        case ControlMode::Reha: return "REHA";
         case ControlMode::Workout: return "WORKOUT";
         case ControlMode::Sim: return "SIM";
         default: return "UNKNOWN";
@@ -37,6 +38,11 @@ bool controlModeFromToken(const char* token, ControlMode& out) {
         out = ControlMode::HrHold;
         return true;
     }
+    if (strcmp(token, "reha") == 0 || strcmp(token, "REHA") == 0 ||
+        strcmp(token, "physio") == 0 || strcmp(token, "PHYSIO") == 0) {
+        out = ControlMode::Reha;
+        return true;
+    }
     if (strcmp(token, "workout") == 0 || strcmp(token, "WORKOUT") == 0) {
         out = ControlMode::Workout;
         return true;
@@ -50,7 +56,7 @@ bool controlModeFromToken(const char* token, ControlMode& out) {
 
 bool ControlState::setMode(ControlMode m) {
     if (m != ControlMode::Off && m != ControlMode::ManualLevel && m != ControlMode::ManualErg &&
-        m != ControlMode::HrHold)
+        m != ControlMode::HrHold && m != ControlMode::Reha)
         return false;
     mode_ = m;
     if (m == ControlMode::Off) {
@@ -65,6 +71,9 @@ bool ControlState::setMode(ControlMode m) {
         hrTargetBpm_ = 0;
     } else if (m == ControlMode::HrHold) {
         levelTargetTenths_ = -1;
+    } else if (m == ControlMode::Reha) {
+        levelTargetTenths_ = -1;
+        hrTargetBpm_ = 0;
     }
     return true;
 }
@@ -77,7 +86,9 @@ bool ControlState::setLevelTargetTenths(int16_t tenths) {
 }
 
 bool ControlState::setPowerTargetW(float watt) {
-    if (mode_ != ControlMode::ManualErg && mode_ != ControlMode::HrHold) return false;
+    if (mode_ != ControlMode::ManualErg && mode_ != ControlMode::HrHold &&
+        mode_ != ControlMode::Reha)
+        return false;
     if (watt < 0.0f) return false;
     powerTargetW_ = watt;
     return true;

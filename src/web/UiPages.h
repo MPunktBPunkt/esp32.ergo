@@ -211,6 +211,7 @@ footer{color:var(--dim);font-size:12px;text-align:center;margin-top:26px}
         <button id="mlvl" class="ghost">LEVEL</button>
         <button id="merg" class="ghost">ERG</button>
         <button id="mhr" class="ghost">HR</button>
+        <button id="mreha" class="ghost">REHA</button>
         <button id="panic" class="danger">STOP</button>
       </div>
       <div class="row flat">
@@ -223,8 +224,17 @@ footer{color:var(--dim);font-size:12px;text-align:center;margin-top:26px}
           <input type="number" id="hrbpm" min="40" max="220" step="1" value="130"></label>
         <button id="hrgo" class="ghost">Puls setzen</button>
       </div>
+      <div class="row flat">
+        <label class="f" style="flex:1;margin:0"><div class="k">Reha-Watt</div>
+          <input type="number" id="rehaw" min="20" max="150" step="5" value="60"></label>
+        <label class="f" style="flex:1;margin:0"><div class="k">Pulsdeckel</div>
+          <input type="number" id="rehahr" min="80" max="180" step="1" value="120"></label>
+        <label class="f" style="flex:1;margin:0"><div class="k">Dauer (min)</div>
+          <input type="number" id="rehamin" min="0" max="60" step="1" value="10"></label>
+      </div>
       <div class="k" id="ergsub"></div>
       <div class="k" id="hrsub" style="color:#b45309"></div>
+      <div class="k" id="rehasub" style="color:#b45309"></div>
       <div class="row flat">
         <button id="req" class="ghost">Steuerhoheit</button>
         <button id="cstart" class="ghost">Start</button>
@@ -233,9 +243,9 @@ footer{color:var(--dim);font-size:12px;text-align:center;margin-top:26px}
         <button id="lvlup" class="ghost">Stufe +1</button>
       </div>
       <div class="msg" id="cmsg"></div>
-      <div class="hint flat">Ohne aktives Profil keine Last. ERG und HR brauchen eine
-        Kennfläche (Kalibrierung). HR regelt Puls→Watt→Stufe. Start/Reset sind FTMS-
-        Freigaben — nach STOP ggf. nötig.</div>
+      <div class="hint flat">Ohne aktives Profil keine Last. ERG/HR/REHA brauchen eine
+        Kennfläche. REHA: festes Watt mit Pulsdeckel (Soft-Band darunter). Start/Reset
+        sind FTMS-Freigaben — nach STOP ggf. nötig.</div>
     </div>
   </section>
 
@@ -684,6 +694,7 @@ function renderBle(s){
   $('rmode').textContent=mode;
   const erg=s.erg||{};
   const hh=s.hrHold||{};
+  const rh=s.reha||{};
   let msub=mode==='MANUAL_LEVEL'?'Handstufe':(mode==='OFF'?'keine Last':'');
   if(mode==='MANUAL_ERG'){
     msub=(erg.targetW?('Ziel '+Math.round(erg.targetW)+' W'):'kein Ziel')
@@ -696,23 +707,35 @@ function renderBle(s){
       +(hh.smoothedHr?(' · Ist '+hh.smoothedHr):'')
       +(hh.lost?' · PULSVERLUST':'');
   }
+  if(mode==='REHA'){
+    msub='PHYSIO '+(rh.desiredW!=null?Math.round(rh.desiredW):'-')+' W · Puls ≤ '+(rh.hrMax||'-')
+      +(rh.effectiveW!=null&&rh.capActive?(' · wirkt '+Math.round(rh.effectiveW)+' W'):'')
+      +(rh.durationS?(' · noch '+(rh.remainingS!=null?rh.remainingS:rh.durationS)+' s'):'')
+      +(rh.lost?' · PULSVERLUST':'');
+  }
   $('rmodesub').textContent=msub;
   $('moff').classList.toggle('ghost', mode!=='OFF');
   $('mlvl').classList.toggle('ghost', mode!=='MANUAL_LEVEL');
   $('merg').classList.toggle('ghost', mode!=='MANUAL_ERG');
   $('mhr').classList.toggle('ghost', mode!=='HR_HOLD');
-  const ergLike=mode==='MANUAL_ERG'||mode==='HR_HOLD';
+  $('mreha').classList.toggle('ghost', mode!=='REHA');
+  const ergLike=mode==='MANUAL_ERG'||mode==='HR_HOLD'||mode==='REHA';
   $('lvlup').disabled=!hasP||ergLike;
   $('lvldn').disabled=!hasP||ergLike;
   $('mlvl').disabled=!hasP;
   $('merg').disabled=!hasP||!(erg.mapReady);
   $('mhr').disabled=!hasP||!(erg.mapReady);
+  $('mreha').disabled=!hasP||!(erg.mapReady);
   $('erggo').disabled=!hasP||!(erg.mapReady)||mode==='HR_HOLD';
   $('hrgo').disabled=!hasP||!(erg.mapReady)||mode!=='HR_HOLD';
   if(hh.targetBpm&&document.activeElement!==$('hrbpm')) $('hrbpm').value=hh.targetBpm;
+  if(mode==='REHA'){
+    if(rh.desiredW!=null&&document.activeElement!==$('rehaw')) $('rehaw').value=Math.round(rh.desiredW);
+    if(rh.hrMax&&document.activeElement!==$('rehahr')) $('rehahr').value=rh.hrMax;
+  }
   $('ergsub').textContent=erg.mapReady
     ?(mode==='MANUAL_ERG'&&erg.ceiling?'Ziel oberhalb der Kennfläche — höchste Stufe':'')
-    :'ERG/HR: zuerst Kalibrierung (Kennfläche)';
+    :'ERG/HR/REHA: zuerst Kalibrierung (Kennfläche)';
   let hrHint='';
   if(mode==='HR_HOLD'&&hh.lost){
     const pol=hh.onHrLoss||'reduce';
@@ -721,6 +744,21 @@ function renderBle(s){
            'Pulsverlust — Watt wird abgesenkt';
   }
   $('hrsub').textContent=hrHint;
+  let rehaHint='';
+  if(mode==='REHA'){
+    if(rh.lost){
+      const pol=rh.onHrLoss||'reduce';
+      rehaHint=pol==='stop'?'Pulsverlust — STOP':
+               pol==='freeze'?'Pulsverlust — Stufe eingefroren':
+               'Pulsverlust — Watt wird abgesenkt';
+    } else if(rh.capActive){
+      rehaHint='Deckel greift'+(rh.interventions?(' · '+rh.interventions+'×'):'')
+        +(rh.effectiveW!=null?(' · '+Math.round(rh.effectiveW)+' W'):'');
+    } else if(rh.interventions){
+      rehaHint='Deckel griff '+rh.interventions+'×';
+    }
+  }
+  $('rehasub').textContent=rehaHint;
   $('rprof').style.color=(pi&&pi.color)?('#'+('000000'+Number(pi.color).toString(16)).slice(-6)):'';
 
   const strat={'emulate-resistance':'Emulation über Widerstand','direct-target':'Wattziel direkt',
@@ -1024,6 +1062,13 @@ $('merg').onclick=()=>{
 $('mhr').onclick=()=>{
   const bpm=+$('hrbpm').value||130;
   post('/api/control/mode?mode=hr&hr='+bpm);
+};
+$('mreha').onclick=()=>{
+  const w=+$('rehaw').value||60;
+  const hr=+$('rehahr').value||120;
+  const min=+$('rehamin').value;
+  const dur=(min>0)?(Math.round(min*60)):0;
+  post('/api/control/mode?mode=reha&watt='+w+'&hrMax='+hr+'&durationS='+dur);
 };
 $('erggo').onclick=()=>{
   const w=+$('ergw').value||80;

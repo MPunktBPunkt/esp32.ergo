@@ -14,13 +14,14 @@
 #include "control/Limiter.h"
 #include "control/PowerController.h"
 #include "control/PowerMap.h"
+#include "control/RehaController.h"
 #include "control/SweepRunner.h"
 #include "core/ConfigStore.h"
 #include "core/HubClient.h"
 #include "core/Profile.h"
 
 /**
- * Shell, BLE, Kalibrierung, Profile, OFF / LEVEL / ERG / HR_HOLD.
+ * Shell, BLE, Kalibrierung, Profile, OFF / LEVEL / ERG / HR_HOLD / REHA.
  */
 class App {
 public:
@@ -37,6 +38,7 @@ public:
     ergo::PowerMap powerMap;
     ergo::PowerController powerCtl;
     ergo::HrController hrCtl;
+    ergo::RehaController rehaCtl;
     ergo::SweepRunner sweep;
     ergo::DebugRing ring;
     ergo::ControlJournal journal;
@@ -82,6 +84,7 @@ private:
     void loopCalibration(unsigned long now);
     void loopErg(unsigned long now);
     void loopHr(unsigned long now);
+    void loopReha(unsigned long now);
     /** Fertige Sweep-Punkte in die Kennflaeche uebernehmen und protokollieren. */
     void harvestSweepPoints();
     void appendCalibJson(JsonObject obj) const;

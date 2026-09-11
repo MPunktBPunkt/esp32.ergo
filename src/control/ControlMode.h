@@ -3,7 +3,7 @@
 #include <stdint.h>
 
 /**
- * Steuermodus — OFF, MANUAL_LEVEL, MANUAL_ERG, HR_HOLD.
+ * Steuermodus — OFF, MANUAL_LEVEL, MANUAL_ERG, HR_HOLD, REHA.
  *
  * Arduino-frei. WORKOUT / SIM bleiben reserviert.
  */
@@ -14,8 +14,9 @@ enum class ControlMode : uint8_t {
     ManualLevel = 1,
     ManualErg = 2,
     HrHold = 3,
-    Workout = 4,
-    Sim = 5,
+    Reha = 4,
+    Workout = 5,
+    Sim = 6,
 };
 
 const char* controlModeName(ControlMode m);
@@ -35,12 +36,14 @@ public:
 
     bool allowsLevelWrite() const { return mode_ == ControlMode::ManualLevel; }
     bool allowsErg() const {
-        return mode_ == ControlMode::ManualErg || mode_ == ControlMode::HrHold;
+        return mode_ == ControlMode::ManualErg || mode_ == ControlMode::HrHold ||
+               mode_ == ControlMode::Reha;
     }
     bool allowsHrHold() const { return mode_ == ControlMode::HrHold; }
+    bool allowsReha() const { return mode_ == ControlMode::Reha; }
     bool allowsAnyLoadWrite() const {
         return mode_ == ControlMode::ManualLevel || mode_ == ControlMode::ManualErg ||
-               mode_ == ControlMode::HrHold;
+               mode_ == ControlMode::HrHold || mode_ == ControlMode::Reha;
     }
     bool sessionActive() const { return mode_ != ControlMode::Off; }
 

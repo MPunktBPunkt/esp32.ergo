@@ -45,6 +45,10 @@ void App::begin() {
     loadPowerMap();
     powerCtl.begin({});
     hrCtl.begin({});
+    rehaCtl.begin({});
+    rehaCtl.setDesiredW(60.0f);
+    rehaCtl.setHrLimits(115, 120);
+    rehaCtl.setDurationS(600);
     journal.begin(ergo::JournalConfig{});
     // Der Ring bleibt nach dem Booten aus und wird bewusst nicht in der
     // Konfiguration gemerkt. Ein Mitschnitt, der einen Neustart ueberlebt und
@@ -353,6 +357,24 @@ void App::buildStatusJson(JsonDocument& doc) {
         if (ap->onHrLoss == ergo::HrLossPolicy::Freeze) loss = "freeze";
         else if (ap->onHrLoss == ergo::HrLossPolicy::Stop) loss = "stop";
         hrhold["onHrLoss"] = loss;
+    }
+    JsonObject reha = doc["reha"].to<JsonObject>();
+    reha["desiredW"] = rehaCtl.desiredW();
+    reha["effectiveW"] = rehaCtl.effectiveW();
+    reha["hrMax"] = rehaCtl.hrMax();
+    reha["hrSoft"] = rehaCtl.hrSoft();
+    reha["capActive"] = rehaCtl.capActive();
+    reha["interventions"] = rehaCtl.interventions();
+    reha["durationS"] = rehaCtl.durationS();
+    reha["elapsedS"] = rehaCtl.elapsedS();
+    reha["remainingS"] = rehaCtl.remainingS();
+    reha["lost"] = rehaCtl.lost();
+    reha["finished"] = rehaCtl.finished();
+    if (const ergo::Profile* ap = profiles.active()) {
+        const char* loss = "reduce";
+        if (ap->onHrLoss == ergo::HrLossPolicy::Freeze) loss = "freeze";
+        else if (ap->onHrLoss == ergo::HrLossPolicy::Stop) loss = "stop";
+        reha["onHrLoss"] = loss;
     }
     if (const ergo::Profile* ap = profiles.active()) {
         doc["profile"] = ap->id;
@@ -678,6 +700,7 @@ void App::registerControlRoutes() {
         control.setMode(ergo::ControlMode::Off);
         powerCtl.reset();
         hrCtl.reset();
+        rehaCtl.reset();
         reply(r);
     });
     server.on("/api/control/request", HTTP_POST,
@@ -716,12 +739,14 @@ void App::registerControlRoutes() {
             return;
         }
         if (m != ergo::ControlMode::Off && m != ergo::ControlMode::ManualLevel &&
-            m != ergo::ControlMode::ManualErg && m != ergo::ControlMode::HrHold) {
+            m != ergo::ControlMode::ManualErg && m != ergo::ControlMode::HrHold &&
+            m != ergo::ControlMode::Reha) {
             NetUtil::sendError(server, 501, "Modus noch nicht implementiert");
             return;
         }
         if (m != ergo::ControlMode::Off && !requireProfile()) return;
-        if ((m == ergo::ControlMode::ManualErg || m == ergo::ControlMode::HrHold) &&
+        if ((m == ergo::ControlMode::ManualErg || m == ergo::ControlMode::HrHold ||
+             m == ergo::ControlMode::Reha) &&
             (!powerMap.ready() || powerMap.pointCount() == 0)) {
             NetUtil::sendError(server, 409, "Kennfläche leer — zuerst Kalibrierung");
             return;
@@ -748,6 +773,7 @@ void App::registerControlRoutes() {
         if (m == ergo::ControlMode::ManualErg) {
             powerCtl.reset();
             hrCtl.reset();
+            rehaCtl.reset();
             if (watt > 0.0f) {
                 control.setPowerTargetW(watt);
                 powerCtl.setTargetW(watt);
@@ -758,6 +784,7 @@ void App::registerControlRoutes() {
         if (m == ergo::ControlMode::HrHold) {
             powerCtl.reset();
             hrCtl.reset();
+            rehaCtl.reset();
             int hr = server.hasArg("hr") ? server.arg("hr").toInt() : 0;
             if (hasBody && !body["hr"].isNull()) hr = body["hr"].as<int>();
             if (hr <= 0 && profiles.active() && profiles.active()->maxHr > 0)
@@ -783,10 +810,47 @@ void App::registerControlRoutes() {
             doc["powerTargetW"] = base;
             doc["mapPoints"] = powerMap.pointCount();
         }
+        if (m == ergo::ControlMode::Reha) {
+            powerCtl.reset();
+            hrCtl.reset();
+            rehaCtl.reset();
+            float w = watt;
+            if (w <= 0.0f && hasBody && !body["watt"].isNull()) w = body["watt"].as<float>();
+            if (w <= 0.0f) w = 60.0f;
+            int hrMax = server.hasArg("hrMax") ? server.arg("hrMax").toInt() : 0;
+            if (hasBody && !body["hrMax"].isNull()) hrMax = body["hrMax"].as<int>();
+            if (hrMax <= 0 && profiles.active() && profiles.active()->maxHr > 0)
+                hrMax = profiles.active()->maxHr;
+            if (hrMax <= 0) hrMax = 120;
+            int hrSoft = server.hasArg("hrSoft") ? server.arg("hrSoft").toInt() : 0;
+            if (hasBody && !body["hrSoft"].isNull()) hrSoft = body["hrSoft"].as<int>();
+            if (hrSoft <= 0) hrSoft = hrMax > 5 ? hrMax - 5 : hrMax;
+            int dur = server.hasArg("durationS") ? server.arg("durationS").toInt() : -1;
+            if (hasBody && !body["durationS"].isNull()) dur = body["durationS"].as<int>();
+            if (dur < 0) dur = 600;
+            if (const ergo::Profile* ap = profiles.active()) {
+                if (ap->maxPowerW > 0 && w > (float)ap->maxPowerW) w = (float)ap->maxPowerW;
+                rehaCtl.setLossPolicy(ap->onHrLoss);
+            } else {
+                rehaCtl.setLossPolicy(ergo::HrLossPolicy::Reduce);
+            }
+            rehaCtl.setDesiredW(w);
+            rehaCtl.setHrLimits((uint8_t)hrSoft, (uint8_t)hrMax);
+            rehaCtl.setDurationS((uint32_t)dur);
+            rehaCtl.reset();
+            control.setPowerTargetW(w);
+            powerCtl.setTargetW(w);
+            doc["powerTargetW"] = w;
+            doc["hrMax"] = rehaCtl.hrMax();
+            doc["hrSoft"] = rehaCtl.hrSoft();
+            doc["durationS"] = rehaCtl.durationS();
+            doc["mapPoints"] = powerMap.pointCount();
+        }
         if (m == ergo::ControlMode::Off && ble.ready(ergo::Role::Bike)) {
             ftms.stop(millis());
             powerCtl.reset();
             hrCtl.reset();
+            rehaCtl.reset();
             doc["stopSent"] = true;
         }
         NetUtil::sendJson(server, 200, doc);
@@ -825,6 +889,18 @@ void App::registerControlRoutes() {
         // Emuliertes ERG-Ziel (nicht Opcode 0x05 — der ist am Varon tot).
         if (server.arg("raw") == "1") {
             reply(ftms.setPowerW((int16_t)wattIn, millis()));
+            return;
+        }
+        if (control.allowsReha()) {
+            rehaCtl.setDesiredW(watt);
+            control.setPowerTargetW(rehaCtl.effectiveW());
+            powerCtl.setTargetW(rehaCtl.effectiveW());
+            JsonDocument doc;
+            doc["ok"] = true;
+            doc["mode"] = "REHA";
+            doc["desiredW"] = rehaCtl.desiredW();
+            doc["effectiveW"] = rehaCtl.effectiveW();
+            NetUtil::sendJson(server, 200, doc);
             return;
         }
         if (control.mode() != ergo::ControlMode::ManualErg) {
@@ -866,6 +942,40 @@ void App::registerControlRoutes() {
         doc["mode"] = "HR_HOLD";
         doc["hrTargetBpm"] = control.hrTargetBpm();
         doc["powerTargetW"] = hrCtl.powerTargetW();
+        NetUtil::sendJson(server, 200, doc);
+    });
+
+    server.on("/api/control/reha", HTTP_POST, [this, requireProfile]() {
+        if (!requireProfile()) return;
+        if (!control.allowsReha()) {
+            NetUtil::sendError(server, 409, "nicht im Modus REHA");
+            return;
+        }
+        if (server.hasArg("watt")) {
+            float w = server.arg("watt").toFloat();
+            if (const ergo::Profile* ap = profiles.active()) {
+                if (ap->maxPowerW > 0 && w > (float)ap->maxPowerW) w = (float)ap->maxPowerW;
+            }
+            rehaCtl.setDesiredW(w);
+            control.setPowerTargetW(rehaCtl.effectiveW());
+            powerCtl.setTargetW(rehaCtl.effectiveW());
+        }
+        if (server.hasArg("hrMax") || server.hasArg("hrSoft")) {
+            int hard = server.hasArg("hrMax") ? server.arg("hrMax").toInt() : rehaCtl.hrMax();
+            int soft = server.hasArg("hrSoft") ? server.arg("hrSoft").toInt() : rehaCtl.hrSoft();
+            rehaCtl.setHrLimits((uint8_t)soft, (uint8_t)hard);
+        }
+        if (server.hasArg("durationS")) {
+            rehaCtl.setDurationS((uint32_t)server.arg("durationS").toInt());
+        }
+        JsonDocument doc;
+        doc["ok"] = true;
+        doc["mode"] = "REHA";
+        doc["desiredW"] = rehaCtl.desiredW();
+        doc["effectiveW"] = rehaCtl.effectiveW();
+        doc["hrMax"] = rehaCtl.hrMax();
+        doc["hrSoft"] = rehaCtl.hrSoft();
+        doc["durationS"] = rehaCtl.durationS();
         NetUtil::sendJson(server, 200, doc);
     });
 }
@@ -1138,6 +1248,10 @@ void App::loopErg(unsigned long now) {
         hrCtl.lossPolicy() == ergo::HrLossPolicy::Freeze) {
         return;
     }
+    if (control.allowsReha() && rehaCtl.lost() &&
+        rehaCtl.lossPolicy() == ergo::HrLossPolicy::Freeze) {
+        return;
+    }
     if (!ble.ready(ergo::Role::Bike) || !ftms.attached()) return;
     if (sweep.running()) return;
 
@@ -1155,9 +1269,11 @@ void App::loopErg(unsigned long now) {
 
     const ergo::FtmsClient::Result r = ftms.setLevelTenths(t.levelTenths, now);
     if (r == ergo::FtmsClient::Result::Ok) {
-        Serial.printf("[%s] Ziel %.0f W → Stufe %d%s (Ist~%.0f W, rpm=%.0f)\n",
-                      control.allowsHrHold() ? "HR" : "ERG", t.targetW, (int)t.levelTenths,
-                      t.ceiling ? " CEILING" : "", t.smoothedW, rpm);
+        const char* tag = "ERG";
+        if (control.allowsHrHold()) tag = "HR";
+        else if (control.allowsReha()) tag = "REHA";
+        Serial.printf("[%s] Ziel %.0f W → Stufe %d%s (Ist~%.0f W, rpm=%.0f)\n", tag, t.targetW,
+                      (int)t.levelTenths, t.ceiling ? " CEILING" : "", t.smoothedW, rpm);
     } else if (r != ergo::FtmsClient::Result::Deferred) {
         Serial.printf("[ERG] Write abgelehnt: %s (%s)\n", ergo::FtmsClient::resultName(r),
                       ftms.lastDenyReason());
@@ -1208,6 +1324,63 @@ void App::loopHr(unsigned long now) {
 
     control.setPowerTargetW(ht.powerTargetW);
     powerCtl.setTargetW(ht.powerTargetW);
+}
+
+void App::loopReha(unsigned long now) {
+    if (!control.allowsReha()) return;
+    if (sweep.running()) return;
+
+    const uint8_t hr = effectiveHr();
+    const bool hrFresh = (resolveHrSource() != ergo::HrSource::None) && hr > 0;
+    if (const ergo::Profile* ap = profiles.active()) {
+        rehaCtl.setLossPolicy(ap->onHrLoss);
+    }
+
+    const ergo::RehaController::Tick rt = rehaCtl.tick(now, hr, hrFresh);
+
+    if (rt.finished) {
+        Serial.println("[REHA] Dauer erreicht — STOP");
+        if (ble.ready(ergo::Role::Bike)) ftms.stop(now);
+        control.setMode(ergo::ControlMode::Off);
+        powerCtl.reset();
+        rehaCtl.reset();
+        return;
+    }
+
+    if (rt.lost) {
+        static unsigned long lastLossLog = 0;
+        if (now - lastLossLog > 2000) {
+            lastLossLog = now;
+            Serial.printf("[REHA] Pulsverlust — Politik %d\n", (int)rt.lossPolicy);
+        }
+        if (rt.lossPolicy == ergo::HrLossPolicy::Stop) {
+            if (ble.ready(ergo::Role::Bike)) ftms.stop(now);
+            control.setMode(ergo::ControlMode::Off);
+            powerCtl.reset();
+            rehaCtl.reset();
+            return;
+        }
+        if (rt.lossPolicy == ergo::HrLossPolicy::Freeze) return;
+        float p = powerCtl.targetW();
+        if (p < 1.0f) p = rt.effectiveW;
+        p *= 0.92f;
+        if (p < 25.0f) p = 25.0f;
+        control.setPowerTargetW(p);
+        powerCtl.setTargetW(p);
+        return;
+    }
+
+    if (rt.capActive) {
+        static unsigned long lastCapLog = 0;
+        if (now - lastCapLog > 3000) {
+            lastCapLog = now;
+            Serial.printf("[REHA] Deckel: %.0f → %.0f W (HR %u, Eingriffe %u)\n", rt.desiredW,
+                          rt.effectiveW, (unsigned)hr, (unsigned)rt.interventions);
+        }
+    }
+
+    control.setPowerTargetW(rt.effectiveW);
+    powerCtl.setTargetW(rt.effectiveW);
 }
 
 void App::loadPowerMap() {
@@ -1595,6 +1768,7 @@ void App::loop() {
     loopDebug(now);
     loopCalibration(now);
     loopHr(now);
+    loopReha(now);
     loopErg(now);
 
     // Waehrend eines aktiven Links haeufiger senden — beim Fahren sind 2 s
