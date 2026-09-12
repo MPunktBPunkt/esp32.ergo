@@ -11,6 +11,7 @@
 #include <time.h>
 
 #include "ble/FtmsCodec.h"
+#include "core/Progression.h"
 #include "core/NetUtil.h"
 #include "core/Zone.h"
 #include "web/UiPages.h"
@@ -1564,6 +1565,7 @@ void App::registerControlRoutes() {
         char err[64];
         char buf[1536];
         if (ergo::workoutBuiltinById(id.c_str(), d)) {
+            prepareWorkoutDoc(d);
             const size_t n = ergo::workoutWriteJson(d, buf, sizeof(buf));
             server.send(200, "application/json", n ? buf : "{}");
             return;
@@ -1606,7 +1608,78 @@ void App::registerControlRoutes() {
             JsonArray zta = doc["zoneTimeS"].to<JsonArray>();
             for (uint8_t i = 0; i < lastSession_.zoneCount && i < ergo::kPowerZones; i++)
                 zta.add(lastSession_.zoneTimeS[i]);
+            if (progOffer_.workoutId[0])
+                appendProgressionOfferJson(doc["progression"].to<JsonObject>());
         }
+        NetUtil::sendJson(server, 200, doc);
+    });
+
+    server.on("/api/progression/get", HTTP_GET, [this]() {
+        String id = server.hasArg("id") ? server.arg("id") : "physio";
+        ergo::WorkoutDoc d;
+        if (!ergo::workoutBuiltinById(id.c_str(), d) && fsReady_) {
+            String path = String("/workouts/") + id + ".json";
+            File f = LittleFS.open(path, "r");
+            char err[48];
+            if (f) {
+                String body = f.readString();
+                f.close();
+                ergo::workoutParseJson(body.c_str(), d, err, sizeof(err));
+            }
+        }
+        JsonDocument doc;
+        doc["ok"] = d.progression.enabled || progOffer_.workoutId[0];
+        doc["id"] = id;
+        doc["enabled"] = d.progression.enabled;
+        doc["stepS"] = d.progression.stepS ? d.progression.stepS : 60;
+        doc["maxS"] = d.progression.maxS ? d.progression.maxS : 1800;
+        const uint32_t base = d.progression.baseDurationS
+                                  ? d.progression.baseDurationS
+                                  : (d.stepCount > 1 ? d.steps[1].durationS : 600);
+        uint32_t cur = readProgressionMainS(id.c_str());
+        if (cur == 0) cur = base;
+        doc["baseMainS"] = base;
+        doc["currentMainS"] = cur;
+        doc["nextMainS"] = ergo::progressionNextMainS(cur, doc["stepS"], doc["maxS"]);
+        if (progOffer_.pending || progOffer_.workoutId[0])
+            appendProgressionOfferJson(doc["offer"].to<JsonObject>());
+        NetUtil::sendJson(server, 200, doc);
+    });
+
+    server.on("/api/progression/accept", HTTP_POST, [this]() {
+        String id = server.hasArg("id") ? server.arg("id") : String(progOffer_.workoutId);
+        if (!id.length()) id = "physio";
+        uint32_t cur = progOffer_.currentMainS;
+        uint16_t step = progOffer_.stepS ? progOffer_.stepS : 60;
+        uint32_t maxS = progOffer_.maxS ? progOffer_.maxS : 1800;
+        if (!progOffer_.clean) {
+            NetUtil::sendError(server, 409, progOffer_.reason[0] ? progOffer_.reason : "nicht sauber");
+            return;
+        }
+        uint32_t next = progOffer_.nextMainS ? progOffer_.nextMainS
+                                             : ergo::progressionNextMainS(cur, step, maxS);
+        if (next <= cur) {
+            NetUtil::sendError(server, 409, "Maximum erreicht");
+            return;
+        }
+        if (!writeProgressionMainS(id.c_str(), next)) {
+            NetUtil::sendError(server, 500, "Progression nicht speicherbar");
+            return;
+        }
+        progOffer_.pending = false;
+        progOffer_.currentMainS = next;
+        progOffer_.nextMainS = ergo::progressionNextMainS(next, step, maxS);
+        JsonDocument doc;
+        doc["ok"] = true;
+        doc["id"] = id;
+        doc["mainS"] = next;
+        NetUtil::sendJson(server, 200, doc);
+    });
+
+    server.on("/api/progression/decline", HTTP_POST, [this]() {
+        progOffer_.pending = false;
+        JsonDocument doc;
+        doc["ok"] = true;
         NetUtil::sendJson(server, 200, doc);
     });
     server.on("/api/session/list", HTTP_GET, [this]() {
@@ -2150,7 +2223,8 @@ bool App::beginFs() {
     if (fsReady_) {
         if (!LittleFS.exists("/workouts")) LittleFS.mkdir("/workouts");
         if (!LittleFS.exists("/sessions")) LittleFS.mkdir("/sessions");
-        Serial.println("[FS] LittleFS bereit (/workouts, /sessions)");
+        if (!LittleFS.exists("/progression")) LittleFS.mkdir("/progression");
+        Serial.println("[FS] LittleFS bereit (/workouts, /sessions, /progression)");
     } else {
         Serial.println("[FS] LittleFS fehlt — nur Builtins");
     }
@@ -2161,13 +2235,19 @@ bool App::loadWorkoutDoc(const ergo::WorkoutDoc& doc, float scale) {
     if (doc.stepCount == 0) return false;
     if (scale < 0.05f) scale = 0.05f;
     if (scale > 2.0f) scale = 2.0f;
+    ergo::WorkoutDoc prepared = doc;
+    prepareWorkoutDoc(prepared);
     ergo::WorkoutStep steps[ergo::WorkoutEngine::kMaxSteps];
-    for (uint8_t i = 0; i < doc.stepCount; i++) {
-        steps[i] = doc.steps[i];
+    for (uint8_t i = 0; i < prepared.stepCount; i++) {
+        steps[i] = prepared.steps[i];
         steps[i].durationS = (uint32_t)(steps[i].durationS * scale + 0.5f);
         if (steps[i].durationS < 1) steps[i].durationS = 1;
     }
-    if (!workout.loadSteps(steps, doc.stepCount, doc.name[0] ? doc.name : doc.id)) return false;
+    if (!workout.loadSteps(steps, prepared.stepCount, prepared.name[0] ? prepared.name : prepared.id))
+        return false;
+    strncpy(activeWorkoutId_, prepared.id, sizeof(activeWorkoutId_) - 1);
+    activeWorkoutId_[sizeof(activeWorkoutId_) - 1] = 0;
+    activeProg_ = prepared.progression;
     rehaCtl.setDurationS(0);
     if (!workout.start(millis())) return false;
     woSnap_ = workout.tick(millis());
@@ -2179,6 +2259,78 @@ bool App::loadWorkoutDoc(const ergo::WorkoutDoc& doc, float scale) {
     return true;
 }
 
+void App::prepareWorkoutDoc(ergo::WorkoutDoc& doc) {
+    if (!doc.progression.enabled) return;
+    doc.progression.stepIndex = ergo::progressionResolveStepIndex(doc);
+    if (doc.progression.baseDurationS == 0)
+        doc.progression.baseDurationS = doc.steps[doc.progression.stepIndex].durationS;
+    const uint32_t stored = readProgressionMainS(doc.id);
+    const uint32_t mainS = stored > 0 ? stored : doc.progression.baseDurationS;
+    ergo::progressionApplyMain(doc, mainS);
+}
+
+uint32_t App::readProgressionMainS(const char* id) const {
+    if (!fsReady_ || !id || !id[0]) return 0;
+    String path = String("/progression/") + id + ".json";
+    File f = LittleFS.open(path, "r");
+    if (!f) return 0;
+    String body = f.readString();
+    f.close();
+    const char* p = strstr(body.c_str(), "\"mainS\"");
+    if (!p) return 0;
+    p = strchr(p, ':');
+    if (!p) return 0;
+    return (uint32_t)strtoul(p + 1, nullptr, 10);
+}
+
+bool App::writeProgressionMainS(const char* id, uint32_t mainS) {
+    if (!fsReady_ || !id || !id[0]) return false;
+    if (!LittleFS.exists("/progression")) LittleFS.mkdir("/progression");
+    String path = String("/progression/") + id + ".json";
+    File f = LittleFS.open(path, "w");
+    if (!f) return false;
+    char buf[48];
+    snprintf(buf, sizeof(buf), "{\"mainS\":%u}", (unsigned)mainS);
+    const bool ok = f.print(buf) > 0;
+    f.close();
+    return ok;
+}
+
+void App::appendProgressionOfferJson(JsonObject obj) const {
+    obj["pending"] = progOffer_.pending;
+    obj["clean"] = progOffer_.clean;
+    obj["reason"] = progOffer_.reason;
+    obj["workoutId"] = progOffer_.workoutId;
+    obj["workoutName"] = progOffer_.workoutName;
+    obj["currentMainS"] = progOffer_.currentMainS;
+    obj["nextMainS"] = progOffer_.nextMainS;
+    obj["stepS"] = progOffer_.stepS;
+    obj["maxS"] = progOffer_.maxS;
+}
+
+void App::maybeOfferProgression(const ergo::SessionSummary& s) {
+    progOffer_ = ergo::ProgressionOffer{};
+    if (!activeProg_.enabled || !activeWorkoutId_[0]) return;
+    strncpy(progOffer_.workoutId, activeWorkoutId_, sizeof(progOffer_.workoutId) - 1);
+    strncpy(progOffer_.workoutName, s.workoutName, sizeof(progOffer_.workoutName) - 1);
+    progOffer_.stepS = activeProg_.stepS ? activeProg_.stepS : 60;
+    progOffer_.maxS = activeProg_.maxS ? activeProg_.maxS : 1800;
+    uint32_t cur = readProgressionMainS(activeWorkoutId_);
+    if (cur == 0) cur = activeProg_.baseDurationS;
+    if (cur == 0) cur = 600;
+    progOffer_.currentMainS = cur;
+    progOffer_.nextMainS = ergo::progressionNextMainS(cur, progOffer_.stepS, progOffer_.maxS);
+    progOffer_.clean = ergo::progressionIsClean(s, progOffer_.reason, sizeof(progOffer_.reason));
+    if (progOffer_.clean && progOffer_.nextMainS > progOffer_.currentMainS)
+        progOffer_.pending = true;
+    else if (!progOffer_.clean)
+        progOffer_.pending = true;
+    else {
+        progOffer_.pending = false;
+        strncpy(progOffer_.reason, "Maximum erreicht", sizeof(progOffer_.reason) - 1);
+    }
+}
+
 void App::recordSessionEnd(const char* reason) {
     if (!session_.active()) return;
     ergo::SessionSummary s = session_.end(millis(), reason);
@@ -2186,6 +2338,7 @@ void App::recordSessionEnd(const char* reason) {
     if (rehaCtl.interventions() > s.interventions) s.interventions = rehaCtl.interventions();
     lastSession_ = s;
     persistSession_(s);
+    maybeOfferProgression(s);
     Serial.printf("[SESS] %s %s %u s (Pause %u), Ø %.0f W, %.1f kJ, Deckel %u×\n", s.mode,
                   s.endReason, (unsigned)s.durationS, (unsigned)s.pausedS, s.avgPowerW, s.workKj,
                   (unsigned)s.interventions);

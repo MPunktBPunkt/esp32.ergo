@@ -210,6 +210,37 @@ bool workoutParseJson(const char* json, WorkoutDoc& out, char* err, size_t errLe
     }
 
     p = root;
+    if (skipToKey(p, "progression")) {
+        p = skipWs(p);
+        if (*p == '{') {
+            const char* end = findMatching(p, '{', '}');
+            if (end) {
+                char pbuf[192];
+                size_t n = (size_t)(end - p + 1);
+                if (n >= sizeof(pbuf)) n = sizeof(pbuf) - 1;
+                memcpy(pbuf, p, n);
+                pbuf[n] = 0;
+                out.progression.enabled = true;
+                const char* pp = pbuf;
+                if (skipToKey(pp, "step")) {
+                    double v = 0;
+                    if (parseNumber(pp, v) && v > 0) out.progression.stepS = (uint16_t)v;
+                }
+                pp = pbuf;
+                if (skipToKey(pp, "max")) {
+                    double v = 0;
+                    if (parseNumber(pp, v) && v > 0) out.progression.maxS = (uint32_t)v;
+                }
+                pp = pbuf;
+                if (skipToKey(pp, "step_index")) {
+                    double v = 0;
+                    if (parseNumber(pp, v)) out.progression.stepIndex = (uint8_t)v;
+                }
+            }
+        }
+    }
+
+    p = root;
     if (!skipToKey(p, "steps")) {
         setErr(err, errLen, "steps fehlt");
         return false;
@@ -253,12 +284,29 @@ bool workoutParseJson(const char* json, WorkoutDoc& out, char* err, size_t errLe
         setErr(err, errLen, "keine Schritte");
         return false;
     }
+    if (out.progression.enabled) {
+        const uint8_t idx = out.progression.stepIndex < out.stepCount
+                                ? out.progression.stepIndex
+                                : (out.stepCount >= 3 ? (uint8_t)1 : (uint8_t)0);
+        out.progression.stepIndex = idx;
+        out.progression.baseDurationS = out.steps[idx].durationS;
+    }
     return true;
 }
 
 size_t workoutWriteJson(const WorkoutDoc& doc, char* buf, size_t bufLen) {
     if (!buf || bufLen < 32) return 0;
-    int w = snprintf(buf, bufLen, "{\"id\":\"%s\",\"name\":\"%s\",\"steps\":[", doc.id, doc.name);
+    int w;
+    if (doc.progression.enabled) {
+        w = snprintf(buf, bufLen,
+                     "{\"id\":\"%s\",\"name\":\"%s\","
+                     "\"progression\":{\"field\":\"duration_s\",\"step\":%u,\"max\":%u},"
+                     "\"steps\":[",
+                     doc.id, doc.name, (unsigned)doc.progression.stepS,
+                     (unsigned)doc.progression.maxS);
+    } else {
+        w = snprintf(buf, bufLen, "{\"id\":\"%s\",\"name\":\"%s\",\"steps\":[", doc.id, doc.name);
+    }
     if (w < 0 || (size_t)w >= bufLen) return 0;
     size_t n = (size_t)w;
     for (uint8_t i = 0; i < doc.stepCount; i++) {
@@ -311,6 +359,11 @@ static void fillPhysio(WorkoutDoc& d, float scale) {
     s[2].hrMax = 120;
     s[2].hrSoft = 115;
     d.stepCount = 3;
+    d.progression.enabled = true;
+    d.progression.stepS = 60;
+    d.progression.maxS = 1800;
+    d.progression.stepIndex = 1;
+    d.progression.baseDurationS = d.steps[1].durationS;
 }
 
 static void fillEasy(WorkoutDoc& d) {

@@ -817,6 +817,23 @@ footer{color:var(--dim);font-size:12px;text-align:center;margin-top:26px}
   </section>
 
   <section id="t-verlauf">
+    <div class="card" id="progcard">
+      <h2>Physio-Progression</h2>
+      <div class="hint flat">Nach einer sauberen Physio-Einheit kann der Hauptteil
+        um eine Minute wachsen — nie automatisch.</div>
+      <div class="k" id="progmeta">lade…</div>
+      <canvas id="progcv" width="640" height="72" aria-label="Progression"
+        style="display:block;width:100%;height:72px;margin:10px 0;background:#0E1116;
+        border-radius:8px;border:1px solid var(--edge)"></canvas>
+      <div class="v" id="progoffer">-</div>
+      <div class="row flat">
+        <button id="progyes" class="ghost" disabled>Hauptteil +1 min</button>
+        <button id="progno" class="ghost" disabled>Nicht steigern</button>
+        <button id="progreload" class="ghost">Aktualisieren</button>
+      </div>
+      <div class="msg" id="progmsg"></div>
+      <table id="proghist"></table>
+    </div>
     <div class="card">
       <h2>Session-Verlauf</h2>
       <p class="k">Die letzten Fahrten auf dem Gerät (LittleFS). Neueste zuerst.</p>
@@ -900,7 +917,7 @@ function tab(n){
   if(n==='profile') loadProfiles();
   if(n==='workouts') loadWorkouts();
   if(n==='tests') loadTests();
-  if(n==='verlauf') loadSessions();
+  if(n==='verlauf'){ loadSessions(); loadProgression(); }
 }
 
 function num(v,d,u){return (v==null)?'-':(d?v.toFixed(d):Math.round(v))+(u||'');}
@@ -2222,7 +2239,76 @@ function loadSessions(){
     $('sesslast').textContent=d.ok?fmtSess(d):'noch keine';
   }).catch(()=>{});
 }
-$('sessreload').onclick=()=>loadSessions();
+$('sessreload').onclick=()=>{loadSessions(); loadProgression();};
+
+function drawProgChart(durs){
+  const cv=$('progcv'); if(!cv) return;
+  const ctx=cv.getContext('2d');
+  const W=cv.width, H=cv.height;
+  ctx.clearRect(0,0,W,H);
+  if(!durs||!durs.length) return;
+  const max=Math.max.apply(null,durs.concat([600]))*1.1;
+  const bw=Math.max(4,(W-8)/durs.length-2);
+  durs.forEach((d,i)=>{
+    const h=Math.max(2,(d/max)*(H-14));
+    ctx.fillStyle=i===durs.length-1?'var(--accent)':'#3FB8B0';
+    ctx.fillStyle=i===durs.length-1?'#E2802F':'#3FB8B0';
+    ctx.fillRect(6+i*(bw+2), H-8-h, bw, h);
+  });
+}
+function loadProgression(){
+  const m=$('progmsg'); if(m){m.className='msg'; m.textContent='';}
+  Promise.all([
+    fetch('/api/progression/get?id=physio').then(r=>r.json()),
+    fetch('/api/session/list').then(r=>r.json()),
+    fetch('/api/session/last').then(r=>r.json())
+  ]).then(([p,list,last])=>{
+    const cur=p.currentMainS||600, next=p.nextMainS||(cur+60);
+    $('progmeta').textContent='Hauptteil jetzt '+hmsShort(cur)
+      +(p.maxS?(' · max '+hmsShort(p.maxS)):'')
+      +(p.stepS?(' · Schritt +'+p.stepS+' s'):'');
+    const rows=(list.sessions||[]).filter(x=>
+      (x.workoutName||'')==='Physio Grundlage' || (x.workoutName||'').indexOf('Physio')===0);
+    const durs=rows.slice().reverse().map(x=>x.durationS||0).filter(x=>x>0);
+    if(p.currentMainS) durs.push(p.currentMainS);
+    drawProgChart(durs.slice(-12));
+    $('proghist').innerHTML=rows.length
+      ?('<tr><th>Dauer</th><th>Ø W</th><th>Puls</th><th>Deckel</th><th>Ende</th></tr>'+
+        rows.map(x=>'<tr><td>'+hmsShort(x.durationS)+'</td><td>'
+          +(x.avgPowerW!=null?Math.round(x.avgPowerW):'—')+'</td><td>'
+          +(x.hrAvg||'—')+(x.hrMax?('/'+x.hrMax):'')+'</td><td>'
+          +(x.interventions||0)+'</td><td>'+(x.endReason||'')+'</td></tr>').join(''))
+      :'';
+    const offer=(last&&last.progression)||p.offer||{};
+    const show=!!(offer.pending||offer.workoutId);
+    if(!show){
+      $('progoffer').textContent='Noch kein Angebot — Physio bis zum Ende fahren.';
+      $('progyes').disabled=true; $('progno').disabled=true;
+      return;
+    }
+    if(offer.clean && offer.nextMainS>offer.currentMainS){
+      $('progoffer').textContent='Sauber · Hauptteil '
+        +hmsShort(offer.currentMainS)+' → '+hmsShort(offer.nextMainS)+'?';
+      $('progyes').disabled=false; $('progno').disabled=false;
+    } else {
+      $('progoffer').textContent='Keine Steigerung: '+(offer.reason||'—')
+        +(offer.currentMainS?(' · aktuell '+hmsShort(offer.currentMainS)):'');
+      $('progyes').disabled=true; $('progno').disabled=!offer.pending;
+    }
+  }).catch(e=>{if(m){m.className='msg err'; m.textContent=String(e);}});
+}
+$('progreload').onclick=()=>loadProgression();
+$('progyes').onclick=()=>{
+  const m=$('progmsg'); m.className='msg'; m.textContent='speichere…';
+  fetch('/api/progression/accept?id=physio',{method:'POST'}).then(r=>r.json()).then(d=>{
+    m.className='msg '+(d.ok?'ok':'err');
+    m.textContent=d.ok?('Hauptteil jetzt '+hmsShort(d.mainS)):(d.error||'abgelehnt');
+    loadProgression();
+  }).catch(e=>{m.className='msg err'; m.textContent=String(e);});
+};
+$('progno').onclick=()=>{
+  fetch('/api/progression/decline',{method:'POST'}).then(()=>loadProgression());
+};
 
 function validateWorkoutUi(showMsg){
   const body=$('wojson').value;

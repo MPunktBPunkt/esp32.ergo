@@ -20,6 +20,7 @@
 #include "control/WorkoutJson.h"
 #include "core/ConfigStore.h"
 #include "core/HubClient.h"
+#include "core/Progression.h"
 #include "core/Profile.h"
 #include "core/SessionStore.h"
 #include "core/SessionSummary.h"
@@ -87,6 +88,11 @@ private:
     void persistSession_(const ergo::SessionSummary& s);
     void loadSessionArchive_();
     bool loadWorkoutDoc(const ergo::WorkoutDoc& doc, float scale);
+    void prepareWorkoutDoc(ergo::WorkoutDoc& doc);
+    uint32_t readProgressionMainS(const char* id) const;
+    bool writeProgressionMainS(const char* id, uint32_t mainS);
+    void maybeOfferProgression(const ergo::SessionSummary& s);
+    void appendProgressionOfferJson(JsonObject obj) const;
 
     void profileToJson(const ergo::Profile& p, JsonObject obj) const;
     bool profileFromJson(JsonVariantConst v, ergo::Profile& out) const;
@@ -159,4 +165,7 @@ private:
     uint8_t zoneUiPrev_ = 0;
     bool fsReady_ = false;
     uint16_t interventionsSeen_ = 0;
+    char activeWorkoutId_[24] = {};
+    ergo::WorkoutDoc::Progression activeProg_{};
+    ergo::ProgressionOffer progOffer_{};
 };

@@ -16,6 +16,13 @@ struct WorkoutDoc {
     char name[40] = {};
     WorkoutStep steps[WorkoutEngine::kMaxSteps];
     uint8_t stepCount = 0;
+    struct Progression {
+        bool enabled = false;
+        uint16_t stepS = 60;
+        uint32_t maxS = 1800;
+        uint8_t stepIndex = 1;
+        uint32_t baseDurationS = 0;
+    } progression;
 };
 
 /** true wenn JSON gelesen und mindestens ein Schritt vorhanden. */

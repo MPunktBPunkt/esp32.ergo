@@ -5,8 +5,8 @@ zuerst diese Datei und danach gezielt weiter. Alle anderen Notizen in `debug/`
 sind Protokolle einzelner Arbeitsschritte und beschreiben den Stand *zu ihrem
 Zeitpunkt* — sie werden nicht nachgeführt.
 
-Stand dieser Datei: **2026-09-12** Schritt-Editor
-([debug/UPDATE_WORKOUT_EDITOR.md](debug/UPDATE_WORKOUT_EDITOR.md)).
+Stand dieser Datei: **2026-09-12** Physio-Progression
+([debug/UPDATE_PROGRESSION.md](debug/UPDATE_PROGRESSION.md)).
 
 ---
 
@@ -124,8 +124,10 @@ für die Wirkung — und `guardAllowSim` muss dafür von `false` auf `true`.
     ([debug/UPDATE_TABLET_RIDE.md](debug/UPDATE_TABLET_RIDE.md)).
 17. ~~**Schritt-Editor**~~ — Steady-Schritte, Watt/%FTP, JSON-Sync, max. 8
     ([debug/UPDATE_WORKOUT_EDITOR.md](debug/UPDATE_WORKOUT_EDITOR.md)).
-18. Optional: Nachtest 4 / Progression / TestRunner.
-19. ~~`.github/workflows/build.yml`~~ / ~~6a~~ / Profile / OFF|LEVEL — erledigt.
+18. ~~**Physio-Progression**~~ — saubere Einheit → Hauptteil +1 min, Verlauf
+    ([debug/UPDATE_PROGRESSION.md](debug/UPDATE_PROGRESSION.md)).
+19. Optional: Nachtest 4 / TestRunner.
+20. ~~`.github/workflows/build.yml`~~ / ~~6a~~ / Profile / OFF|LEVEL — erledigt.
 
 Noch offen aus dem Hardware-Bericht: ob `Start/Resume` am Varon wirklich nötig
 ist — der UI-Hinweis steht; Messung am Rad offen.
@@ -142,7 +144,7 @@ ist — der UI-Hinweis steht; Messung am Rad offen.
    `Limiter`, `PowerMap`, `SweepRunner`, `ControlJournal`, `DebugRing`,
    `ProfileStore`, `ControlMode`, `PowerController`, `HrController`,
    `RehaController`, `WorkoutEngine`, `WorkoutJson`, `SessionTracker`,
-   `SessionStore`, `Zone`.
+   `SessionStore`, `Zone`, `Progression`.
 4. **Jeder FTMS-Write nur durch den Limiter.** Es gibt keine öffentliche Methode,
    die rohe Bytes an den Control Point schreibt; alles läuft durch
    `FtmsClient::send()`. Ein Bypass müsste die Klasse ändern, nicht sie nur
