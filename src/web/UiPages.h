@@ -1679,6 +1679,8 @@ function saveProfile(){
         setActiveChip({id:id,name:name,color:body.color});
         selectProfile(id);
       }
+    }).catch(e=>{$('pfmsg').className='msg err';$('pfmsg').textContent=''+e;});
+}
 function deleteProfile(){
   const id=$('pf-id').value.trim();
   if(!id||!confirm('Profil „'+id+'“ löschen?')) return;
