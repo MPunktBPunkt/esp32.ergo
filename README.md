@@ -1,17 +1,21 @@
 # esp32.ergo
 
-![Version](https://img.shields.io/badge/version-0.1.0--dev-orange)
+![Version](https://img.shields.io/badge/version-0.1.0-green)
 [![License: GPL v3](https://img.shields.io/badge/License-GPLv3-blue.svg)](https://www.gnu.org/licenses/gpl-3.0)
 [![Build](https://github.com/MPunktBPunkt/esp32.ergo/actions/workflows/build.yml/badge.svg)](https://github.com/MPunktBPunkt/esp32.ergo/actions/workflows/build.yml)
 [![Donate](https://img.shields.io/badge/Donate-PayPal-00457C.svg?logo=paypal)](https://www.paypal.com/donate/?business=martin%40bchmnn.de&currency_code=EUR)
 
 > **Trainingsrechner und BLE-Steuerung für das Ergometer Hammer Varon XTR II** — ERG-Emulation über die Widerstandsstufe, Pulsführung, Trainingszonen, Profile und Web-UI. Anbindung an [iobroker.esp-hub](https://github.com/MPunktBPunkt/iobroker.esp-hub).
 
-> [!WARNING]
-> **Stand: Fundament und Messtechnik stehen, Trainingslogik fehlt.** Hostgetestet sind FTMS-Codec, Capability-Ableitung, Limiter, Kennfläche, Sweep-Ablauf, Steuer-Journal und Rohbyte-Ring (119 Fälle). Auf Hardware laufen WLAN, Web, OTA, Hub-Heartbeat sowie BLE-Central mit zwei Links, FTMS-Client, Handsteuerung über den Limiter, die geführte Kalibrierung und der Debug-Mitschnitt. **Noch nicht belegt:** dass eine gestellte Stufe die Last tatsächlich ändert — die erste Hardware-Session hat lauter Erfolgsquittungen ohne Wirkung gesehen, Ursache gefunden und behoben (siehe [UPDATE_CAPS_FIX.md](debug/UPDATE_CAPS_FIX.md)). Damit sich das nicht wiederholt, beurteilt die Firmware jeden Schreibvorgang jetzt selbst — kadenznormiert, und mit „weiß nicht" als zulässigem Ergebnis. **Noch nicht da:** Steuermodi, Zonen, Profile, Workouts — also alles, was aus dem Gerät einen Trainingsrechner macht.
-
 > [!NOTE]
-> **Wer hier weiterarbeitet, fängt bei [`STATE.md`](STATE.md) an.** Dort stehen der aktuelle Stand, der eine offene Beweis, was ohne Fahrer am Rad möglich ist, die harten Regeln und die nächsten Schritte. Die Notizen in `debug/` sind Protokolle einzelner Arbeitsschritte und werden nicht nachgeführt.
+> **v0.1.0 (Coach) ist released.** Stand und Testergebnisse:
+> [`debug/RELEASE_v0.1.0.md`](debug/RELEASE_v0.1.0.md). Weiterarbeit beginnt bei
+> [`STATE.md`](STATE.md). Offen u. a. TestRunner, Flash-/UI-Budget, Bridge (v0.3).
+
+> [!TIP]
+> Stufenwirkung ist auf Hardware belegt (Journal WORKS, 0 Widersprüche). Caps-Fix
+> und die Regel „Erfolgsquittung beweist nichts“ bleiben Pflichtlektüre:
+> [`debug/UPDATE_CAPS_FIX.md`](debug/UPDATE_CAPS_FIX.md).
 
 ---
 
@@ -46,7 +50,9 @@ Vier Befunde aus dem Sondenlauf mit [esp32.ftmsprobe](https://github.com/MPunktB
 - **16 Stufen**, 1,0 bis 16,0 in Zehnteln, als `04 <sint16 LE>`. Die 1-Byte-Form wird quittiert, wirkt aber nicht.
 - **Eine Erfolgsquittung beweist nichts.** Das Bike antwortet auch auf `05 64 00` mit `80 05 01` Success, obwohl es das Feature nicht meldet.
 
-Offen und blockierend sind der Stufen-Sweep (welcher Leistungsbereich ist überhaupt fahrbar — die Extrapolation deutet auf rund 130 W) und die Kadenzabhängigkeit. Beides fährt die geführte Kalibrierung dieser Firmware inzwischen selbst, inklusive der Verwerfung von Punkten mit weggelaufener Kadenz.
+Stufen-Sweep und Kadenzabhängigkeit fährt die geführte Kalibrierung selbst
+(inkl. Verwerfung weggelaufener Kadenz). Auf Hardware: linear bis ~170 W @ Stufe 16;
+Kadenztest leicht bestätigt.
 
 **Nichts davon steht als Konstante im Code.** `ftms::Capabilities` leitet zur Verbindungszeit aus `0x2ACC`, `0x2AD6`, `0x2AD8` und den beobachteten `0x2AD2`-Flags ab, was das angeschlossene Gerät kann, und wählt daraus die Steuerstrategie: Wattziel direkt, Emulation über die Stufe, oder nur Dashboard. Ein anderes Ergometer ist damit ein Scan, ein Connect und ein Kalibrierlauf — kein Firmwarethema. Dasselbe gilt für den Pulsgurt: die BLE-Quellen sind reines `0x180D` und herstellerunabhängig.
 
@@ -54,21 +60,20 @@ Offen und blockierend sind der Stufen-Sweep (welcher Leistungsbereich ist überh
 
 ## Features
 
-### v0.1 — Coach
+### v0.1 — Coach *(released)*
 
 - **BLE Central (NimBLE):** Scan, Connect, Remember / Forget für Bike und Gurt
-- **Steuermodi:** `OFF`, `MANUAL_LEVEL`, `MANUAL_ERG` (emuliert), `HR_HOLD`, `WORKOUT`
-- **Profile** mit eigenem FTP, HRmax, Zonenmodell und **harten Grenzen** für Leistung, Puls und Stufe
-- **Leistungsziel mit Pulsdeckel** — das Reha-Programm: 60 W halten, Puls nicht über 120
-- **Limiter** als einziger Schreibpfad: Opcode-Whitelist, Klemmen, Rampe, Deadman
-- **Kalibrierung** der Kennfläche Stufe × Kadenz → Watt, geführt und passiv lernend
-- **Debug-Modus:** Rohbyte-Ring im JSONL-Format der Sonde, direkt als Codec-Fixtures verwertbar
-- **Web-UI** mit Zonenschiene, Ist-vs-Ziel-Chart und Stellweg-Anzeige
-- Workouts als JSON auf LittleFS, Session-Archiv, Hub-Heartbeat mit `fwType: ergo`
+- **Steuermodi:** `OFF`, `MANUAL_LEVEL`, `MANUAL_ERG` (emuliert), `HR_HOLD`, `REHA`, `WORKOUT`
+- **Profile** (Mehrbenutzer), harte Grenzen, Zonen mit Ambient/Hysterese
+- **Reha:** festes Watt + Pulsdeckel; **Progression** nach sauberer Physio-Einheit
+- **Limiter** als einziger Schreibpfad; Steuer-Journal; Kalibrierung / Kennfläche
+- **Web-UI:** Ride (Tablet), Bibliothek, Schritt-Editor, Tests-Stubs, Verlauf, Debug
+- Session-Archiv, Hub-Heartbeat `fwType: ergo`, OTA in beide Richtungen
 
 ### v0.2 — Trainingslehre
 
-Workout-Editor mit Live-Vorschau und Machbarkeitsprüfung, geführte Tests (Rampe, 20 Minuten, Recovery), Physio-Progression, Ghost-Vergleich gegen die eigene Bestleistung.
+Echter TestRunner (MAP / 20 min / Recovery), Interval-/Rampen-Editor, Ghost,
+LittleFS-UI falls Flash-Budget es erzwingt.
 
 ### v0.3 — Bridge
 

@@ -5,8 +5,8 @@ zuerst diese Datei und danach gezielt weiter. Alle anderen Notizen in `debug/`
 sind Protokolle einzelner Arbeitsschritte und beschreiben den Stand *zu ihrem
 Zeitpunkt* — sie werden nicht nachgeführt.
 
-Stand dieser Datei: **2026-09-12** Physio-Progression
-([debug/UPDATE_PROGRESSION.md](debug/UPDATE_PROGRESSION.md)).
+Stand dieser Datei: **2026-09-12** Release **v0.1.0**
+([debug/RELEASE_v0.1.0.md](debug/RELEASE_v0.1.0.md)).
 
 ---
 
@@ -14,7 +14,7 @@ Stand dieser Datei: **2026-09-12** Physio-Progression
 
 | | |
 |---|---|
-| Gerät | ESP32-S3 auf `192.168.178.88`, MAC `68B6B329339C`, `ergo 0.1.0-dev` |
+| Gerät | ESP32-S3 auf `192.168.178.88`, MAC `68B6B329339C`, `ergo 0.1.0` |
 | Bike | Hammer Varon XTR II, BLE-Name `TC174`, MAC `c2:32:a5:1e:bf:b5` |
 | Hub | `192.168.178.113:8093`, `fwType: ergo` |
 | Rollback-Bin | `nodes/esp32.ftmsprobe/dist/ftmsprobe.0.1.4.esp32s3.bin` |
@@ -28,109 +28,47 @@ Auf Hardware bewährt: WLAN, Web-UI, OTA in beide Richtungen, Hub-Heartbeat,
 BLE-Central mit zwei Rollen, FTMS-Client mit Capability-Ableitung, Handsteuerung
 über den Limiter, Sweep-Abbruch bei fehlender Kadenz.
 
-## 2. Der Unterschied, auf den es ankommt
+## 2. Stufenwirkung — erledigt (2026-09-12)
 
-**Belegt** ist, dass Kommandos ankommen und quittiert werden.
+**Belegt:** `0x04` sint16 wirkt messbar. Journal: WORKS, **0 Widersprüche**.
+W/rpm ~1,0@6 → ~3,1@16 → ~0,84@4. Details:
+[debug/RELEASE_v0.1.0.md](debug/RELEASE_v0.1.0.md).
 
-**Nicht belegt** ist, dass eine gestellte Widerstandsstufe die Last tatsächlich
-ändert.
+Historisch (Caps-Fix): die schmale Form `04 64` wurde quittiert ohne Wirkung —
+siehe [UPDATE_CAPS_FIX.md](debug/UPDATE_CAPS_FIX.md). Arbeitsregel bleibt:
+**Eine Erfolgsquittung beweist nichts.**
 
-Das ist keine Formalie. Die erste Hardware-Session hat lauter
-Erfolgsquittungen gesehen und daraus geschlossen, der Schreibweg stehe. Er stand
-nicht: `needsWideResistance()` leitete das Drahtformat aus dem *Stellbereich* ab,
-der Varon-Bereich (10…160) passt in ein `uint8`, also ging die schmale Form
-`04 64` hinaus — und genau die quittiert das Gerät laut
-[GERAETEPROFIL.md](docs/ergometer/GERAETEPROFIL.md) §5 mit Success, ohne etwas zu
-tun. Der Fix steht in [UPDATE_CAPS_FIX.md](debug/UPDATE_CAPS_FIX.md).
+## 3. Hardware 2026-09-12 (Kurz)
 
-> **Eine Erfolgsquittung beweist nichts.** Ein Stellbereich kann keine
-> Formatfrage beantworten. Wer von hier aus weiterarbeitet, sollte diesen Satz
-> als Arbeitsregel behandeln und nicht als Anekdote.
+- LEVEL-Session und Builtin-Rampe (`done`, 480 s, Puls max 149) gefahren
+- Profile Martin + Manu; Kopfzeile/Form vereinfacht
+- Flash ~75 %; UI-Seite groß — LittleFS vor weiterem Wachstum empfohlen
 
-Damit sich das nicht wiederholt, urteilt die Firmware seit diesem Zyklus selbst:
-das **Steuer-Journal** (`src/control/ControlJournal.{h,cpp}`) bewertet jeden
-Write kadenznormiert und benennt den Zustand „quittiert, aber wirkungslos" als
-`contradictory()` — rot im Debug-Reiter, im Log als `[JRN] WIDERSPRUCH`.
-
-## 3. Der eine offene Beweis — er braucht keinen Fahrer
-
-Die Frage ist qualitativ, also genügt eine Hand an der Kurbel.
-
-1. Flashen, Bike verbinden, `POST /api/control/request`
-2. Mitschnitt einschalten (Debug-Reiter) — dann ist der Lauf hinterher
-   auswertbar, auch wenn live niemand mitliest
-3. Stufe 1 setzen, Kurbel ~20 s gleichmäßig von Hand drehen
-4. Stufe 16 setzen, ~20 s gleichmäßig von Hand drehen
-5. Ist der Widerstand von Hand deutlich verschieden? Das Journal sagt es
-   zusätzlich selbst
-
-Das Bike meldet auch im Handbetrieb Werte — im letzten Bericht 12 W bei 21 rpm.
-Die Konsole taugt nicht als Rückmeldung: ihr Display ist aus, solange der
-BLE-Link steht, und die Stufe meldet das Bike in `0x2AD2` nicht zurück.
-
-Bleibt es bei „keine Wirkung" **mit** Erfolgsquittung, ist auch sint16 falsch.
-Nächste Verdächtige dann: fehlende `Start/Resume`-Freigabe, oder ein Betriebsmodus
-an der Konsole.
-
-Alles Weitere hängt daran — Kalibrierung, `MANUAL_ERG`, `HR_HOLD`.
-
-## 4. Was ohne Fahrer geht, und was nicht
+## 4. Was ohne Fahrer noch lohnt
 
 | Ohne Fahrer | |
 |---|---|
-| Der Beweis aus §3 | Hand an der Kurbel |
-| Reconnect | Bike aus, `LOST`, Bike an, `READY` ohne Neustart |
-| Nachtest 5 Dual-Link | Gurt umlegen und zehn Minuten sitzen, nicht treten |
-| Nachtest 6 Crash unter Last | hohe Stufe setzen, dem ESP den Strom ziehen, Kurbel von Hand prüfen. Entscheidet, ob der Hub-Watchdog überhaupt aktiv bleiben darf |
+| Reconnect | Bike aus → `LOST` → an → `READY` |
+| Nachtest 5 Dual-Link | Gurt umlegen, sitzen |
+| Nachtest 6 Crash unter Last | entscheidet Hub-Watchdog |
 
-| Braucht einen Fahrer | |
+| Braucht Fahrer | |
 |---|---|
-| Nachtest 1 · 60 rpm | die Zahlen der Kennfläche, Reiter Kalibrierung |
-| Nachtest 2 · 80 rpm | Kadenzabhängigkeit — Tabelle oder Regler |
-| Nachtest 3 | Watt-Nachtest, bestätigt `0x05` als tot |
+| Dichtere Kennfläche / voller Test 2 | optional |
+| Nachtest 3 | `0x05` tot |
+| ERG/HR/Reha-Abnahme | Mechanik da |
 
-Nachtest 4 (`0x11` Simulation) braucht keinen Fahrer für die Quittung, aber einen
-für die Wirkung — und `guardAllowSim` muss dafür von `false` auf `true`.
+Nachtest 4 (`0x11`): Quittung ohne Fahrer, Wirkung mit Fahrer; `guardAllowSim`.
 
-## 5. Nächste Schritte
+## 5. Nächste Schritte (nach v0.1.0)
 
-1. ~~Kopieren und bauen.~~ / ~~Caps-Fix OTA.~~
-2. ~~Hand-Beweis / Stufenwirkung~~ — bestätigt durch Test 1 (Journal WORKS,
-   lineare Kennlinie).
-3. ~~**Test 2 leicht**~~ — Kadenzabhängigkeit bestätigt (+37 % W bei Stufe 8,
-   60→80 rpm). [debug/HW_TEST2_LIGHT.md](debug/HW_TEST2_LIGHT.md).
-   Voller Test 2 optional.
-4. Optional: Nachtest 3 (`0x05` tot, API `power?raw=1`) / 4 (`0x11`).
-5. ~~**MANUAL_ERG**~~ — PowerController + UI ([debug/UPDATE_ERG.md](debug/UPDATE_ERG.md)).
-6. ~~**HR_HOLD**~~ — Puls→Watt→Stufe ([debug/UPDATE_HR_HOLD.md](debug/UPDATE_HR_HOLD.md)).
-7. ~~**Reha-Programm**~~ — festes Watt + HR-Deckel ([debug/UPDATE_REHA.md](debug/UPDATE_REHA.md)).
-8. ~~**Ride-UI-Politur**~~ — Ist/Ziel, Deckelbalken, Start-Hinweis
-   ([debug/UPDATE_RIDE_UI.md](debug/UPDATE_RIDE_UI.md)).
-9. ~~**WorkoutEngine (Physio)**~~ — 3 steady-Schritte + Deckel
-   ([debug/UPDATE_WORKOUT.md](debug/UPDATE_WORKOUT.md)).
-10. ~~**LittleFS-Workouts / Hub / Session-Stub**~~
-    ([debug/UPDATE_NIGHT.md](debug/UPDATE_NIGHT.md)).
-11. ~~**Session-Lifecycle**~~ — Auto-Pause, Freeze→LEVEL, Archiv, Hub-Export, Verlauf-UI
-    ([debug/UPDATE_SESSION.md](debug/UPDATE_SESSION.md)).
-12. ~~**Zonenschiene / Zone-UI**~~ — Ambient, Hero-Farbe, Zeit-in-Zone, Verlauf-Balken
-    ([debug/UPDATE_ZONES.md](debug/UPDATE_ZONES.md)).
-13. ~~**Profil-Karten / Mehrbenutzer**~~ — volle Felder, Martin-Vorlage, HRmax-Schätzung
-    ([debug/UPDATE_PROFILES_UI.md](debug/UPDATE_PROFILES_UI.md)).
-14. ~~**Workout-Bibliothek / Vorschau**~~ — Zeitachse, Machbarkeit, Drop/JSON
-    ([debug/UPDATE_WORKOUT_UI.md](debug/UPDATE_WORKOUT_UI.md)).
-15. ~~**Geführte Tests-UI**~~ — Rampe / 20 min / Recovery, Reha-Hide, FTP-Vorschlag
-    ([debug/UPDATE_TESTS_UI.md](debug/UPDATE_TESTS_UI.md)).
-16. ~~**Tablet-Ride-Layout**~~ — sticky Stufe/STOP, Hero, Zonen-Hysterese
-    ([debug/UPDATE_TABLET_RIDE.md](debug/UPDATE_TABLET_RIDE.md)).
-17. ~~**Schritt-Editor**~~ — Steady-Schritte, Watt/%FTP, JSON-Sync, max. 8
-    ([debug/UPDATE_WORKOUT_EDITOR.md](debug/UPDATE_WORKOUT_EDITOR.md)).
-18. ~~**Physio-Progression**~~ — saubere Einheit → Hauptteil +1 min, Verlauf
-    ([debug/UPDATE_PROGRESSION.md](debug/UPDATE_PROGRESSION.md)).
-19. Optional: Nachtest 4 / TestRunner.
-20. ~~`.github/workflows/build.yml`~~ / ~~6a~~ / Profile / OFF|LEVEL — erledigt.
+1. Flash-/UI-Budget (LittleFS oder schlanke Seite)
+2. TestRunner (echtes MAP / 20 min / Recovery)
+3. Optional: Nachtest 4 / dichtere Map / Interval-Editor
+4. Entscheidung v0.2 vs v0.3 (Bridge)
 
-Noch offen aus dem Hardware-Bericht: ob `Start/Resume` am Varon wirklich nötig
-ist — der UI-Hinweis steht; Messung am Rad offen.
+Erledigt bis v0.1.0: Caps-Fix, Kalibrierung leicht, ERG/HR/Reha, Session,
+Zonen, Profile, Workout-UI/Editor, Tests-UI, Tablet-Ride, Progression, CI.
 
 ## 6. Harte Regeln
 
@@ -168,11 +106,11 @@ Die Liste selbst steht in [PFLICHTENHEFT.md](docs/ergometer/PFLICHTENHEFT.md) §
 | 5 | **erfüllt** (Test 1: linear bis 170 W @ Stufe 16; Journal WORKS) |
 | 6 | **erfüllt für Architektur** (60 rpm voll + 80 rpm leicht); dichtere Map optional |
 | 6a | **erfüllt** (Host + Live-Export + CI `--verify-curated`) |
-| 6b | gebaut und hosttestbar; auf Hardware noch nicht gesehen |
+| 6b | gebaut; Rampen-Stub auf Hardware gefahren (kein volles MAP) |
 | 7 | **Mechanik da** (MANUAL_ERG); Abnahme mit Fahrer offen |
 | 8 | Ceiling-Flag + UI (Hero rot, Ist/Ziel-Hinweis) |
 | 13 | erfüllt (gewollter Neustart sendet `08 01`) |
-| 18 | Profilpflicht + Wechsel-Lock gebaut (UI/API); Session-Begriff noch ohne Workout |
+| 18 | Profile + Sessions + Workouts + Progression auf Hardware genutzt |
 
 ## 8. Welches Dokument beantwortet was
 
@@ -184,8 +122,9 @@ Die Liste selbst steht in [PFLICHTENHEFT.md](docs/ergometer/PFLICHTENHEFT.md) §
 | [WEBINTERFACE.md](docs/ergometer/WEBINTERFACE.md) | Designkonzept der UI, Reiterfolge §7, Flash-Budget §8 |
 | [NACHTESTS.md](docs/ergometer/NACHTESTS.md) | die sechs Messungen und was jede entscheidet. Die Kommandos darin beschreiben noch die Sonde, siehe Hinweis im Kopf der Datei. |
 | [BLE-SCAN.md](docs/ergometer/BLE-SCAN.md) | erster Protokolltest, erledigt. Vorlage für weitere Geräte. |
-| [debug/UPDATE_CAPS_FIX.md](debug/UPDATE_CAPS_FIX.md) | **jüngste Übergabe**: der Fix, Debug-Modus, Steuer-Journal, Kopierliste |
-| [debug/HW_TEST_REPORT.md](debug/HW_TEST_REPORT.md) | Protokoll der Hardware-Session 2026-09-11 |
+| [debug/RELEASE_v0.1.0.md](debug/RELEASE_v0.1.0.md) | **Release-Stand + Testergebnisse v0.1.0** |
+| [debug/UPDATE_CAPS_FIX.md](debug/UPDATE_CAPS_FIX.md) | Caps-Fix, Debug-Modus, Steuer-Journal |
+| [debug/HW_TEST_REPORT.md](debug/HW_TEST_REPORT.md) | Hardware-Session 2026-09-11 |
 | `debug/*` sonst | Protokolle älterer Arbeitsschritte, historisch |
 
 ## 9. Offene Entscheidungen
@@ -193,9 +132,9 @@ Die Liste selbst steht in [PFLICHTENHEFT.md](docs/ergometer/PFLICHTENHEFT.md) §
 - **Reihenfolge v0.2 gegen v0.3.** Die einzige echte Scope-Frage, siehe
   PFLICHTENHEFT §11 am Ende. Editor und Tests setzen direkt auf v0.1 auf;
   MyWhoosh ist die Motivation, die erhalten bleiben soll.
-- **Wandert die UI nach LittleFS?** Zuletzt gemessen 64,9 % Flash bei 33977 Byte
-  UI-Seite; die Seite ist inzwischen 40487 Byte. WEBINTERFACE.md §8: diese
-  Entscheidung wird gemessen, nicht geraten. Derzeit nicht dringend.
+- **Wandert die UI nach LittleFS?** Flash ~75 %, UI-Seite ~110 kB Quelle —
+  vor TestRunner/v0.2-Wachstum dringend messen und entscheiden
+  (WEBINTERFACE.md §8).
 - **Gerätename.** Das gemeinsame NVS `esphub` hält noch `FtmsProbe-S3`.
   Kosmetisch.
 - **mDNS** ist vom Build-Host nicht auflösbar. Bisher nur lästig.
