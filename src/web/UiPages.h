@@ -23,9 +23,9 @@
  * Kennflaeche als Heatmap mit sichtbarem Unterschied zwischen gefuehrt
  * gemessenen und beim Fahren gelernten Zellen.
  *
- * Nicht umgesetzt und bewusst nicht erfunden: Zonenschiene, Hero-Zonenfarbe
- * und der Kadenz-Hinweis. Alle drei brauchen Profile beziehungsweise einen
- * laufenden Regler; eine Zielspanne ohne Regler waere eine ausgedachte Zahl.
+ * Nicht umgesetzt und bewusst nicht erfunden: volles Tablet-Layout nach
+ * Wireframe und Geisterlinie. Zonenschiene, Hero-Zonenfarbe und Kadenz-Hinweis
+ * sind umgesetzt.
  *
  * Ohne JavaScript zeigt die Seite alle Abschnitte untereinander und das
  * OTA-Formular sendet native — das ist der Grund fuer `body.js` statt
@@ -46,11 +46,54 @@ static const char PAGE_MAIN[] PROGMEM = R"HTML(<!DOCTYPE html>
 :root{
   --bg:#0E1116; --card:#161A21; --edge:#232936;
   --fg:#E6EAF2; --dim:#8A94A6; --accent:#E2802F; --ok:#4CAF63; --bad:#C9304A;
+  --zone:#8A94A6;
+  --z1:#3FB8B0; --z2:#4CAF63; --z3:#D8B23A; --z4:#E2802F;
+  --z5:#DE5334; --z6:#C9304A; --z7:#A63FB0;
 }
 *{box-sizing:border-box}
 body{margin:0;background:var(--bg);color:var(--fg);
   font-family:'IBM Plex Mono',ui-monospace,SFMono-Regular,Menlo,monospace;
-  font-size:15px;line-height:1.5;padding:24px}
+  font-size:15px;line-height:1.5;padding:24px;
+  transition:background .4s ease}
+body.z1{background:radial-gradient(ellipse 90% 55% at 30% 12%,rgba(63,184,176,.16),transparent 55%),var(--bg);--zone:var(--z1);--accent:var(--z1)}
+body.z2{background:radial-gradient(ellipse 90% 55% at 30% 12%,rgba(76,175,99,.16),transparent 55%),var(--bg);--zone:var(--z2);--accent:var(--z2)}
+body.z3{background:radial-gradient(ellipse 90% 55% at 30% 12%,rgba(216,178,58,.16),transparent 55%),var(--bg);--zone:var(--z3);--accent:var(--z3)}
+body.z4{background:radial-gradient(ellipse 90% 55% at 30% 12%,rgba(226,128,47,.16),transparent 55%),var(--bg);--zone:var(--z4);--accent:var(--z4)}
+body.z5{background:radial-gradient(ellipse 90% 55% at 30% 12%,rgba(222,83,52,.16),transparent 55%),var(--bg);--zone:var(--z5);--accent:var(--z5)}
+body.z6{background:radial-gradient(ellipse 90% 55% at 30% 12%,rgba(201,48,74,.16),transparent 55%),var(--bg);--zone:var(--z6);--accent:var(--z6)}
+body.z7{background:radial-gradient(ellipse 90% 55% at 30% 12%,rgba(166,63,176,.16),transparent 55%),var(--bg);--zone:var(--z7);--accent:var(--z7)}
+.v.hero{font-size:46px;font-weight:800;line-height:1.1;color:var(--zone);
+  text-shadow:0 0 28px var(--zone)}
+.zonebadge{display:inline-flex;align-items:baseline;gap:8px;margin-top:6px;
+  font-family:'Syne',system-ui,sans-serif;letter-spacing:.06em}
+.zonebadge .zc{font-size:18px;font-weight:800;color:var(--zone)}
+.zonebadge .zn{font-size:13px;color:var(--dim);text-transform:uppercase}
+.zrail{margin-top:16px;padding-top:14px;border-top:1px solid var(--edge)}
+.zrail .segs{display:flex;gap:4px;margin:8px 0 6px;height:14px}
+.zrail .segs i{flex:1;position:relative;border-radius:3px;background:var(--edge);
+  overflow:hidden}
+.zrail .segs i b{display:block;height:100%;width:0;border-radius:3px;
+  transition:width .4s ease}
+.zrail .segs i.cur{outline:2px solid var(--fg);outline-offset:1px}
+.zrail .segs i:nth-child(1) b{background:var(--z1)}
+.zrail .segs i:nth-child(2) b{background:var(--z2)}
+.zrail .segs i:nth-child(3) b{background:var(--z3)}
+.zrail .segs i:nth-child(4) b{background:var(--z4)}
+.zrail .segs i:nth-child(5) b{background:var(--z5)}
+.zrail .segs i:nth-child(6) b{background:var(--z6)}
+.zrail .segs i:nth-child(7) b{background:var(--z7)}
+.zlabels{display:flex;gap:4px;font-size:10px;color:var(--dim);letter-spacing:.04em}
+.zlabels span{flex:1;text-align:center;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.zmini{display:flex;gap:2px;height:8px;margin-top:6px}
+.zmini i{flex:1;border-radius:2px;background:var(--edge);overflow:hidden}
+.zmini i b{display:block;height:100%;width:0}
+.zmini i:nth-child(1) b{background:var(--z1)}
+.zmini i:nth-child(2) b{background:var(--z2)}
+.zmini i:nth-child(3) b{background:var(--z3)}
+.zmini i:nth-child(4) b{background:var(--z4)}
+.zmini i:nth-child(5) b{background:var(--z5)}
+.zmini i:nth-child(6) b{background:var(--z6)}
+.zmini i:nth-child(7) b{background:var(--z7)}
 .wrap{max-width:820px;margin:0 auto}
 header{display:flex;align-items:baseline;gap:14px;margin-bottom:4px}
 h1{font-family:'Syne',system-ui,sans-serif;font-size:30px;letter-spacing:.14em;
@@ -80,7 +123,6 @@ body.js section.on{display:block}
 .v.mac{word-break:break-all}
 .v.addr{font-size:15px}
 .v.big{font-size:26px;font-weight:700}
-.v.hero{font-size:46px;font-weight:800;line-height:1.1}
 .v.ceil{color:var(--bad)}
 .tile{border:1px solid transparent;border-radius:9px;padding:8px;margin:-8px}
 .tile.cap{border-color:var(--bad)}
@@ -223,6 +265,23 @@ footer{color:var(--dim);font-size:12px;text-align:center;margin-top:26px}
         <canvas id="regcv" width="640" height="48" aria-label="Ist gegen Ziel"></canvas>
         <div class="bar" id="rehaprogress" hidden><i id="rehaprogi"></i></div>
         <div class="k" id="rehaprogsub"></div>
+      </div>
+      <div class="zrail" id="zrail">
+        <div class="k">Zonen · Zeit in Zone</div>
+        <div class="zonebadge" id="zbadge">
+          <span class="zc" id="zcode">—</span>
+          <span class="zn" id="zname">keine Zone</span>
+        </div>
+        <div class="segs" id="zsegs">
+          <i data-z="1"><b></b></i><i data-z="2"><b></b></i><i data-z="3"><b></b></i>
+          <i data-z="4"><b></b></i><i data-z="5"><b></b></i><i data-z="6"><b></b></i>
+          <i data-z="7"><b></b></i>
+        </div>
+        <div class="zlabels" id="zlabels">
+          <span>Z1</span><span>Z2</span><span>Z3</span><span>Z4</span>
+          <span>Z5</span><span>Z6</span><span>Z7</span>
+        </div>
+        <div class="k" id="zrailsub"></div>
       </div>
     </div>
 
@@ -638,6 +697,19 @@ $('nav').innerHTML=NAV.map(x=>
   '<button class="tab'+(x[2]?' soon':'')+'" data-t="'+x[0]+'">'+x[1]+'</button>').join('');
 document.querySelectorAll('.tab').forEach(b=>{b.onclick=()=>tab(b.dataset.t)});
 
+function zoneMiniHtml(times, count){
+  const n=count||7;
+  const arr=times||[];
+  let sum=0; for(let i=0;i<n;i++) sum+=(arr[i]|0);
+  let h='';
+  for(let i=0;i<n;i++){
+    const t=arr[i]|0;
+    const pct=sum?Math.min(100,100*t/sum):0;
+    h+='<i><b style="width:'+pct+'%"></b></i>';
+  }
+  return '<div class="zmini">'+h+'</div>';
+}
+
 function tab(n){
   const e=NAV.find(x=>x[0]===n)||NAV[0];
   n=e[0];
@@ -748,7 +820,7 @@ function pushHist(ist,ziel){
   istHist.push(ist); zielHist.push(ziel);
   while(istHist.length>HIST_N){istHist.shift();zielHist.shift();}
 }
-function drawRegChart(){
+function drawRegChart(istColor){
   const cv=$('regcv'); if(!cv) return;
   const ctx=cv.getContext('2d');
   const W=cv.width, H=cv.height;
@@ -771,7 +843,7 @@ function drawRegChart(){
     ctx.stroke();
   }
   stroke(zielHist,'#8A94A6',[4,4]);
-  stroke(istHist,'#E2802F',[]);
+  stroke(istHist,istColor||'#E2802F',[]);
   ctx.setLineDash([]);
 }
 
@@ -812,6 +884,48 @@ function renderBle(s){
   if(fh){
     const freeze=(mode==='HR_HOLD'&&hh.lost)||((mode==='REHA'||mode==='WORKOUT')&&rh.lost);
     fh.hidden=!freeze;
+  }
+
+  // Zone-Optik (führende Zone aus Profil)
+  const zi=s.zone||{};
+  const zIdx=zi.index|0;
+  const zClasses=['js'];
+  if(zIdx>=1&&zIdx<=7) zClasses.push('z'+zIdx);
+  document.body.className=zClasses.join(' ');
+  const zc=$('zcode'), zn=$('zname'), zsub=$('zrailsub');
+  if(zc) zc.textContent=zi.code||'—';
+  if(zn) zn.textContent=zi.name||(zi.lead==='hr'?'Pulsbasis':'Leistungsbasis');
+  const times=(sess.zoneTimeS)||[];
+  const zCount=(sess.zoneCount||(zi.lead==='hr'?5:7))|0;
+  let sumT=0;
+  for(let i=0;i<times.length;i++) sumT+=(times[i]|0);
+  const segs=$('zsegs');
+  if(segs){
+    const kids=segs.children;
+    for(let i=0;i<kids.length;i++){
+      const on=i<zCount;
+      kids[i].style.display=on?'':'none';
+      kids[i].classList.toggle('cur', on && (i+1)===zIdx);
+      const fill=kids[i].querySelector('b');
+      if(fill){
+        const t=times[i]|0;
+        fill.style.width=sumT?Math.max(0,Math.min(100,100*t/sumT))+'%':'0%';
+      }
+    }
+  }
+  const zl=$('zlabels');
+  if(zl){
+    for(let i=0;i<zl.children.length;i++){
+      zl.children[i].style.display=i<zCount?'':'none';
+      const t=times[i]|0;
+      zl.children[i].textContent=t?('Z'+(i+1)+' '+hms(t)):('Z'+(i+1));
+    }
+  }
+  if(zsub){
+    zsub.textContent=(!zi.ftpW&&zi.lead!=='hr')
+      ?'FTP im Profil setzen für Leistungszonen'
+      :((zi.lead==='hr'&&!zi.hrMax)?'HRmax im Profil setzen für Pulszonen'
+        :(sumT?('Summe '+hms(sumT)+(zIdx?(' · aktuell Z'+zIdx):'')):'Zeit sammelt sich in der Session'));
   }
 
   const ceil=!!(erg.ceiling && (mode==='MANUAL_ERG'||mode==='REHA'||mode==='HR_HOLD'||mode==='WORKOUT'));
@@ -881,12 +995,13 @@ function renderBle(s){
   $('el').textContent=live?hms(d.elapsedS):'-';
   levelTile(li,c);
 
-  // Ist/Ziel-Kurve
+  // Ist/Ziel-Kurve — Farbe folgt Zone
   let ziel=0, ist=live?(d.powerW||0):0;
   if(mode==='MANUAL_ERG') ziel=erg.targetW||0;
   else if(mode==='REHA') ziel=rh.capActive?(rh.effectiveW||0):(rh.desiredW||0);
   else if(mode==='WORKOUT') ziel=rh.capActive?(rh.effectiveW||0):(wo.desiredW||rh.desiredW||0);
   else if(mode==='HR_HOLD') ziel=hh.powerTargetW||0;
+  const zColor=zi.color?('#'+zi.color):'#E2802F';
   if(mode==='MANUAL_ERG'||mode==='REHA'||mode==='HR_HOLD'||mode==='WORKOUT'){
     if(live) pushHist(ist, ziel);
     let line='';
@@ -900,7 +1015,7 @@ function renderBle(s){
   } else {
     $('regline').textContent=mode==='OFF'?'keine Regelung':'Handstufe';
   }
-  drawRegChart();
+  drawRegChart(zColor);
 
   const rp=$('rehaprogress'), rpi=$('rehaprogi'), rps=$('rehaprogsub');
   if(rp){
@@ -1382,12 +1497,12 @@ function loadSessions(){
     const rows=d.sessions||[];
     $('sessnone').hidden=rows.length>0;
     $('sesslist').innerHTML=rows.length
-      ?('<tr><th>Modus</th><th>Dauer</th><th>Leistung</th><th>Puls</th><th>Ende</th></tr>'+
+      ?('<tr><th>Modus</th><th>Dauer</th><th>Leistung</th><th>Zonen</th><th>Ende</th></tr>'+
         rows.map(x=>'<tr><td>'+(x.mode||'')+(x.workoutName?(' · '+x.workoutName):'')+
           '</td><td>'+(x.durationS||0)+' s'+(x.pausedS?(' (+'+x.pausedS+' Pause)'):'')+
           '</td><td>'+(x.avgPowerW!=null?Math.round(x.avgPowerW)+' W':'—')+
           (x.workKj!=null?(' / '+Number(x.workKj).toFixed(1)+' kJ'):'')+
-          '</td><td>'+(x.hrAvg||'—')+(x.hrMax?(' / '+x.hrMax):'')+
+          '</td><td>'+zoneMiniHtml(x.zoneTimeS,x.zoneCount||(x.leadHr?5:7))+
           '</td><td>'+(x.endReason||'')+
           (x.interventions?(' · Deckel '+x.interventions):'')+
           (x.autoPauses?(' · AP '+x.autoPauses):'')+'</td></tr>').join(''))

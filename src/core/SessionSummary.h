@@ -3,6 +3,8 @@
 #include <stdint.h>
 #include <string.h>
 
+#include "core/Zone.h"
+
 /**
  * Letzte Session-Zusammenfassung — RAM / JSON-Zeile.
  * Arduino-frei.
@@ -24,6 +26,10 @@ struct SessionSummary {
     float workKj = 0.0f;
     uint8_t hrAvg = 0;
     uint8_t hrMax = 0;
+    /** Sekunden je Zone (Z1…; max kPowerZones). */
+    uint32_t zoneTimeS[kPowerZones] = {};
+    uint8_t zoneCount = kPowerZones;
+    bool leadHr = false;
     uint32_t endedUnix = 0;
     bool valid = false;
 

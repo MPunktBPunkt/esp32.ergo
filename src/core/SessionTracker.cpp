@@ -1,5 +1,7 @@
 #include "core/SessionTracker.h"
 
+#include "core/Zone.h"
+
 namespace ergo {
 
 void SessionTracker::begin(const SessionTrackerConfig& cfg) {
@@ -25,16 +27,39 @@ void SessionTracker::reset() {
     desiredN_ = 0;
     hrSum_ = 0;
     hrN_ = 0;
+    leadHr_ = false;
+    ftpW_ = 0;
+    hrMax_ = 0;
+    curZone_ = 0;
+    for (uint8_t i = 0; i < kPowerZones; i++) zoneMs_[i] = 0;
     cur_.clear();
+}
+
+void SessionTracker::setZoneBasis(bool leadHr, uint16_t ftpW, uint8_t hrMax) {
+    leadHr_ = leadHr;
+    ftpW_ = ftpW;
+    hrMax_ = hrMax;
+    if (active_) {
+        cur_.leadHr = leadHr_;
+        cur_.zoneCount = leadHr_ ? kHrZones : kPowerZones;
+    }
 }
 
 void SessionTracker::start(uint32_t nowMs, const char* mode, const char* workoutName,
                            const char* profileId) {
+    const bool lead = leadHr_;
+    const uint16_t ftp = ftpW_;
+    const uint8_t hrm = hrMax_;
     reset();
+    leadHr_ = lead;
+    ftpW_ = ftp;
+    hrMax_ = hrm;
     active_ = true;
     startMs_ = nowMs ? nowMs : 1;
     lastTickMs_ = startMs_;
     cur_.valid = true;
+    cur_.leadHr = leadHr_;
+    cur_.zoneCount = leadHr_ ? kHrZones : kPowerZones;
     if (mode) {
         strncpy(cur_.mode, mode, sizeof(cur_.mode) - 1);
         cur_.mode[sizeof(cur_.mode) - 1] = 0;
@@ -51,7 +76,6 @@ void SessionTracker::start(uint32_t nowMs, const char* mode, const char* workout
 
 SessionSummary SessionTracker::end(uint32_t nowMs, const char* reason) {
     if (!active_) {
-        cur_.valid = cur_.valid;  // keep last
         return cur_;
     }
     if (paused_ && pauseAtMs_ > 0 && nowMs >= pauseAtMs_) {
@@ -70,6 +94,8 @@ SessionSummary SessionTracker::end(uint32_t nowMs, const char* reason) {
     if (desiredN_ > 0) cur_.avgDesiredW = (float)(desiredSum_ / (double)desiredN_);
     cur_.workKj = (float)(workJ_ / 1000.0);
     if (hrN_ > 0) cur_.hrAvg = (uint8_t)(hrSum_ / hrN_);
+    cur_.leadHr = leadHr_;
+    cur_.zoneCount = leadHr_ ? kHrZones : kPowerZones;
     cur_.valid = true;
     active_ = false;
     paused_ = false;
@@ -122,16 +148,34 @@ void SessionTracker::accumulate_(uint32_t nowMs, float watt, uint8_t hr, bool li
         if (dtS > 3.0f) dtS = 3.0f;
     }
     lastTickMs_ = nowMs ? nowMs : 1;
-    if (!active_ || paused_ || dtS <= 0.0f) return;
-    if (liveData && watt > 0.0f) {
+    if (!active_ || paused_) return;
+
+    if (liveData) {
+        uint8_t z = 0;
+        if (leadHr_) {
+            z = zoneFromHr(hr, hrMax_);
+        } else if (watt > 0.0f) {
+            z = zoneFromPowerW(watt, ftpW_);
+        }
+        curZone_ = z;
+    }
+
+    if (dtS <= 0.0f || !liveData) return;
+
+    if (watt > 0.0f) {
         powerSum_ += watt;
         powerN_++;
         workJ_ += (double)watt * (double)dtS;
     }
-    if (liveData && hr > 0) {
+    if (hr > 0) {
         hrSum_ += hr;
         hrN_++;
         if (hr > cur_.hrMax) cur_.hrMax = hr;
+    }
+    if (curZone_ >= 1 && curZone_ <= cur_.zoneCount) {
+        const uint32_t addMs = (uint32_t)(dtS * 1000.0f + 0.5f);
+        zoneMs_[curZone_ - 1] += addMs;
+        cur_.zoneTimeS[curZone_ - 1] = zoneMs_[curZone_ - 1] / 1000UL;
     }
 }
 
@@ -147,7 +191,6 @@ void SessionTracker::tick(uint32_t nowMs, float rpm, float watt, uint8_t hr, boo
             paused_ = false;
         }
     } else if (liveData) {
-        // Stillstand / Link-Verlust (Aufrufer setzt liveData + rpm=0).
         if (zeroSinceMs_ == 0) zeroSinceMs_ = nowMs ? nowMs : 1;
         if (!paused_ && nowMs >= zeroSinceMs_ &&
             (nowMs - zeroSinceMs_) >= cfg_.autoPauseAfterMs) {

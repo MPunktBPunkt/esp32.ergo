@@ -22,7 +22,6 @@ bool SessionStore::append(const SessionSummary& s) {
 
 bool SessionStore::at(uint8_t newestIndex, SessionSummary& out) const {
     if (newestIndex >= count_) return false;
-    // head_ zeigt hinter dem neuesten
     int idx = (int)head_ - 1 - (int)newestIndex;
     while (idx < 0) idx += kMax;
     out = ring_[(uint8_t)idx];
@@ -30,19 +29,32 @@ bool SessionStore::at(uint8_t newestIndex, SessionSummary& out) const {
 }
 
 size_t SessionStore::writeJsonLine(const SessionSummary& s, char* buf, size_t bufLen) {
-    if (!buf || bufLen < 32) return 0;
-    int n = snprintf(buf, bufLen,
+    if (!buf || bufLen < 64) return 0;
+    char zones[96];
+    zones[0] = 0;
+    size_t zp = 0;
+    const uint8_t n = s.zoneCount ? s.zoneCount : kPowerZones;
+    for (uint8_t i = 0; i < n && i < kPowerZones; i++) {
+        int w = snprintf(zones + zp, sizeof(zones) - zp, "%s%u", i ? "," : "",
+                         (unsigned)s.zoneTimeS[i]);
+        if (w < 0) break;
+        zp += (size_t)w;
+        if (zp >= sizeof(zones)) break;
+    }
+    int m = snprintf(buf, bufLen,
                      "{\"mode\":\"%s\",\"workoutName\":\"%s\",\"profileId\":\"%s\","
                      "\"endReason\":\"%s\",\"durationS\":%u,\"pausedS\":%u,"
                      "\"steps\":%u,\"interventions\":%u,\"autoPauses\":%u,"
                      "\"avgPowerW\":%.1f,\"avgDesiredW\":%.1f,\"workKj\":%.1f,"
-                     "\"hrAvg\":%u,\"hrMax\":%u}",
+                     "\"hrAvg\":%u,\"hrMax\":%u,\"leadHr\":%s,\"zoneCount\":%u,"
+                     "\"zoneTimeS\":[%s]}",
                      s.mode, s.workoutName, s.profileId, s.endReason, (unsigned)s.durationS,
                      (unsigned)s.pausedS, (unsigned)s.steps, (unsigned)s.interventions,
                      (unsigned)s.autoPauses, s.avgPowerW, s.avgDesiredW, s.workKj,
-                     (unsigned)s.hrAvg, (unsigned)s.hrMax);
-    if (n < 0 || (size_t)n >= bufLen) return 0;
-    return (size_t)n;
+                     (unsigned)s.hrAvg, (unsigned)s.hrMax, s.leadHr ? "true" : "false",
+                     (unsigned)n, zones);
+    if (m < 0 || (size_t)m >= bufLen) return 0;
+    return (size_t)m;
 }
 
 static bool extractStr(const char* j, const char* key, char* out, size_t outLen) {
@@ -80,6 +92,17 @@ static bool extractF(const char* j, const char* key, float& v) {
     return true;
 }
 
+static bool extractBool(const char* j, const char* key, bool& v) {
+    char pat[40];
+    snprintf(pat, sizeof(pat), "\"%s\":", key);
+    const char* p = strstr(j, pat);
+    if (!p) return false;
+    p += strlen(pat);
+    while (*p == ' ') p++;
+    v = (strncmp(p, "true", 4) == 0);
+    return true;
+}
+
 bool SessionStore::parseJsonLine(const char* line, SessionSummary& out) {
     out.clear();
     if (!line || !line[0]) return false;
@@ -98,6 +121,25 @@ bool SessionStore::parseJsonLine(const char* line, SessionSummary& out) {
     extractF(line, "workKj", out.workKj);
     if (extractU32(line, "hrAvg", u)) out.hrAvg = (uint8_t)u;
     if (extractU32(line, "hrMax", u)) out.hrMax = (uint8_t)u;
+    bool b = false;
+    if (extractBool(line, "leadHr", b)) out.leadHr = b;
+    if (extractU32(line, "zoneCount", u)) out.zoneCount = (uint8_t)u;
+    if (out.zoneCount == 0 || out.zoneCount > kPowerZones)
+        out.zoneCount = out.leadHr ? kHrZones : kPowerZones;
+    const char* zt = strstr(line, "\"zoneTimeS\":[");
+    if (zt) {
+        zt = strchr(zt, '[');
+        if (zt) {
+            zt++;
+            for (uint8_t i = 0; i < out.zoneCount && i < kPowerZones; i++) {
+                while (*zt == ' ' || *zt == ',') zt++;
+                if (*zt == ']' || !*zt) break;
+                char* endp = nullptr;
+                out.zoneTimeS[i] = (uint32_t)strtoul(zt, &endp, 10);
+                zt = endp ? endp : zt + 1;
+            }
+        }
+    }
     out.valid = out.mode[0] != 0 || out.durationS > 0;
     return out.valid;
 }

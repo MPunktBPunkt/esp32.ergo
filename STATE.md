@@ -5,8 +5,8 @@ zuerst diese Datei und danach gezielt weiter. Alle anderen Notizen in `debug/`
 sind Protokolle einzelner Arbeitsschritte und beschreiben den Stand *zu ihrem
 Zeitpunkt* — sie werden nicht nachgeführt.
 
-Stand dieser Datei: **2026-09-12** Session-Lifecycle
-([debug/UPDATE_SESSION.md](debug/UPDATE_SESSION.md)).
+Stand dieser Datei: **2026-09-12** Zonenschiene / Ride-Zone-UI
+([debug/UPDATE_ZONES.md](debug/UPDATE_ZONES.md)).
 
 ---
 
@@ -112,8 +112,10 @@ für die Wirkung — und `guardAllowSim` muss dafür von `false` auf `true`.
     ([debug/UPDATE_NIGHT.md](debug/UPDATE_NIGHT.md)).
 11. ~~**Session-Lifecycle**~~ — Auto-Pause, Freeze→LEVEL, Archiv, Hub-Export, Verlauf-UI
     ([debug/UPDATE_SESSION.md](debug/UPDATE_SESSION.md)).
-12. Optional: Nachtest 4 / Editor / Progression / geführte Tests.
-13. ~~`.github/workflows/build.yml`~~ / ~~6a~~ / Profile / OFF|LEVEL — erledigt.
+12. ~~**Zonenschiene / Zone-UI**~~ — Ambient, Hero-Farbe, Zeit-in-Zone, Verlauf-Balken
+    ([debug/UPDATE_ZONES.md](debug/UPDATE_ZONES.md)).
+13. Optional: Nachtest 4 / Editor / Progression / geführte Tests / Tablet-Layout.
+14. ~~`.github/workflows/build.yml`~~ / ~~6a~~ / Profile / OFF|LEVEL — erledigt.
 
 Noch offen aus dem Hardware-Bericht: ob `Start/Resume` am Varon wirklich nötig
 ist — der UI-Hinweis steht; Messung am Rad offen.
@@ -129,7 +131,8 @@ ist — der UI-Hinweis steht; Messung am Rad offen.
 3. **Arduino-frei und hosttestbar bleiben:** `FtmsCodec`, `FtmsCapabilities`,
    `Limiter`, `PowerMap`, `SweepRunner`, `ControlJournal`, `DebugRing`,
    `ProfileStore`, `ControlMode`, `PowerController`, `HrController`,
-   `RehaController`, `WorkoutEngine`, `WorkoutJson`.
+   `RehaController`, `WorkoutEngine`, `WorkoutJson`, `SessionTracker`,
+   `SessionStore`, `Zone`.
 4. **Jeder FTMS-Write nur durch den Limiter.** Es gibt keine öffentliche Methode,
    die rohe Bytes an den Control Point schreibt; alles läuft durch
    `FtmsClient::send()`. Ein Bypass müsste die Klasse ändern, nicht sie nur

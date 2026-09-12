@@ -29,6 +29,12 @@ public:
     /** Beendet; Summary bleibt bis zum nächsten start lesbar. */
     SessionSummary end(uint32_t nowMs, const char* reason);
 
+    /**
+     * Zone-Parameter für Akkumulation (vor tick setzen).
+     * leadHr: führende Zone aus Puls; sonst Leistung/%FTP.
+     */
+    void setZoneBasis(bool leadHr, uint16_t ftpW, uint8_t hrMax);
+
     void tick(uint32_t nowMs, float rpm, float watt, uint8_t hr, bool liveData);
     void noteIntervention();
     void noteHrLost(uint32_t nowMs, bool lost);
@@ -40,6 +46,9 @@ public:
     /** Während Auto-Pause keine neuen Last-Writes. */
     bool holdLoad() const { return active_ && paused_; }
     bool freezeTimedOut(uint32_t nowMs) const;
+
+    /** Aktuelle führende Zone (1..n) während der Session. */
+    uint8_t currentZone() const { return curZone_; }
 
     const SessionSummary& peek() const { return cur_; }
     uint32_t elapsedActiveS(uint32_t nowMs) const;
@@ -63,6 +72,11 @@ private:
     uint32_t desiredN_ = 0;
     uint32_t hrSum_ = 0;
     uint32_t hrN_ = 0;
+    bool leadHr_ = false;
+    uint16_t ftpW_ = 0;
+    uint8_t hrMax_ = 0;
+    uint8_t curZone_ = 0;
+    uint32_t zoneMs_[kPowerZones] = {};
     SessionSummary cur_{};
 };
 

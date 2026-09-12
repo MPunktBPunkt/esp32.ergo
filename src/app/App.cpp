@@ -12,6 +12,7 @@
 
 #include "ble/FtmsCodec.h"
 #include "core/NetUtil.h"
+#include "core/Zone.h"
 #include "web/UiPages.h"
 
 App& App::instance() {
@@ -414,6 +415,11 @@ void App::buildStatusJson(JsonDocument& doc) {
         ls["workKj"] = lastSession_.workKj;
         ls["hrAvg"] = lastSession_.hrAvg;
         ls["hrMax"] = lastSession_.hrMax;
+        ls["leadHr"] = lastSession_.leadHr;
+        ls["zoneCount"] = lastSession_.zoneCount;
+        JsonArray zta = ls["zoneTimeS"].to<JsonArray>();
+        for (uint8_t i = 0; i < lastSession_.zoneCount && i < ergo::kPowerZones; i++)
+            zta.add(lastSession_.zoneTimeS[i]);
     }
     {
         JsonObject sess = doc["session"].to<JsonObject>();
@@ -424,9 +430,39 @@ void App::buildStatusJson(JsonDocument& doc) {
         sess["interventions"] = session_.peek().interventions;
         sess["avgPowerW"] = session_.peek().avgPowerW;
         sess["workKj"] = session_.peek().workKj;
+        sess["zone"] = session_.currentZone();
+        sess["leadHr"] = session_.peek().leadHr;
+        sess["zoneCount"] = session_.peek().zoneCount;
+        JsonArray zta = sess["zoneTimeS"].to<JsonArray>();
+        for (uint8_t i = 0; i < session_.peek().zoneCount && i < ergo::kPowerZones; i++)
+            zta.add(session_.peek().zoneTimeS[i]);
     }
     doc["fsReady"] = fsReady_;
     doc["sessionCount"] = sessionStore_.count();
+
+    {
+        float watt = 0.0f;
+        if (ftms.hasLive() && !ftms.stale(millis())) watt = (float)ftms.live().powerW;
+        const uint8_t hr = effectiveHr();
+        bool leadHr = false;
+        uint16_t ftp = 0;
+        uint8_t hrMax = 0;
+        if (const ergo::Profile* ap = profiles.active()) {
+            leadHr = (ap->leadingZone == ergo::ZoneLead::Hr);
+            ftp = ap->ftpW;
+            hrMax = ap->hrMax ? ap->hrMax : ap->maxHr;
+        }
+        const ergo::ZoneInfo zi = ergo::leadingZoneInfo(leadHr, watt, ftp, hr, hrMax);
+        JsonObject z = doc["zone"].to<JsonObject>();
+        z["index"] = zi.index;
+        z["code"] = zi.code;
+        z["name"] = zi.name;
+        z["color"] = zi.colorHex;
+        z["lead"] = leadHr ? "hr" : "power";
+        z["ftpW"] = ftp;
+        z["hrMax"] = hrMax;
+    }
+
     if (const ergo::Profile* ap = profiles.active()) {
         doc["profile"] = ap->id;
         JsonObject po = doc["profileInfo"].to<JsonObject>();
@@ -1409,6 +1445,11 @@ void App::registerControlRoutes() {
             doc["workKj"] = lastSession_.workKj;
             doc["hrAvg"] = lastSession_.hrAvg;
             doc["hrMax"] = lastSession_.hrMax;
+            doc["leadHr"] = lastSession_.leadHr;
+            doc["zoneCount"] = lastSession_.zoneCount;
+            JsonArray zta = doc["zoneTimeS"].to<JsonArray>();
+            for (uint8_t i = 0; i < lastSession_.zoneCount && i < ergo::kPowerZones; i++)
+                zta.add(lastSession_.zoneTimeS[i]);
         }
         NetUtil::sendJson(server, 200, doc);
     });
@@ -1435,6 +1476,11 @@ void App::registerControlRoutes() {
             o["workKj"] = s.workKj;
             o["hrAvg"] = s.hrAvg;
             o["hrMax"] = s.hrMax;
+            o["leadHr"] = s.leadHr;
+            o["zoneCount"] = s.zoneCount;
+            JsonArray zta = o["zoneTimeS"].to<JsonArray>();
+            for (uint8_t j = 0; j < s.zoneCount && j < ergo::kPowerZones; j++)
+                zta.add(s.zoneTimeS[j]);
         }
         NetUtil::sendJson(server, 200, doc);
     });
@@ -1962,12 +2008,26 @@ void App::beginSession(const char* workoutName) {
     const char* mode = ergo::controlModeName(control.mode());
     const char* pid = profiles.activeId() ? profiles.activeId() : "";
     session_.start(millis(), mode, workoutName ? workoutName : "", pid);
+    bool leadHr = false;
+    uint16_t ftp = 0;
+    uint8_t hrMax = 0;
+    if (const ergo::Profile* ap = profiles.active()) {
+        leadHr = (ap->leadingZone == ergo::ZoneLead::Hr);
+        ftp = ap->ftpW;
+        hrMax = ap->hrMax ? ap->hrMax : ap->maxHr;
+    }
+    session_.setZoneBasis(leadHr, ftp, hrMax);
     interventionsSeen_ = rehaCtl.interventions();
-    Serial.printf("[SESS] start %s profile=%s\n", mode, pid);
+    Serial.printf("[SESS] start %s profile=%s zones=%s\n", mode, pid, leadHr ? "HR" : "PWR");
 }
 
 void App::loopSession(unsigned long now) {
     if (!session_.active()) return;
+
+    if (const ergo::Profile* ap = profiles.active()) {
+        session_.setZoneBasis(ap->leadingZone == ergo::ZoneLead::Hr, ap->ftpW,
+                              ap->hrMax ? ap->hrMax : ap->maxHr);
+    }
 
     const bool linked = ble.ready(ergo::Role::Bike);
     const bool fresh = linked && ftms.hasLive() && !ftms.stale(now);
@@ -1975,7 +2035,6 @@ void App::loopSession(unsigned long now) {
     const float watt = fresh ? (float)ftms.live().powerW : 0.0f;
     const uint8_t hr = effectiveHr();
 
-    // Link-Verlust und Stillstand gleich behandeln → Auto-Pause.
     if (!linked || !fresh) {
         session_.tick(now, 0.0f, 0.0f, hr, true);
     } else {
@@ -2014,7 +2073,7 @@ void App::persistSession_(const ergo::SessionSummary& s) {
 
     if (fsReady_) {
         if (!LittleFS.exists("/sessions")) LittleFS.mkdir("/sessions");
-        char line[384];
+        char line[480];
         const size_t n = sessionStore_.writeJsonLine(s, line, sizeof(line));
         if (n > 0) {
             File f = LittleFS.open("/sessions/log.jsonl", "a");
@@ -2049,6 +2108,11 @@ void App::persistSession_(const ergo::SessionSummary& s) {
         doc["workKj"] = s.workKj;
         doc["hrAvg"] = s.hrAvg;
         doc["hrMax"] = s.hrMax;
+        doc["leadHr"] = s.leadHr;
+        doc["zoneCount"] = s.zoneCount;
+        JsonArray zta = doc["zoneTimeS"].to<JsonArray>();
+        for (uint8_t i = 0; i < s.zoneCount && i < ergo::kPowerZones; i++)
+            zta.add(s.zoneTimeS[i]);
         String payload;
         serializeJson(doc, payload);
         const int code = hub.postJson("/api/session-export", payload, 15000);

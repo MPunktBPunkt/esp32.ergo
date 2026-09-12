@@ -70,13 +70,33 @@ static void test_json_roundtrip(void) {
     a.avgPowerW = 95.5f;
     a.workKj = 57.3f;
     a.hrMax = 145;
-    char buf[320];
+    a.zoneCount = 7;
+    a.zoneTimeS[2] = 120;
+    a.zoneTimeS[3] = 80;
+    char buf[480];
     TEST_ASSERT_TRUE(st.writeJsonLine(a, buf, sizeof(buf)) > 0);
     SessionSummary b;
     TEST_ASSERT_TRUE(st.parseJsonLine(buf, b));
     TEST_ASSERT_EQUAL_STRING("MANUAL_ERG", b.mode);
     TEST_ASSERT_EQUAL_UINT32(600, b.durationS);
     TEST_ASSERT_FLOAT_WITHIN(0.2f, 95.5f, b.avgPowerW);
+    TEST_ASSERT_EQUAL_UINT32(120, b.zoneTimeS[2]);
+    TEST_ASSERT_EQUAL_UINT32(80, b.zoneTimeS[3]);
+}
+
+static void test_zone_accumulate(void) {
+    SessionTracker s;
+    s.begin({});
+    s.setZoneBasis(false, 200, 180);
+    s.start(1000, "MANUAL_ERG", "", "standard");
+    // 100 W = 50 % FTP → Z1
+    s.tick(1000, 60.0f, 100.0f, 100, true);
+    TEST_ASSERT_EQUAL_UINT8(1, s.currentZone());
+    s.tick(3000, 60.0f, 100.0f, 100, true);
+    TEST_ASSERT_TRUE(s.peek().zoneTimeS[0] >= 1);
+    // 200 W = 100 % → Z4
+    s.tick(5000, 60.0f, 200.0f, 100, true);
+    TEST_ASSERT_EQUAL_UINT8(4, s.currentZone());
 }
 
 void setUp(void) {}
@@ -88,5 +108,6 @@ int main(int, char**) {
     RUN_TEST(test_freeze_timeout);
     RUN_TEST(test_store_ring);
     RUN_TEST(test_json_roundtrip);
+    RUN_TEST(test_zone_accumulate);
     return UNITY_END();
 }
