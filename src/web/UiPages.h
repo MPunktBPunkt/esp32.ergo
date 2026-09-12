@@ -91,7 +91,7 @@ body.z7{background:radial-gradient(ellipse 90% 55% at 30% 12%,rgba(166,63,176,.1
 .zmini i:nth-child(6) b{background:var(--z6)}
 .zmini i:nth-child(7) b{background:var(--z7)}
 .wrap{max-width:980px;margin:0 auto}
-header{display:flex;align-items:baseline;gap:14px;margin-bottom:4px;flex-wrap:wrap}
+header{display:flex;align-items:center;gap:14px;margin-bottom:4px;flex-wrap:wrap}
 h1{font-family:'Syne',system-ui,sans-serif;font-size:30px;letter-spacing:.14em;
   margin:0;font-weight:800}
 .badge{font-size:12px;color:var(--accent);border:1px solid var(--accent);
@@ -403,9 +403,8 @@ footer{color:var(--dim);font-size:12px;text-align:center;margin-top:26px}
   <section id="t-profile">
     <div class="card">
       <h2>Wer fährt?</h2>
-      <div class="hint flat">Jedes Profil hat eigene Grenzen, Zonen und HRmax.
-        Ohne Auswahl startet keine Session. Wechsel nur im Modus OFF.
-        Zonen brauchen FTP (Leistung) bzw. HRmax (Puls) im Profil.</div>
+      <div class="hint flat">Nur den Namen setzen — ID und Initiale entstehen automatisch.
+        Ohne Auswahl startet keine Session. Wechsel nur im Modus OFF.</div>
       <div class="pcards" id="pcards"></div>
       <div class="k" id="plnone">noch keine Profile</div>
       <div class="row tight"><button id="pclr" class="ghost sm">Auswahl aufheben</button>
@@ -416,12 +415,10 @@ footer{color:var(--dim);font-size:12px;text-align:center;margin-top:26px}
     <div class="card">
       <h2 id="pfh">Profil bearbeiten</h2>
       <div class="fgrid">
-        <label class="f"><div class="k">ID</div>
-          <input type="text" id="pf-id" maxlength="15" autocomplete="off"></label>
-        <label class="f"><div class="k">Name</div>
+        <label class="f wide"><div class="k">Name</div>
           <input type="text" id="pf-name" maxlength="23" autocomplete="off"></label>
-        <label class="f"><div class="k">Initiale</div>
-          <input type="text" id="pf-initial" maxlength="2" autocomplete="off"></label>
+        <input type="hidden" id="pf-id" value="">
+        <input type="hidden" id="pf-initial" value="">
         <label class="f"><div class="k">Farbe</div>
           <div class="colorrow" id="pf-colors"></div>
           <input type="hidden" id="pf-color" value="14881855"></label>
@@ -938,19 +935,7 @@ function render(s){
   $('codec').textContent=s.codecSelfTest||'-';
   dot($('cdot'),s.codecSelfTest==='ok');
   $('sub').textContent=[s.fwType||'ergo',s.chip||'',s.time||'ohne Zeit'].join(' / ');
-  const chip=$('pchip'), cav=$('pchipav'), cn=$('pchipname');
-  if(chip){
-    const pi=s.profileInfo;
-    if(pi&&pi.name){
-      chip.hidden=false;
-      const col='#'+(('000000'+((pi.color||0xe2802f)>>>0).toString(16)).slice(-6));
-      cav.style.background=col;
-      cav.textContent=(pi.initial||pi.name.charAt(0)||'?').toUpperCase();
-      cn.textContent=pi.name+(pi.goal&&pi.goal!=='none'?(' · '+({fatloss:'Fettabbau',fitness:'Training',reha:'Reha',performance:'Leistung'}[pi.goal]||'')):'');
-    } else {
-      chip.hidden=true;
-    }
-  }
+  setActiveChip(s.profileInfo||null);
   renderBle(s);
   renderCalib(s);
   renderDebug(s);
@@ -1554,13 +1539,32 @@ function updateHrHint(){
   el.textContent='Tanaka-Schätzung ~'+est+' bpm (Alter '+age+')';
 }
 let _plist=[];
+function setActiveChip(pi){
+  const chip=$('pchip'), cav=$('pchipav'), cn=$('pchipname');
+  if(!chip) return;
+  if(pi&&(pi.name||pi.id)){
+    chip.hidden=false;
+    chip.removeAttribute('hidden');
+    const col='#'+(('000000'+((pi.color||0xe2802f)>>>0).toString(16)).slice(-6));
+    cav.style.background=col;
+    const letter=(pi.name||pi.id||'?').charAt(0).toUpperCase();
+    cav.textContent=letter;
+    cn.textContent=pi.name||pi.id;
+  } else {
+    chip.hidden=true;
+  }
+}
+function profileSlug(name){
+  let s=String(name||'').toLowerCase().replace(/[^a-z0-9]+/g,'_').replace(/^_|_$/g,'').slice(0,15);
+  if(!s) s='profil';
+  return s;
+}
 function fillProfileForm(p){
   const e=!p;
   $('pfh').textContent=e?'Neues Profil':('Profil: '+(p.name||p.id));
   $('pf-id').value=p?p.id:'';
-  $('pf-id').disabled=!!p;
   $('pf-name').value=p?p.name:'';
-  $('pf-initial').value=p&&p.initial?p.initial:(p&&p.name?p.name.charAt(0):'');
+  $('pf-initial').value='';
   const col=p&&p.color?p.color:0xE2802F;
   $('pf-color').value=String(col);
   paintColors(col);
@@ -1637,15 +1641,22 @@ function selectProfile(id){
       $('pmsg').className='msg '+(o.j.ok?'ok':'err');
       $('pmsg').textContent=o.j.ok?(o.j.active?('aktiv: '+o.j.active):'Auswahl aufgehoben')
         :(o.j.error||'Fehler');
-      loadProfiles();
+      if(o.j.ok){
+        if(o.j.active){
+          const p=_plist.find(x=>x.id===o.j.active);
+          setActiveChip(p||{id:o.j.active,name:o.j.active});
+        } else setActiveChip(null);
+        loadProfiles();
+        poll();
+      }
     }).catch(e=>{$('pmsg').className='msg err';$('pmsg').textContent=''+e;});
 }
 function saveProfile(){
-  const id=$('pf-id').value.trim();
   const name=$('pf-name').value.trim();
-  if(!id||!name){$('pfmsg').className='msg err';$('pfmsg').textContent='ID und Name nötig';return;}
-  let initial=$('pf-initial').value.trim();
-  if(!initial) initial=name.charAt(0);
+  if(!name){$('pfmsg').className='msg err';$('pfmsg').textContent='Name nötig';return;}
+  let id=$('pf-id').value.trim();
+  if(!id) id=profileSlug(name);
+  const initial=name.charAt(0).toUpperCase();
   const body={id:id,name:name,initial:initial,
     color:+$('pf-color').value||0xE2802F,
     birthYear:+$('pf-birth').value||0,
@@ -1663,9 +1674,11 @@ function saveProfile(){
     .then(o=>{
       $('pfmsg').className='msg '+(o.j.ok?'ok':'err');
       $('pfmsg').textContent=o.j.ok?'gespeichert':(o.j.error||'Fehler');
-      if(o.j.ok) loadProfiles();
-    }).catch(e=>{$('pfmsg').className='msg err';$('pfmsg').textContent=''+e;});
-}
+      if(o.j.ok){
+        $('pf-id').value=id;
+        setActiveChip({id:id,name:name,color:body.color});
+        selectProfile(id);
+      }
 function deleteProfile(){
   const id=$('pf-id').value.trim();
   if(!id||!confirm('Profil „'+id+'“ löschen?')) return;
