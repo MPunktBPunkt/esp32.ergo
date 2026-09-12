@@ -25,8 +25,17 @@ struct ZoneInfo {
 /** Power-Zone 1..7 aus Watt und FTP. FTP 0 → 0. */
 uint8_t zoneFromPowerW(float watt, uint16_t ftpW);
 
+/**
+ * Wie zoneFromPowerW, mit Hysterese gegen Grenzflackern (± ~2,5 % FTP).
+ * prevZone 0 = keine Vorgeschichte → soft-raw.
+ */
+uint8_t zoneFromPowerW(float watt, uint16_t ftpW, uint8_t prevZone);
+
 /** HR-Zone 1..5 aus BPM und HRmax. HRmax 0 → 0. */
 uint8_t zoneFromHr(uint8_t bpm, uint8_t hrMax);
+
+/** Wie zoneFromHr mit Hysterese (± ~2 % HRmax). */
+uint8_t zoneFromHr(uint8_t bpm, uint8_t hrMax, uint8_t prevZone);
 
 ZoneInfo powerZoneInfo(uint8_t z);
 ZoneInfo hrZoneInfo(uint8_t z);

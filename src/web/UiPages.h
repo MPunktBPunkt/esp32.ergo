@@ -20,9 +20,8 @@
  * Kennflaeche als Heatmap mit sichtbarem Unterschied zwischen gefuehrt
  * gemessenen und beim Fahren gelernten Zellen.
  *
- * Nicht umgesetzt und bewusst nicht erfunden: volles Tablet-Layout nach
- * Wireframe und Geisterlinie. Zonenschiene, Hero-Zonenfarbe und Kadenz-Hinweis
- * sind umgesetzt.
+ * Nicht umgesetzt und bewusst nicht erfunden: Geisterlinie. Tablet-Ride-Dock
+ * (Stufe/STOP sticky), Hero-Zweispalter und Zonen-Hysterese sind umgesetzt.
  *
  * Ohne JavaScript zeigt die Seite alle Abschnitte untereinander und das
  * OTA-Formular sendet native — das ist der Grund fuer `body.js` statt
@@ -91,8 +90,8 @@ body.z7{background:radial-gradient(ellipse 90% 55% at 30% 12%,rgba(166,63,176,.1
 .zmini i:nth-child(5) b{background:var(--z5)}
 .zmini i:nth-child(6) b{background:var(--z6)}
 .zmini i:nth-child(7) b{background:var(--z7)}
-.wrap{max-width:820px;margin:0 auto}
-header{display:flex;align-items:baseline;gap:14px;margin-bottom:4px}
+.wrap{max-width:980px;margin:0 auto}
+header{display:flex;align-items:baseline;gap:14px;margin-bottom:4px;flex-wrap:wrap}
 h1{font-family:'Syne',system-ui,sans-serif;font-size:30px;letter-spacing:.14em;
   margin:0;font-weight:800}
 .badge{font-size:12px;color:var(--accent);border:1px solid var(--accent);
@@ -109,6 +108,27 @@ nav{display:flex;flex-wrap:wrap;gap:3px;margin-bottom:18px;background:var(--card
 body:not(.js) nav{display:none}
 body.js section{display:none}
 body.js section.on{display:block}
+.ridedock{position:sticky;top:0;z-index:30;display:none;gap:10px;align-items:stretch;
+  flex-wrap:wrap;margin:0 0 14px;padding:10px;background:rgba(14,17,22,.92);
+  border:1px solid var(--edge);border-radius:12px;backdrop-filter:blur(8px)}
+#t-ride.on .ridedock{display:flex}
+.ridedock .docklvl{flex:1;min-width:120px;display:flex;flex-direction:column;justify-content:center}
+.ridedock .docklvl .v{font-size:22px;font-weight:800;color:var(--zone)}
+.ridedock button{flex:1;min-width:96px;min-height:52px;font-size:16px}
+.ridedock button.danger{flex:1.1}
+.ridehero{display:grid;grid-template-columns:1.2fr .9fr;gap:16px;align-items:start}
+@media (max-width:720px){.ridehero{grid-template-columns:1fr}}
+.ridehero .heroBlock .v.hero{font-size:64px}
+.lvldock{display:flex;gap:10px;margin-top:12px;flex-wrap:wrap}
+.lvldock button{flex:1;min-height:52px;font-size:16px;font-weight:800}
+.connline{display:flex;flex-wrap:wrap;gap:14px 22px;align-items:center;font-size:13px}
+.connline .v{font-size:14px}
+.modes{display:flex;flex-wrap:wrap;gap:8px;margin:0 0 12px}
+.modes button{min-height:48px}
+.advbox{margin-top:12px;padding-top:12px;border-top:1px solid var(--edge)}
+.advbox summary{cursor:pointer;color:var(--dim);font-size:12px;letter-spacing:.08em;
+  text-transform:uppercase;list-style:none}
+.advbox summary::-webkit-details-marker{display:none}
 .card{background:var(--card);border:1px solid var(--edge);border-radius:12px;
   padding:18px 20px;margin-bottom:16px}
 .card h2{font-family:'Syne',system-ui,sans-serif;font-size:13px;letter-spacing:.18em;
@@ -243,44 +263,63 @@ footer{color:var(--dim);font-size:12px;text-align:center;margin-top:26px}
   <nav id="nav"></nav>
 
   <section id="t-ride">
+    <div class="ridedock" id="ridedock">
+      <div class="docklvl"><div class="k">Stufe</div><div class="v" id="docklvl">-</div></div>
+      <button id="lvldn" class="ghost">Stufe −</button>
+      <button id="lvlup" class="ghost">Stufe +</button>
+      <button id="panic" class="danger">STOP</button>
+    </div>
     <div class="card">
-      <h2>Verbindung</h2>
-      <div class="grid">
-        <div><div class="k">Bike</div>
-          <div class="v"><span class="dot j-bdot"></span><span class="j-bike">-</span></div>
-          <div class="k j-bsub"></div></div>
-        <div><div class="k">Pulsgurt</div>
-          <div class="v"><span class="dot j-hdot"></span><span class="j-strap">-</span></div>
-          <div class="k j-hsub"></div></div>
+      <div class="connline">
+        <div><span class="dot j-bdot"></span><span class="j-bike">-</span>
+          <span class="k j-bsub"></span></div>
+        <div><span class="dot j-hdot"></span><span class="j-strap">-</span>
+          <span class="k j-hsub"></span></div>
+        <div><span class="k">Profil</span> <span class="v" id="rprof">-</span></div>
+        <div><span class="k">Modus</span> <span class="v" id="rmode">-</span></div>
       </div>
     </div>
 
     <div class="card">
-      <h2>Messwerte</h2>
+      <h2>Fahrt</h2>
       <div class="msg warn" id="startHint" hidden>Nach STOP: ggf. <b>Start</b> drücken und
         erneut treten — die Freigabe am Bike kann sonst fehlen.</div>
       <div class="msg warn" id="pauseHint" hidden>Auto-Pause: keine Trittfrequenz —
         Last gehalten. Weiter treten setzt die Session fort.</div>
       <div class="msg warn" id="freezeHint" hidden>Pulsverlust — Stufe eingefroren.
         Nach Timeout Rückfall auf LEVEL.</div>
-      <div class="grid">
-        <div id="pwtile"><div class="k">Leistung</div><div class="v" id="pw">-</div>
-          <div class="k" id="pwsub"></div></div>
-        <div><div class="k">Kadenz</div><div class="v big" id="cad">-</div>
-          <div class="k" id="cadsub"></div></div>
-        <div id="hrtile"><div class="k">Puls</div><div class="v" id="hrv">-</div>
-          <div class="k" id="hrvsub"></div>
-          <div class="capbar" id="hrcap" hidden><i id="hrcapi"></i>
-            <span class="mark" id="hrsoftm"></span></div>
-          <div class="k" id="hrcapsub"></div></div>
-        <div class="tile" id="ltile"><div class="k">Stufe</div>
-          <div class="v big" id="lvl">-</div>
-          <div class="segs" id="segs"></div>
-          <div class="k" id="lvlsub"></div></div>
-        <div><div class="k">Geschwindigkeit</div><div class="v" id="spd">-</div></div>
-        <div><div class="k">Strecke</div><div class="v" id="dst">-</div></div>
-        <div><div class="k">Energie</div><div class="v" id="kcal">-</div></div>
-        <div><div class="k">Fahrzeit</div><div class="v" id="el">-</div></div>
+      <div class="ridehero">
+        <div class="heroBlock">
+          <div id="pwtile"><div class="k">Leistung</div><div class="v" id="pw">-</div>
+            <div class="k" id="pwsub"></div></div>
+          <div id="hrtile" style="margin-top:12px"><div class="k">Puls</div><div class="v" id="hrv">-</div>
+            <div class="k" id="hrvsub"></div>
+            <div class="capbar" id="hrcap" hidden><i id="hrcapi"></i>
+              <span class="mark" id="hrsoftm"></span></div>
+            <div class="k" id="hrcapsub"></div></div>
+          <div class="zonebadge" id="zbadge">
+            <span class="zc" id="zcode">—</span>
+            <span class="zn" id="zname">keine Zone</span>
+          </div>
+        </div>
+        <div>
+          <div><div class="k">Kadenz</div><div class="v big" id="cad">-</div>
+            <div class="k" id="cadsub"></div></div>
+          <div class="tile" id="ltile" style="margin-top:12px"><div class="k">Stufe</div>
+            <div class="v big" id="lvl">-</div>
+            <div class="segs" id="segs"></div>
+            <div class="k" id="lvlsub"></div></div>
+          <div class="lvldock">
+            <button id="lvldn2" class="ghost">Stufe −</button>
+            <button id="lvlup2" class="ghost">Stufe +</button>
+          </div>
+          <div class="grid" style="margin-top:14px">
+            <div><div class="k">Fahrzeit</div><div class="v" id="el">-</div></div>
+            <div><div class="k">Energie</div><div class="v" id="kcal">-</div></div>
+            <div><div class="k">Strecke</div><div class="v" id="dst">-</div></div>
+            <div><div class="k">Geschwindigkeit</div><div class="v" id="spd">-</div></div>
+          </div>
+        </div>
       </div>
       <div class="reg" id="regstrip">
         <div class="k">Ist / Ziel</div>
@@ -291,10 +330,6 @@ footer{color:var(--dim);font-size:12px;text-align:center;margin-top:26px}
       </div>
       <div class="zrail" id="zrail">
         <div class="k">Zonen · Zeit in Zone</div>
-        <div class="zonebadge" id="zbadge">
-          <span class="zc" id="zcode">—</span>
-          <span class="zn" id="zname">keine Zone</span>
-        </div>
         <div class="segs" id="zsegs">
           <i data-z="1"><b></b></i><i data-z="2"><b></b></i><i data-z="3"><b></b></i>
           <i data-z="4"><b></b></i><i data-z="5"><b></b></i><i data-z="6"><b></b></i>
@@ -310,57 +345,53 @@ footer{color:var(--dim);font-size:12px;text-align:center;margin-top:26px}
 
     <div class="card">
       <h2>Steuerung</h2>
-      <div class="grid">
-        <div><div class="k">Profil</div><div class="v" id="rprof">-</div>
-          <div class="k" id="rprofsub"></div></div>
-        <div><div class="k">Modus</div><div class="v" id="rmode">-</div>
-          <div class="k" id="rmodesub"></div></div>
-      </div>
-      <div class="row flat">
+      <div class="k" id="rprofsub"></div>
+      <div class="k" id="rmodesub"></div>
+      <div class="modes">
         <button id="moff" class="ghost">OFF</button>
         <button id="mlvl" class="ghost">LEVEL</button>
         <button id="merg" class="ghost">ERG</button>
         <button id="mhr" class="ghost">HR</button>
         <button id="mreha" class="ghost">REHA</button>
         <button id="mwo" class="ghost">PHYSIO</button>
-        <button id="panic" class="danger">STOP</button>
       </div>
       <div class="row flat" id="worow">
         <button id="wopause" class="ghost">Pause</button>
         <button id="woresume" class="ghost">Weiter</button>
         <button id="woskip" class="ghost">Schritt überspringen</button>
       </div>
-      <div class="row flat">
-        <label class="f" style="flex:1;margin:0"><div class="k">Zielwatt (ERG)</div>
-          <input type="number" id="ergw" min="20" max="300" step="5" value="80"></label>
-        <button id="erggo" class="ghost">Ziel setzen</button>
-      </div>
-      <div class="row flat">
-        <label class="f" style="flex:1;margin:0"><div class="k">Zielpuls (HR)</div>
-          <input type="number" id="hrbpm" min="40" max="220" step="1" value="130"></label>
-        <button id="hrgo" class="ghost">Puls setzen</button>
-      </div>
-      <div class="row flat">
-        <label class="f" style="flex:1;margin:0"><div class="k">Reha-Watt</div>
-          <input type="number" id="rehaw" min="20" max="150" step="5" value="60"></label>
-        <label class="f" style="flex:1;margin:0"><div class="k">Pulsdeckel</div>
-          <input type="number" id="rehahr" min="80" max="180" step="1" value="120"></label>
-        <label class="f" style="flex:1;margin:0"><div class="k">Dauer (min)</div>
-          <input type="number" id="rehamin" min="0" max="60" step="1" value="10"></label>
-      </div>
-      <div class="k" id="ergsub"></div>
-      <div class="k" id="hrsub" style="color:#b45309"></div>
-      <div class="k" id="rehasub" style="color:#b45309"></div>
-      <div class="row flat">
-        <button id="req" class="ghost">Steuerhoheit</button>
-        <button id="cstart" class="ghost">Start</button>
-        <button id="creset" class="ghost">Reset</button>
-        <button id="lvldn" class="ghost">Stufe -1</button>
-        <button id="lvlup" class="ghost">Stufe +1</button>
-      </div>
+      <details class="advbox" id="rideadv">
+        <summary>Ziele · Freigabe · Reset</summary>
+        <div class="row flat">
+          <label class="f" style="flex:1;margin:0"><div class="k">Zielwatt (ERG)</div>
+            <input type="number" id="ergw" min="20" max="300" step="5" value="80"></label>
+          <button id="erggo" class="ghost">Ziel setzen</button>
+        </div>
+        <div class="row flat">
+          <label class="f" style="flex:1;margin:0"><div class="k">Zielpuls (HR)</div>
+            <input type="number" id="hrbpm" min="40" max="220" step="1" value="130"></label>
+          <button id="hrgo" class="ghost">Puls setzen</button>
+        </div>
+        <div class="row flat">
+          <label class="f" style="flex:1;margin:0"><div class="k">Reha-Watt</div>
+            <input type="number" id="rehaw" min="20" max="150" step="5" value="60"></label>
+          <label class="f" style="flex:1;margin:0"><div class="k">Pulsdeckel</div>
+            <input type="number" id="rehahr" min="80" max="180" step="1" value="120"></label>
+          <label class="f" style="flex:1;margin:0"><div class="k">Dauer (min)</div>
+            <input type="number" id="rehamin" min="0" max="60" step="1" value="10"></label>
+        </div>
+        <div class="k" id="ergsub"></div>
+        <div class="k" id="hrsub" style="color:#b45309"></div>
+        <div class="k" id="rehasub" style="color:#b45309"></div>
+        <div class="row flat">
+          <button id="req" class="ghost">Steuerhoheit</button>
+          <button id="cstart" class="ghost">Start</button>
+          <button id="creset" class="ghost">Reset</button>
+        </div>
+      </details>
       <div class="msg" id="cmsg"></div>
-      <div class="hint flat">Ohne aktives Profil keine Last. ERG/HR/REHA brauchen eine
-        Kennfläche. REHA: festes Watt mit Pulsdeckel. Nach STOP ggf. Start + Tritt.</div>
+      <div class="hint flat">Stufe und STOP bleiben oben kleben. Ohne Profil keine Last.
+        ERG/HR/REHA brauchen Kennfläche. Nach STOP ggf. Start + Tritt.</div>
     </div>
   </section>
 
@@ -1221,6 +1252,10 @@ function renderBle(s){
   const ergLike=mode==='MANUAL_ERG'||mode==='HR_HOLD'||mode==='REHA'||mode==='WORKOUT';
   $('lvlup').disabled=!hasP||ergLike;
   $('lvldn').disabled=!hasP||ergLike;
+  if($('lvlup2')) $('lvlup2').disabled=!hasP||ergLike;
+  if($('lvldn2')) $('lvldn2').disabled=!hasP||ergLike;
+  const adv=$('rideadv');
+  if(adv && (mode==='MANUAL_ERG'||mode==='HR_HOLD'||mode==='REHA')) adv.open=true;
   $('mlvl').disabled=!hasP;
   $('merg').disabled=!hasP||!(erg.mapReady);
   $('mhr').disabled=!hasP||!(erg.mapReady);
@@ -1300,6 +1335,7 @@ function levelTile(li,c){
     for(let i=0;i<n;i++) box.appendChild(document.createElement('i'));}
   Array.prototype.forEach.call(box.children,(d,i)=>{d.className=(i<set)?'on':''});
   $('lvl').textContent=n?(set?('~'+set+'/'+n):('- / '+n)):'-';
+  if($('docklvl')) $('docklvl').textContent=n?(set?('~'+set+'/'+n):('- / '+n)):'-';
   $('lvlsub').textContent=n?(set?('Reserve '+(n-set)):'nichts gestellt')
     :'kein Stellweg gemeldet';
   $('ltile').classList.toggle('cap', n>0 && set>=n);
@@ -2066,6 +2102,8 @@ $('hrgo').onclick=()=>{
 };
 $('lvlup').onclick=()=>step(+10);
 $('lvldn').onclick=()=>step(-10);
+if($('lvlup2')) $('lvlup2').onclick=()=>step(+10);
+if($('lvldn2')) $('lvldn2').onclick=()=>step(-10);
 function step(delta){
   fetch('/api/status').then(r=>r.json()).then(s=>{
     if(!s.profile){

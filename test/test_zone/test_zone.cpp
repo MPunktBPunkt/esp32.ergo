@@ -42,6 +42,15 @@ static void test_leading(void) {
     TEST_ASSERT_EQUAL_UINT8(4, b.index);
 }
 
+static void test_power_hysteresis(void) {
+    // An der Z2/Z3-Grenze (76 % von 200 = 152 W) nicht sofort hoch/runter.
+    TEST_ASSERT_EQUAL_UINT8(2, zoneFromPowerW(150, 200, 2));  // 75 %
+    TEST_ASSERT_EQUAL_UINT8(2, zoneFromPowerW(153, 200, 2));  // 76.5 % — noch Hyst
+    TEST_ASSERT_EQUAL_UINT8(3, zoneFromPowerW(158, 200, 2));  // 79 % — klar drüber
+    TEST_ASSERT_EQUAL_UINT8(3, zoneFromPowerW(153, 200, 3));  // bleibt in 3
+    TEST_ASSERT_EQUAL_UINT8(2, zoneFromPowerW(145, 200, 3));  // unter 76−2.5
+}
+
 void setUp(void) {}
 void tearDown(void) {}
 
@@ -51,5 +60,6 @@ int main(int, char**) {
     RUN_TEST(test_hr_boundaries);
     RUN_TEST(test_info_names);
     RUN_TEST(test_leading);
+    RUN_TEST(test_power_hysteresis);
     return UNITY_END();
 }

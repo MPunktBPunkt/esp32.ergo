@@ -521,7 +521,18 @@ void App::buildStatusJson(JsonDocument& doc) {
             ftp = ap->ftpW;
             hrMax = ap->hrMax ? ap->hrMax : ap->maxHr;
         }
-        const ergo::ZoneInfo zi = ergo::leadingZoneInfo(leadHr, watt, ftp, hr, hrMax);
+        const uint8_t raw = leadHr ? ergo::zoneFromHr(hr, hrMax)
+                                   : ergo::zoneFromPowerW(watt, ftp);
+        uint8_t idx = raw;
+        if (session_.active() && session_.currentZone() > 0)
+            idx = session_.currentZone();
+        else if (zoneUiPrev_ > 0) {
+            idx = leadHr ? ergo::zoneFromHr(hr, hrMax, zoneUiPrev_)
+                         : ergo::zoneFromPowerW(watt, ftp, zoneUiPrev_);
+        }
+        zoneUiPrev_ = idx;
+        const ergo::ZoneInfo zi =
+            leadHr ? ergo::hrZoneInfo(idx) : ergo::powerZoneInfo(idx);
         JsonObject z = doc["zone"].to<JsonObject>();
         z["index"] = zi.index;
         z["code"] = zi.code;

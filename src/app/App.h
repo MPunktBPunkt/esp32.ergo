@@ -156,6 +156,7 @@ private:
     ergo::SessionSummary lastSession_{};
     ergo::SessionTracker session_;
     ergo::SessionStore sessionStore_;
+    uint8_t zoneUiPrev_ = 0;
     bool fsReady_ = false;
     uint16_t interventionsSeen_ = 0;
 };

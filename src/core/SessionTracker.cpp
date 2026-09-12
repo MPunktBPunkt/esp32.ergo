@@ -153,9 +153,9 @@ void SessionTracker::accumulate_(uint32_t nowMs, float watt, uint8_t hr, bool li
     if (liveData) {
         uint8_t z = 0;
         if (leadHr_) {
-            z = zoneFromHr(hr, hrMax_);
+            z = zoneFromHr(hr, hrMax_, curZone_);
         } else if (watt > 0.0f) {
-            z = zoneFromPowerW(watt, ftpW_);
+            z = zoneFromPowerW(watt, ftpW_, curZone_);
         }
         curZone_ = z;
     }

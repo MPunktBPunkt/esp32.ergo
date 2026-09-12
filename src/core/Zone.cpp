@@ -14,6 +14,20 @@ uint8_t zoneFromPowerW(float watt, uint16_t ftpW) {
     return 7;
 }
 
+uint8_t zoneFromPowerW(float watt, uint16_t ftpW, uint8_t prevZone) {
+    const uint8_t raw = zoneFromPowerW(watt, ftpW);
+    if (prevZone == 0 || raw == 0 || raw == prevZone) return raw;
+    if (ftpW == 0) return raw;
+    const float pct = 100.0f * watt / (float)ftpW;
+    /* Untere Grenzen der Zonen 2..7 (Zone 1 startet bei 0). */
+    static const float enter[] = {0.f, 0.f, 55.f, 76.f, 91.f, 106.f, 121.f, 151.f};
+    constexpr float kH = 2.5f;
+    if (raw > prevZone) {
+        return (pct >= enter[raw] + kH) ? raw : prevZone;
+    }
+    return (pct < enter[prevZone] - kH) ? raw : prevZone;
+}
+
 uint8_t zoneFromHr(uint8_t bpm, uint8_t hrMax) {
     if (hrMax == 0 || bpm == 0) return 0;
     const float pct = 100.0f * (float)bpm / (float)hrMax;
@@ -22,6 +36,19 @@ uint8_t zoneFromHr(uint8_t bpm, uint8_t hrMax) {
     if (pct < 80.0f) return 3;
     if (pct < 90.0f) return 4;
     return 5;
+}
+
+uint8_t zoneFromHr(uint8_t bpm, uint8_t hrMax, uint8_t prevZone) {
+    const uint8_t raw = zoneFromHr(bpm, hrMax);
+    if (prevZone == 0 || raw == 0 || raw == prevZone) return raw;
+    if (hrMax == 0) return raw;
+    const float pct = 100.0f * (float)bpm / (float)hrMax;
+    static const float enter[] = {0.f, 0.f, 60.f, 70.f, 80.f, 90.f};
+    constexpr float kH = 2.0f;
+    if (raw > prevZone) {
+        return (pct >= enter[raw] + kH) ? raw : prevZone;
+    }
+    return (pct < enter[prevZone] - kH) ? raw : prevZone;
 }
 
 static ZoneInfo makeZone(uint8_t index, const char* code, const char* name, const char* color) {
