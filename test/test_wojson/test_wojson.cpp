@@ -50,12 +50,19 @@ static void test_ftp_pct(void) {
 }
 
 static void test_builtins(void) {
-    TEST_ASSERT_TRUE(workoutBuiltinCount() >= 4);
+    TEST_ASSERT_TRUE(workoutBuiltinCount() >= 7);
     WorkoutDoc d;
     TEST_ASSERT_TRUE(workoutBuiltinById("reha_kurz", d));
     TEST_ASSERT_EQUAL_UINT8(3, d.stepCount);
     TEST_ASSERT_TRUE(workoutBuiltinById("ftp_warm", d));
     TEST_ASSERT_TRUE(d.steps[0].ftpPct > 0);
+    TEST_ASSERT_TRUE(workoutBuiltinById("test_ramp", d));
+    TEST_ASSERT_EQUAL_UINT8(WorkoutEngine::kMaxSteps, d.stepCount);
+    TEST_ASSERT_FLOAT_WITHIN(0.1f, 200.0f, d.steps[7].powerW);
+    TEST_ASSERT_TRUE(workoutBuiltinById("test_20min", d));
+    TEST_ASSERT_EQUAL_UINT8(4, d.stepCount);
+    TEST_ASSERT_TRUE(workoutBuiltinById("test_recovery", d));
+    TEST_ASSERT_EQUAL_UINT32(60, d.steps[1].durationS);
 }
 
 static void test_reject_empty(void) {

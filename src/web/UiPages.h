@@ -7,11 +7,8 @@
  * Ride, Workouts, Tests, Verlauf, Profile, Geraete, Kalibrierung, Debug,
  * Einstellungen, OTA.
  *
- * Sechs davon tragen Inhalt (Ride, Geraete, Kalibrierung, Debug, Einstellungen,
- * OTA), vier sind Platzhalter mit Zielversion. Das ist Absicht: die Navigation ist die
- * eine Entscheidung, die man nicht zweimal treffen will, und ein Reiter, der
- * spaeter dazukommt, soll ein geloeschtes Flag sein und kein Umbau. Der Nutzer
- * sieht ausserdem, was geplant ist, statt es zu erraten.
+ * Alle zehn Reiter tragen Inhalt. NAV-Eintraege mit Zielversion oeffnen weiter
+ * den Soon-Platzhalter — derzeit ungenutzt.
  *
  * Die Reiterliste `NAV` ist die einzige Quelle dafuer — Leiste und Platzhalter
  * werden daraus erzeugt. Ein Reiter mehr ist eine Zeile, nicht drei Stellen.
@@ -724,6 +721,48 @@ footer{color:var(--dim);font-size:12px;text-align:center;margin-top:26px}
     </div>
   </section>
 
+  <section id="t-tests">
+    <div class="card">
+      <h2>Geführte Tests</h2>
+      <div class="hint flat">Rampe, 20 Minuten und Recovery laufen als Programme.
+        Ergebnis wird vorgeschlagen, nie automatisch übernommen. Bei Reha-Profil ausgeblendet.</div>
+      <div class="pcards" id="tstcards"></div>
+      <div class="k" id="tstnone">lade…</div>
+      <div class="row flat">
+        <label class="f" style="flex:1;margin:0"><div class="k">Zeitfaktor</div>
+          <input type="number" id="tstscale" min="0.05" max="2" step="0.05" value="1"></label>
+        <button id="tstreload" class="ghost">Neu laden</button>
+      </div>
+      <div class="msg" id="tstmsg"></div>
+    </div>
+    <div class="card">
+      <h2>Vorschau / Machbarkeit</h2>
+      <div class="k" id="tstprevmeta">Test wählen</div>
+      <canvas id="tstprev" width="640" height="72" aria-label="Test-Vorschau"
+        style="display:block;width:100%;height:72px;margin:10px 0;background:#0E1116;
+        border-radius:8px;border:1px solid var(--edge)"></canvas>
+      <div class="msg" id="tstwarn"></div>
+      <div class="row flat">
+        <button id="tststart" class="ghost" disabled>Test starten</button>
+      </div>
+    </div>
+    <div class="card">
+      <h2>Ergebnis</h2>
+      <div class="k" id="tstresmeta">nach Stop oder Abschluss</div>
+      <div class="v" id="tstres">-</div>
+      <div class="row flat">
+        <button id="tstaccept" class="ghost" disabled>FTP übernehmen</button>
+        <button id="tstresload" class="ghost">Letzte Session</button>
+      </div>
+      <div class="msg" id="tstresmsg"></div>
+    </div>
+    <div class="card">
+      <h2>Testhistorie</h2>
+      <table id="tsthist"></table>
+      <div class="k" id="tsthistnone" hidden>noch keine Test-Sessions</div>
+    </div>
+  </section>
+
   <section id="t-verlauf">
     <div class="card">
       <h2>Session-Verlauf</h2>
@@ -757,7 +796,7 @@ const $=i=>document.getElementById(i);
 const NAV=[
  ['ride','Ride','',''],
  ['workouts','Workouts','',''],
- ['tests','Tests','v0.2','Geführte Tests: Rampe, 20 Minuten, Recovery. Ergebnis wird vorgeschlagen, nie automatisch übernommen.'],
+ ['tests','Tests','',''],
  ['verlauf','Verlauf','',''],
  ['profile','Profile','',''],
  ['dev','Geräte','',''],
@@ -807,6 +846,7 @@ function tab(n){
   if(n==='calib') loadMap();
   if(n==='profile') loadProfiles();
   if(n==='workouts') loadWorkouts();
+  if(n==='tests') loadTests();
   if(n==='verlauf') loadSessions();
 }
 
@@ -1656,6 +1696,195 @@ function loadWorkouts(){
   }).catch(()=>{});
 }
 $('woreload').onclick=()=>loadWorkouts();
+
+const TST_CAT=[
+  {id:'test_ramp',name:'Rampe',blurb:'60 W, +20 W / min · Stop = Abbruch · FTP ≈ 0,75 × Spitze'},
+  {id:'test_20min',name:'20 Minuten',blurb:'Warmup + 20 min bei 100 % FTP · FTP ≈ 0,95 × Ø'},
+  {id:'test_recovery',name:'Recovery',blurb:'Belastung + 60 s leicht · Note aus Puls (Session)'}
+];
+let _tstId='';
+let _tstPreview=null;
+let _tstPropose=0;
+let _tstProfileId='';
+
+function isTestSession(x){
+  const n=(x&& (x.workoutName||''))||'';
+  return n==='Rampe'||n==='20 Minuten'||n==='Recovery'
+    ||n.indexOf('test_')===0;
+}
+function loadTests(){
+  const m=$('tstmsg'); m.className='msg'; m.textContent='';
+  fetch('/api/status').then(r=>r.json()).then(s=>{
+    const pi=s.profileInfo||{};
+    _tstProfileId=pi.id||'';
+    const reha=pi.goal==='reha';
+    $('tstnone').hidden=false;
+    if(reha){
+      $('tstcards').innerHTML='';
+      $('tstnone').textContent='Bei Reha-Profil ausgeblendet (Maximaltests).';
+      $('tststart').disabled=true;
+      return;
+    }
+    if(!pi.id){
+      $('tstcards').innerHTML='';
+      $('tstnone').textContent='Zuerst Profil wählen (Reiter Profile).';
+      $('tststart').disabled=true;
+      return;
+    }
+    $('tstnone').hidden=true;
+    const box=$('tstcards'); box.innerHTML='';
+    TST_CAT.forEach(t=>{
+      const card=document.createElement('div');
+      card.className='pcard'+(t.id===_tstId?' on':'');
+      card.dataset.id=t.id;
+      card.innerHTML='<div class="pn">'+t.name+'</div><div class="pm">'+t.blurb+'</div><div class="prow"></div>';
+      const prow=card.querySelector('.prow');
+      const b=document.createElement('button');
+      b.className='ghost sm'; b.textContent='Prüfen';
+      b.onclick=ev=>{ev.stopPropagation(); previewTest(t.id);};
+      prow.appendChild(b);
+      card.onclick=()=>previewTest(t.id);
+      box.appendChild(card);
+    });
+  }).catch(e=>{m.className='msg err'; m.textContent=String(e);});
+  loadTestResult();
+  loadTestHist();
+}
+$('tstreload').onclick=()=>loadTests();
+
+function previewTest(id){
+  _tstId=id;
+  document.querySelectorAll('#tstcards .pcard').forEach(c=>c.classList.toggle('on',c.dataset.id===id));
+  fetch('/api/workout/download?id='+encodeURIComponent(id)).then(r=>r.text()).then(txt=>
+    fetch('/api/workout/validate',{method:'POST',headers:{'Content-Type':'application/json'},body:txt})
+      .then(r=>r.json())).then(d=>{
+    _tstPreview=d;
+    const meta=$('tstprevmeta');
+    if(!d||!d.ok){
+      meta.textContent='ungueltig';
+      const cv=$('tstprev'); if(cv){const c=cv.getContext('2d');c.clearRect(0,0,cv.width,cv.height);}
+      $('tststart').disabled=true;
+      return;
+    }
+    meta.textContent=(d.name||id)+' · '+hmsShort(d.durationS||0)
+      +' · Spitze '+(d.peakW!=null?Math.round(d.peakW)+' W':'—')
+      +(d.mapLevelTenths!=null?(' · ~Stufe '+(d.mapLevelTenths/10).toFixed(1)):'')
+      +(d.feasible===false?' · nicht machbar':(d.feasible?' · machbar':''));
+    const cv=$('tstprev');
+    if(cv){
+      const tl=d.timeline||[];
+      const ctx=cv.getContext('2d');
+      const W=cv.width, H=cv.height;
+      ctx.clearRect(0,0,W,H);
+      let tot=0, peak=1;
+      tl.forEach(s=>{tot+=(s.durationS|0); peak=Math.max(peak,s.resolvedW||s.powerW||0);});
+      if(tot>0){
+        peak*=1.12; let x=0;
+        const cols=['#3FB8B0','#4CAF63','#D8B23A','#E2802F','#DE5334','#C9304A','#A63FB0'];
+        tl.forEach((s,i)=>{
+          const dur=s.durationS|0;
+          const w=s.resolvedW||s.powerW||0;
+          const bw=W*(dur/tot);
+          const bh=Math.max(2,(w/peak)*(H-12));
+          ctx.fillStyle=cols[i%cols.length];
+          ctx.fillRect(x, H-6-bh, Math.max(1,bw-1), bh);
+          x+=bw;
+        });
+      }
+    }
+    const w=$('tstwarn');
+    const warns=d.warnings||[];
+    if(warns.length){
+      w.className='msg err';
+      w.textContent=warns.join(' · ')+' — Start gesperrt, bis Kennfläche/Profil passen.';
+    } else {
+      w.className='msg ok';
+      w.textContent='gegen Profil/Kennfläche ok';
+    }
+    $('tststart').disabled=!(d.feasible!==false && d.ok);
+  }).catch(e=>{
+    const w=$('tstwarn'); w.className='msg err'; w.textContent=String(e);
+    $('tststart').disabled=true;
+  });
+}
+$('tststart').onclick=()=>{
+  if(!_tstId) return;
+  const sc=+$('tstscale').value||1;
+  post('/api/workout/start?id='+encodeURIComponent(_tstId)+'&scale='+sc,'tstmsg');
+};
+
+function proposeFromSession(d){
+  _tstPropose=0;
+  if(!d||!d.ok) return {text:'noch keine', ftp:0};
+  const name=d.workoutName||'';
+  let ftp=0, text=fmtSess(d);
+  if(name==='Rampe'){
+    let peak=Math.max(d.avgDesiredW||0, d.avgPowerW||0);
+    if(d.endReason==='done'&&_tstPreview&&_tstPreview.peakW)
+      peak=Math.max(peak,_tstPreview.peakW);
+    ftp=peak>0?Math.round(0.75*peak):0;
+    text+=' · Vorschlag FTP '+(ftp||'—')+' W (0,75 × Spitze ~'
+      +Math.round(peak)+' W — kein echtes 1-Min-MAP)';
+  } else if(name==='20 Minuten'){
+    const avg=d.avgPowerW||0;
+    ftp=Math.round(0.95*avg);
+    text+=' · Vorschlag FTP '+ftp+' W (0,95 × Ø '+Math.round(avg)+' W)';
+  } else if(name==='Recovery'){
+    const drop=(d.hrMax||0)-(d.hrAvg||0);
+    text+=' · Puls max '+(d.hrMax||0)+' / Ø '+(d.hrAvg||0)
+      +(drop>0?(' · grobe Drop-Note '+drop+' bpm'):'')
+      +' — volle Erholungsnote folgt mit TestRunner';
+  }
+  return {text, ftp};
+}
+function loadTestResult(){
+  fetch('/api/session/last').then(r=>r.json()).then(d=>{
+    if(!d.ok||!isTestSession(d)){
+      $('tstresmeta').textContent='nach Stop oder Abschluss';
+      $('tstres').textContent='-';
+      $('tstaccept').disabled=true;
+      _tstPropose=0;
+      return;
+    }
+    $('tstresmeta').textContent=(d.workoutName||'')+' · '+(d.endReason||'');
+    const p=proposeFromSession(d);
+    $('tstres').textContent=p.text;
+    _tstPropose=p.ftp|0;
+    $('tstaccept').disabled=!(_tstPropose>0 && _tstProfileId);
+  }).catch(()=>{});
+}
+$('tstresload').onclick=()=>loadTestResult();
+$('tstaccept').onclick=()=>{
+  const m=$('tstresmsg');
+  if(!_tstPropose||!_tstProfileId){
+    m.className='msg err'; m.textContent='kein Vorschlag'; return;
+  }
+  if(!confirm('FTP '+_tstPropose+' W ins Profil '+_tstProfileId+' übernehmen?')) return;
+  m.className='msg'; m.textContent='schreibe…';
+  fetch('/api/profile/get?id='+encodeURIComponent(_tstProfileId)).then(r=>r.json()).then(p=>{
+    if(!p||!p.id) throw new Error('Profil fehlt');
+    p.ftpW=_tstPropose;
+    p.ftpOrigin='test';
+    p.ftpDateUnix=Math.floor(Date.now()/1000);
+    return fetch('/api/profile/put',{method:'POST',headers:{'Content-Type':'application/json'},
+      body:JSON.stringify(p)}).then(r=>r.json());
+  }).then(d=>{
+    m.className='msg '+(d.ok?'ok':'err');
+    m.textContent=d.ok?('FTP '+_tstPropose+' W übernommen'):(d.error||'Fehler');
+  }).catch(e=>{m.className='msg err'; m.textContent=String(e);});
+};
+function loadTestHist(){
+  fetch('/api/session/list').then(r=>r.json()).then(d=>{
+    const rows=(d.sessions||[]).filter(isTestSession);
+    $('tsthistnone').hidden=rows.length>0;
+    $('tsthist').innerHTML=rows.length
+      ?('<tr><th>Test</th><th>Dauer</th><th>Leistung</th><th>Ende</th></tr>'+
+        rows.map(x=>'<tr><td>'+(x.workoutName||'')+'</td><td>'+(x.durationS||0)+' s</td><td>'
+          +(x.avgPowerW!=null?Math.round(x.avgPowerW)+' W':'—')
+          +(x.hrMax?(' · HR≤'+x.hrMax):'')+'</td><td>'+(x.endReason||'')+'</td></tr>').join(''))
+      :'';
+  }).catch(()=>{});
+}
 
 function hmsShort(s){
   s=s|0; const m=Math.floor(s/60), r=s%60;

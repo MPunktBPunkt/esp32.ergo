@@ -379,6 +379,54 @@ static void fillRehaKurz(WorkoutDoc& d) {
     d.stepCount = 3;
 }
 
+/** Rampe WEBINTERFACE §6: 60 W, +20 W / 60 s, 8 Stufen (Engine-Limit). Abbruch = Stop. */
+static void fillTestRamp(WorkoutDoc& d) {
+    d = WorkoutDoc{};
+    strncpy(d.id, "test_ramp", sizeof(d.id) - 1);
+    strncpy(d.name, "Rampe", sizeof(d.name) - 1);
+    for (uint8_t i = 0; i < WorkoutEngine::kMaxSteps; i++) {
+        const int w = 60 + (int)i * 20;
+        snprintf(d.steps[i].label, sizeof(d.steps[i].label), "%d W", w);
+        d.steps[i].durationS = 60;
+        d.steps[i].powerW = (float)w;
+    }
+    d.stepCount = WorkoutEngine::kMaxSteps;
+}
+
+/** 20-Min-Test: Warmup + 20 min bei 100 % FTP (ERG-Halter; Ø-Leistung → FTP-Vorschlag). */
+static void fillTest20(WorkoutDoc& d) {
+    d = WorkoutDoc{};
+    strncpy(d.id, "test_20min", sizeof(d.id) - 1);
+    strncpy(d.name, "20 Minuten", sizeof(d.name) - 1);
+    strncpy(d.steps[0].label, "Warm 50%", sizeof(d.steps[0].label) - 1);
+    d.steps[0].durationS = 300;
+    d.steps[0].ftpPct = 50;
+    strncpy(d.steps[1].label, "Warm 70%", sizeof(d.steps[1].label) - 1);
+    d.steps[1].durationS = 180;
+    d.steps[1].ftpPct = 70;
+    strncpy(d.steps[2].label, "Haupt 20 min", sizeof(d.steps[2].label) - 1);
+    d.steps[2].durationS = 1200;
+    d.steps[2].ftpPct = 100;
+    strncpy(d.steps[3].label, "Cool", sizeof(d.steps[3].label) - 1);
+    d.steps[3].durationS = 180;
+    d.steps[3].ftpPct = 40;
+    d.stepCount = 4;
+}
+
+/** Recovery-Stub: Belastung + 60 s leicht (volle Erholungsnote braucht spaeter HR-Serie). */
+static void fillTestRecovery(WorkoutDoc& d) {
+    d = WorkoutDoc{};
+    strncpy(d.id, "test_recovery", sizeof(d.id) - 1);
+    strncpy(d.name, "Recovery", sizeof(d.name) - 1);
+    strncpy(d.steps[0].label, "Belastung", sizeof(d.steps[0].label) - 1);
+    d.steps[0].durationS = 180;
+    d.steps[0].ftpPct = 90;
+    strncpy(d.steps[1].label, "Erholung 60s", sizeof(d.steps[1].label) - 1);
+    d.steps[1].durationS = 60;
+    d.steps[1].ftpPct = 35;
+    d.stepCount = 2;
+}
+
 struct Builtin {
     const char* id;
     const char* name;
@@ -392,6 +440,9 @@ static const Builtin kBuiltins[] = {
     {"reha_kurz", "Reha kurz", fillRehaKurz},
     {"easy20", "Locker 20 min", fillEasy},
     {"ftp_warm", "FTP-Warmup", fillFtpWarm},
+    {"test_ramp", "Rampe", fillTestRamp},
+    {"test_20min", "20 Minuten", fillTest20},
+    {"test_recovery", "Recovery", fillTestRecovery},
 };
 
 uint8_t workoutBuiltinCount() {
