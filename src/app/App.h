@@ -76,6 +76,8 @@ private:
     void runCodecSelfTest();
     void applyLimiterConfig();
     void seedDefaultProfiles();
+    /** Legt fehlende Vorlagen nach (Martin), ohne bestehende zu überschreiben. */
+    void ensureKnownProfiles();
     void loadProfiles();
     void saveProfiles();
     bool beginFs();

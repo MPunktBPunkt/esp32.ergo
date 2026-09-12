@@ -4,7 +4,9 @@ namespace ergo {
 namespace {
 
 constexpr uint32_t kMagic = 0x45524750u;  // 'ERGP'
-constexpr uint8_t kVersion = 1;
+constexpr uint8_t kVersion = 2;
+constexpr uint8_t kProfileBytesV1 = 68;
+constexpr uint8_t kProfileBytesV2 = 71;  // + birthYear u16 + goal u8
 
 inline void w8(uint8_t*& p, uint8_t v) { *p++ = v; }
 inline void w16(uint8_t*& p, uint16_t v) {
@@ -58,11 +60,12 @@ void writeProfile(uint8_t*& p, const Profile& pr) {
     w16(p, static_cast<uint16_t>(pr.maxLevelTenths));
     w8(p, pr.targetCadenceRpm);
     w8(p, static_cast<uint8_t>(pr.onHrLoss));
+    w16(p, pr.birthYear);
+    w8(p, static_cast<uint8_t>(pr.goal));
 }
 
-bool readProfile(const uint8_t*& p, const uint8_t* end, Profile& pr) {
-    // 16+24+4+4+2+4+1+1+1+1+1+1+1+2+1+2+1+1 = 68
-    if (!need(p, end, 68)) return false;
+bool readProfileV1(const uint8_t*& p, const uint8_t* end, Profile& pr) {
+    if (!need(p, end, kProfileBytesV1)) return false;
     pr = Profile{};
     rbytes(p, pr.id, 16);
     rbytes(p, pr.name, 24);
@@ -82,6 +85,39 @@ bool readProfile(const uint8_t*& p, const uint8_t* end, Profile& pr) {
     pr.maxLevelTenths = static_cast<int16_t>(r16(p));
     pr.targetCadenceRpm = r8(p);
     pr.onHrLoss = static_cast<HrLossPolicy>(r8(p));
+    pr.birthYear = 0;
+    pr.goal = TrainingGoal::None;
+    pr.id[15] = '\0';
+    pr.name[23] = '\0';
+    pr.initial[3] = '\0';
+    return ProfileStore::sanitize(pr);
+}
+
+bool readProfile(const uint8_t*& p, const uint8_t* end, Profile& pr, uint8_t ver) {
+    if (ver == 1) return readProfileV1(p, end, pr);
+    if (ver != 2) return false;
+    if (!need(p, end, kProfileBytesV2)) return false;
+    pr = Profile{};
+    rbytes(p, pr.id, 16);
+    rbytes(p, pr.name, 24);
+    pr.color = r32(p);
+    rbytes(p, pr.initial, 4);
+    pr.ftpW = r16(p);
+    pr.ftpDateUnix = r32(p);
+    pr.ftpOrigin = static_cast<FtpOrigin>(r8(p));
+    pr.hrMax = r8(p);
+    pr.restingHr = r8(p);
+    pr.lthr = r8(p);
+    pr.zoneBasis = static_cast<ZoneBasis>(r8(p));
+    pr.weightKg = r8(p);
+    pr.leadingZone = static_cast<ZoneLead>(r8(p));
+    pr.maxPowerW = static_cast<int16_t>(r16(p));
+    pr.maxHr = r8(p);
+    pr.maxLevelTenths = static_cast<int16_t>(r16(p));
+    pr.targetCadenceRpm = r8(p);
+    pr.onHrLoss = static_cast<HrLossPolicy>(r8(p));
+    pr.birthYear = r16(p);
+    pr.goal = static_cast<TrainingGoal>(r8(p));
     pr.id[15] = '\0';
     pr.name[23] = '\0';
     pr.initial[3] = '\0';
@@ -113,7 +149,20 @@ bool ProfileStore::sanitize(Profile& p) {
     if (p.hrMax > kHrCeilingMax) p.hrMax = kHrCeilingMax;
     if (p.maxPowerW < 0) p.maxPowerW = 0;
     if (p.maxLevelTenths < 0) p.maxLevelTenths = 0;
+    if (p.birthYear != 0 && (p.birthYear < 1920 || p.birthYear > 2020)) p.birthYear = 0;
+    if (static_cast<uint8_t>(p.goal) > static_cast<uint8_t>(TrainingGoal::Performance))
+        p.goal = TrainingGoal::None;
     return true;
+}
+
+uint8_t ProfileStore::estimateHrMax(uint16_t birthYear, uint16_t nowYear) {
+    if (birthYear < 1920 || nowYear < birthYear || nowYear - birthYear > 100) return 0;
+    const uint16_t age = static_cast<uint16_t>(nowYear - birthYear);
+    // Tanaka et al.: 208 − 0.7 × Alter
+    float hr = 208.0f - 0.7f * static_cast<float>(age);
+    if (hr < 120.0f) hr = 120.0f;
+    if (hr > static_cast<float>(kHrCeilingMax)) hr = static_cast<float>(kHrCeilingMax);
+    return static_cast<uint8_t>(hr + 0.5f);
 }
 
 bool ProfileStore::put(const Profile& in) {
@@ -174,8 +223,7 @@ void ProfileStore::applyTo(LimiterConfig& lc) const {
 }
 
 size_t ProfileStore::save(uint8_t* out, size_t cap) const {
-    // Header 22 + 68 * count
-    const size_t needBytes = 22u + 68u * static_cast<size_t>(count_);
+    const size_t needBytes = 22u + static_cast<size_t>(kProfileBytesV2) * static_cast<size_t>(count_);
     if (!out || cap < needBytes) return 0;
     uint8_t* p = out;
     w32(p, kMagic);
@@ -191,7 +239,8 @@ bool ProfileStore::load(const uint8_t* in, size_t len) {
     const uint8_t* p = in;
     const uint8_t* end = in + len;
     if (r32(p) != kMagic) return false;
-    if (r8(p) != kVersion) return false;
+    const uint8_t ver = r8(p);
+    if (ver != 1 && ver != 2) return false;
     const uint8_t n = r8(p);
     if (n > kMaxProfiles) return false;
     char aid[16] = {0};
@@ -200,9 +249,8 @@ bool ProfileStore::load(const uint8_t* in, size_t len) {
 
     Profile tmp[kMaxProfiles];
     for (uint8_t i = 0; i < n; ++i) {
-        if (!readProfile(p, end, tmp[i])) return false;
+        if (!readProfile(p, end, tmp[i], ver)) return false;
     }
-    // Rest darf Padding sein — nicht verlangen, dass p == end.
 
     clearAll();
     for (uint8_t i = 0; i < n; ++i) items_[count_++] = tmp[i];

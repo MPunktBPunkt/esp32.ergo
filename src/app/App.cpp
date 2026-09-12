@@ -49,6 +49,8 @@ void App::begin() {
     if (profiles.count() == 0) {
         seedDefaultProfiles();
         saveProfiles();
+    } else {
+        ensureKnownProfiles();
     }
     applyLimiterConfig();
     loadPowerMap();
@@ -106,34 +108,101 @@ void App::applyLimiterConfig() {
 }
 
 void App::seedDefaultProfiles() {
-    // Zwei Vorlagen, keines aktiv — kein stilles Defaultprofil.
-    // Nur wenn NVS leer ist (loadProfiles hat nichts geliefert).
-    ergo::Profile std;
-    ergo::profileCopyId(std.id, sizeof(std.id), "standard");
-    ergo::profileCopyId(std.name, sizeof(std.name), "Standard");
-    std.color = 0x4EC9A5;
-    std.ftpW = 200;
-    std.hrMax = 180;
-    std.maxPowerW = 300;
-    std.maxLevelTenths = 160;
-    std.maxHr = 180;
-    std.targetCadenceRpm = 80;
-    profiles.put(std);
+    // Vorlagen, keines aktiv — kein stilles Defaultprofil.
+    ergo::Profile martin;
+    ergo::profileCopyId(martin.id, sizeof(martin.id), "martin");
+    ergo::profileCopyId(martin.name, sizeof(martin.name), "Martin");
+    ergo::profileCopyId(martin.initial, sizeof(martin.initial), "M");
+    martin.color = 0xE2802F;
+    martin.ftpW = 180;
+    martin.ftpOrigin = ergo::FtpOrigin::Estimate;
+    martin.birthYear = 1981;
+    martin.hrMax = ergo::ProfileStore::estimateHrMax(1981, 2026);
+    martin.maxHr = martin.hrMax;
+    martin.weightKg = 84;
+    martin.goal = ergo::TrainingGoal::FatLoss;
+    martin.maxPowerW = 280;
+    martin.maxLevelTenths = 160;
+    martin.targetCadenceRpm = 80;
+    martin.onHrLoss = ergo::HrLossPolicy::Freeze;
+    martin.leadingZone = ergo::ZoneLead::Power;
+    profiles.put(martin);
 
     ergo::Profile reha;
     ergo::profileCopyId(reha.id, sizeof(reha.id), "reha");
     ergo::profileCopyId(reha.name, sizeof(reha.name), "Reha");
+    ergo::profileCopyId(reha.initial, sizeof(reha.initial), "R");
     reha.color = 0xF0A13A;
     reha.ftpW = 80;
     reha.hrMax = 130;
     reha.maxPowerW = 100;
-    reha.maxLevelTenths = 80;  // Stufe 8,0
+    reha.maxLevelTenths = 80;
     reha.maxHr = 120;
     reha.targetCadenceRpm = 60;
     reha.onHrLoss = ergo::HrLossPolicy::Stop;
     reha.leadingZone = ergo::ZoneLead::Hr;
+    reha.goal = ergo::TrainingGoal::Reha;
     profiles.put(reha);
     Serial.printf("[PROFILE] %u Vorlagen (kein aktives Profil)\n", (unsigned)profiles.count());
+}
+
+void App::ensureKnownProfiles() {
+    bool dirty = false;
+    ergo::Profile existing;
+    if (!profiles.get("martin", existing)) {
+        if (profiles.count() < ergo::ProfileStore::kMaxProfiles) {
+            ergo::Profile martin;
+            ergo::profileCopyId(martin.id, sizeof(martin.id), "martin");
+            ergo::profileCopyId(martin.name, sizeof(martin.name), "Martin");
+            ergo::profileCopyId(martin.initial, sizeof(martin.initial), "M");
+            martin.color = 0xE2802F;
+            martin.ftpW = 180;
+            martin.ftpOrigin = ergo::FtpOrigin::Estimate;
+            martin.birthYear = 1981;
+            martin.hrMax = ergo::ProfileStore::estimateHrMax(1981, 2026);
+            martin.maxHr = martin.hrMax;
+            martin.weightKg = 84;
+            martin.goal = ergo::TrainingGoal::FatLoss;
+            martin.maxPowerW = 280;
+            martin.maxLevelTenths = 160;
+            martin.targetCadenceRpm = 80;
+            martin.onHrLoss = ergo::HrLossPolicy::Freeze;
+            martin.leadingZone = ergo::ZoneLead::Power;
+            if (profiles.put(martin)) {
+                dirty = true;
+                Serial.println("[PROFILE] Martin nachgetragen");
+            }
+        }
+    } else {
+        // Lücken in bekannten Feldern auffüllen, ohne gesetzte Werte zu überschreiben.
+        bool touch = false;
+        if (existing.weightKg == 0) {
+            existing.weightKg = 84;
+            touch = true;
+        }
+        if (existing.birthYear == 0) {
+            existing.birthYear = 1981;
+            touch = true;
+        }
+        if (existing.hrMax == 0 && existing.birthYear > 0) {
+            existing.hrMax = ergo::ProfileStore::estimateHrMax(existing.birthYear, 2026);
+            if (existing.maxHr == 0) existing.maxHr = existing.hrMax;
+            touch = true;
+        }
+        if (existing.goal == ergo::TrainingGoal::None) {
+            existing.goal = ergo::TrainingGoal::FatLoss;
+            touch = true;
+        }
+        if (!existing.initial[0]) {
+            ergo::profileCopyId(existing.initial, sizeof(existing.initial), "M");
+            touch = true;
+        }
+        if (touch && profiles.put(existing)) {
+            dirty = true;
+            Serial.println("[PROFILE] Martin-Felder ergänzt");
+        }
+    }
+    if (dirty) saveProfiles();
 }
 
 void App::loadProfiles() {
@@ -476,6 +545,17 @@ void App::buildStatusJson(JsonDocument& doc) {
         po["maxLevelTenths"] = ap->maxLevelTenths;
         po["targetCadenceRpm"] = ap->targetCadenceRpm;
         po["leadingZone"] = (ap->leadingZone == ergo::ZoneLead::Hr) ? "hr" : "power";
+        po["weightKg"] = ap->weightKg;
+        po["birthYear"] = ap->birthYear;
+        po["initial"] = ap->initial;
+        const char* goal = "none";
+        if (ap->goal == ergo::TrainingGoal::Fitness) goal = "fitness";
+        else if (ap->goal == ergo::TrainingGoal::FatLoss) goal = "fatloss";
+        else if (ap->goal == ergo::TrainingGoal::Reha) goal = "reha";
+        else if (ap->goal == ergo::TrainingGoal::Performance) goal = "performance";
+        po["goal"] = goal;
+        if (ap->ftpW > 0 && ap->weightKg > 0)
+            po["wPerKg"] = (float)ap->ftpW / (float)ap->weightKg;
     } else {
         doc["profile"] = nullptr;
         doc["profileInfo"] = nullptr;
@@ -1495,6 +1575,10 @@ void App::profileToJson(const ergo::Profile& p, JsonObject obj) const {
     obj["initial"] = p.initial;
     obj["ftpW"] = p.ftpW;
     obj["ftpDateUnix"] = p.ftpDateUnix;
+    const char* fo = "manual";
+    if (p.ftpOrigin == ergo::FtpOrigin::Estimate) fo = "estimate";
+    else if (p.ftpOrigin == ergo::FtpOrigin::Test) fo = "test";
+    obj["ftpOrigin"] = fo;
     obj["hrMax"] = p.hrMax;
     obj["restingHr"] = p.restingHr;
     obj["lthr"] = p.lthr;
@@ -1509,6 +1593,18 @@ void App::profileToJson(const ergo::Profile& p, JsonObject obj) const {
     if (p.onHrLoss == ergo::HrLossPolicy::Freeze) loss = "freeze";
     else if (p.onHrLoss == ergo::HrLossPolicy::Stop) loss = "stop";
     obj["onHrLoss"] = loss;
+    obj["birthYear"] = p.birthYear;
+    const char* goal = "none";
+    if (p.goal == ergo::TrainingGoal::Fitness) goal = "fitness";
+    else if (p.goal == ergo::TrainingGoal::FatLoss) goal = "fatloss";
+    else if (p.goal == ergo::TrainingGoal::Reha) goal = "reha";
+    else if (p.goal == ergo::TrainingGoal::Performance) goal = "performance";
+    obj["goal"] = goal;
+    if (p.ftpW > 0 && p.weightKg > 0)
+        obj["wPerKg"] = (float)p.ftpW / (float)p.weightKg;
+    if (p.birthYear > 0) {
+        obj["hrMaxEstimate"] = ergo::ProfileStore::estimateHrMax(p.birthYear, 2026);
+    }
 }
 
 bool App::profileFromJson(JsonVariantConst v, ergo::Profile& out) const {
@@ -1543,6 +1639,21 @@ bool App::profileFromJson(JsonVariantConst v, ergo::Profile& out) const {
         if (z && strcmp(z, "freeze") == 0) out.onHrLoss = ergo::HrLossPolicy::Freeze;
         else if (z && strcmp(z, "stop") == 0) out.onHrLoss = ergo::HrLossPolicy::Stop;
         else out.onHrLoss = ergo::HrLossPolicy::Reduce;
+    }
+    if (!v["ftpOrigin"].isNull()) {
+        const char* z = v["ftpOrigin"].as<const char*>();
+        if (z && strcmp(z, "estimate") == 0) out.ftpOrigin = ergo::FtpOrigin::Estimate;
+        else if (z && strcmp(z, "test") == 0) out.ftpOrigin = ergo::FtpOrigin::Test;
+        else out.ftpOrigin = ergo::FtpOrigin::Manual;
+    }
+    if (!v["birthYear"].isNull()) out.birthYear = (uint16_t)v["birthYear"].as<int>();
+    if (!v["goal"].isNull()) {
+        const char* z = v["goal"].as<const char*>();
+        if (z && strcmp(z, "fitness") == 0) out.goal = ergo::TrainingGoal::Fitness;
+        else if (z && strcmp(z, "fatloss") == 0) out.goal = ergo::TrainingGoal::FatLoss;
+        else if (z && strcmp(z, "reha") == 0) out.goal = ergo::TrainingGoal::Reha;
+        else if (z && strcmp(z, "performance") == 0) out.goal = ergo::TrainingGoal::Performance;
+        else out.goal = ergo::TrainingGoal::None;
     }
     return ergo::ProfileStore::sanitize(out);
 }

@@ -20,6 +20,14 @@ enum class ZoneLead : uint8_t { Power = 0, Hr = 1 };
 enum class ZoneBasis : uint8_t { HrMax = 0, Lthr = 1 };
 enum class FtpOrigin : uint8_t { Manual = 0, Estimate = 1, Test = 2 };
 enum class HrLossPolicy : uint8_t { Freeze = 0, Reduce = 1, Stop = 2 };
+/** Trainingsziel — steuert Hinweise in der UI, keine Lastlogik. */
+enum class TrainingGoal : uint8_t {
+    None = 0,
+    Fitness = 1,     // allgemeines Training
+    FatLoss = 2,     // Fettabbau / Grundlagen
+    Reha = 3,
+    Performance = 4  // Leistung
+};
 
 struct Profile {
     char id[16] = {0};
@@ -47,6 +55,10 @@ struct Profile {
     uint8_t targetCadenceRpm = 0;
     HrLossPolicy onHrLoss = HrLossPolicy::Reduce;
 
+    /** 0 = unbekannt; sonst Jahr (z. B. 1981). */
+    uint16_t birthYear = 0;
+    TrainingGoal goal = TrainingGoal::None;
+
     bool hasId() const { return id[0] != '\0'; }
 };
 
@@ -64,7 +76,7 @@ public:
     static constexpr uint8_t kMaxProfiles = 4;
     /** Absolute Pulsdeckel — auch ein fehlerhaftes Profil darf nicht hoeher. */
     static constexpr uint8_t kHrCeilingMax = 190;
-    static constexpr size_t kMaxBytes = 320;
+    static constexpr size_t kMaxBytes = 384;
 
     uint8_t count() const { return count_; }
     const Profile* at(uint8_t i) const { return i < count_ ? &items_[i] : nullptr; }
@@ -91,6 +103,9 @@ public:
 
     /** Klemmt maxHr auf kHrCeilingMax; leere id/name → false. */
     static bool sanitize(Profile& p);
+
+    /** Tanaka-Schätzung HRmax aus Geburtsjahr; 0 wenn Jahr ungültig. */
+    static uint8_t estimateHrMax(uint16_t birthYear, uint16_t nowYear);
 
     /** Byte-Blob fuer NVS. 0 = Puffer zu klein / leer. */
     size_t save(uint8_t* out, size_t cap) const;

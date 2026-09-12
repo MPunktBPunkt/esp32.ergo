@@ -207,6 +207,28 @@ tr.pick:hover td{color:var(--accent)}
 .soonbox .d{display:block;max-width:48ch;margin:0 auto}
 .soonbox .ver{display:table;margin:16px auto 0;font-size:12px;color:var(--accent);
   border:1px solid var(--accent);border-radius:999px;padding:2px 12px}
+.pcards{display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:12px;
+  margin:14px 0}
+.pcard{background:#0E1116;border:2px solid var(--edge);border-radius:14px;padding:16px 14px;
+  cursor:pointer;text-align:center;transition:border-color .2s,transform .15s}
+.pcard:hover{border-color:var(--accent)}
+.pcard.on{border-color:var(--pc,var(--accent));box-shadow:0 0 0 1px var(--pc,var(--accent))}
+.pcard .av{width:52px;height:52px;border-radius:50%;margin:0 auto 10px;display:flex;
+  align-items:center;justify-content:center;font-family:'Syne',system-ui,sans-serif;
+  font-size:22px;font-weight:800;color:#0E1116}
+.pcard .pn{font-family:'Syne',system-ui,sans-serif;font-size:16px;font-weight:700;
+  letter-spacing:.04em}
+.pcard .pm{color:var(--dim);font-size:11px;margin-top:6px;line-height:1.4}
+.pcard .prow{display:flex;justify-content:center;gap:6px;margin-top:10px;flex-wrap:wrap}
+.chip{display:inline-flex;align-items:center;gap:8px;padding:4px 10px 4px 4px;
+  border-radius:999px;border:1px solid var(--edge);background:var(--card);font-size:13px}
+.chip .av{width:28px;height:28px;border-radius:50%;display:inline-flex;align-items:center;
+  justify-content:center;font-family:'Syne',system-ui,sans-serif;font-size:12px;font-weight:800;
+  color:#0E1116}
+.colorrow{display:flex;gap:8px;flex-wrap:wrap;margin-top:6px}
+.colorrow button{width:28px;height:28px;min-height:0;padding:0;border-radius:50%;
+  border:2px solid transparent;cursor:pointer}
+.colorrow button.on{border-color:#fff}
 footer{color:var(--dim);font-size:12px;text-align:center;margin-top:26px}
 </style>
 </head>
@@ -215,6 +237,10 @@ footer{color:var(--dim);font-size:12px;text-align:center;margin-top:26px}
   <header>
     <h1>ERGO</h1>
     <span class="badge" id="ver">-</span>
+    <span class="chip" id="pchip" hidden>
+      <span class="av" id="pchipav">?</span>
+      <span id="pchipname">—</span>
+    </span>
   </header>
   <div class="sub" id="sub">verbinde...</div>
   <nav id="nav"></nav>
@@ -343,10 +369,11 @@ footer{color:var(--dim);font-size:12px;text-align:center;margin-top:26px}
 
   <section id="t-profile">
     <div class="card">
-      <h2>Profile</h2>
-      <div class="hint flat">Kein stilles Standardprofil. Vor dem Training eines
-        wählen — Wechsel nur im Modus OFF. Grenzen gelten sofort für den Limiter.</div>
-      <table id="plist"></table>
+      <h2>Wer fährt?</h2>
+      <div class="hint flat">Jedes Profil hat eigene Grenzen, Zonen und HRmax.
+        Ohne Auswahl startet keine Session. Wechsel nur im Modus OFF.
+        Zonen brauchen FTP (Leistung) bzw. HRmax (Puls) im Profil.</div>
+      <div class="pcards" id="pcards"></div>
       <div class="k" id="plnone">noch keine Profile</div>
       <div class="row tight"><button id="pclr" class="ghost sm">Auswahl aufheben</button>
         <button id="pnew" class="ghost sm">Neu</button>
@@ -355,20 +382,53 @@ footer{color:var(--dim);font-size:12px;text-align:center;margin-top:26px}
     </div>
     <div class="card">
       <h2 id="pfh">Profil bearbeiten</h2>
-      <div class="grid">
+      <div class="fgrid">
         <label class="f"><div class="k">ID</div>
           <input type="text" id="pf-id" maxlength="15" autocomplete="off"></label>
         <label class="f"><div class="k">Name</div>
           <input type="text" id="pf-name" maxlength="23" autocomplete="off"></label>
+        <label class="f"><div class="k">Initiale</div>
+          <input type="text" id="pf-initial" maxlength="2" autocomplete="off"></label>
+        <label class="f"><div class="k">Farbe</div>
+          <div class="colorrow" id="pf-colors"></div>
+          <input type="hidden" id="pf-color" value="14881855"></label>
+        <label class="f"><div class="k">Geburtsjahr</div>
+          <input type="number" id="pf-birth" min="1920" max="2015" placeholder="1981"></label>
+        <label class="f"><div class="k">Gewicht (kg)</div>
+          <input type="number" id="pf-weight" min="0" max="200"></label>
+        <label class="f"><div class="k">Ziel</div>
+          <select id="pf-goal">
+            <option value="none">—</option>
+            <option value="fitness">Training / Fitness</option>
+            <option value="fatloss">Fettabbau</option>
+            <option value="performance">Leistung</option>
+            <option value="reha">Reha</option>
+          </select></label>
         <label class="f"><div class="k">FTP (W)</div>
           <input type="number" id="pf-ftp" min="0" max="600"></label>
+        <label class="f"><div class="k">FTP-Herkunft</div>
+          <select id="pf-ftporig">
+            <option value="manual">manuell</option>
+            <option value="estimate">Schätzung</option>
+            <option value="test">Test</option>
+          </select></label>
         <label class="f"><div class="k">HRmax</div>
-          <input type="number" id="pf-hrmax" min="0" max="190"></label>
+          <input type="number" id="pf-hrmax" min="0" max="190">
+          <div class="hint flat" id="pf-hrehint"></div></label>
+        <label class="f"><div class="k">Ruhepuls</div>
+          <input type="number" id="pf-rest" min="0" max="120"></label>
+        <label class="f"><div class="k">LTHR</div>
+          <input type="number" id="pf-lthr" min="0" max="190"></label>
+        <label class="f"><div class="k">Zonenbasis Puls</div>
+          <select id="pf-zbasis">
+            <option value="hrmax">% HRmax</option>
+            <option value="lthr">% LTHR</option>
+          </select></label>
         <label class="f"><div class="k">max. Stufe</div>
           <input type="number" id="pf-maxlvl" min="0" max="16" step="0.1"></label>
         <label class="f"><div class="k">max. Watt</div>
           <input type="number" id="pf-maxw" min="0" max="500"></label>
-        <label class="f"><div class="k">max. Puls</div>
+        <label class="f"><div class="k">max. Puls (Hartlimit)</div>
           <input type="number" id="pf-maxhr" min="0" max="190"></label>
         <label class="f"><div class="k">Ziel-Kadenz</div>
           <input type="number" id="pf-cad" min="0" max="120"></label>
@@ -380,7 +440,9 @@ footer{color:var(--dim);font-size:12px;text-align:center;margin-top:26px}
             <option value="freeze">Einfrieren</option>
             <option value="stop">Stop</option></select></label>
       </div>
+      <div class="k" id="pf-stats"></div>
       <div class="row tight">
+        <button id="pfest" class="ghost">HRmax aus Alter</button>
         <button id="pfsave">Speichern</button>
         <button id="pfdel" class="danger ghost">Löschen</button>
       </div>
@@ -750,6 +812,19 @@ function render(s){
   $('codec').textContent=s.codecSelfTest||'-';
   dot($('cdot'),s.codecSelfTest==='ok');
   $('sub').textContent=[s.fwType||'ergo',s.chip||'',s.time||'ohne Zeit'].join(' / ');
+  const chip=$('pchip'), cav=$('pchipav'), cn=$('pchipname');
+  if(chip){
+    const pi=s.profileInfo;
+    if(pi&&pi.name){
+      chip.hidden=false;
+      const col='#'+(('000000'+((pi.color||0xe2802f)>>>0).toString(16)).slice(-6));
+      cav.style.background=col;
+      cav.textContent=(pi.initial||pi.name.charAt(0)||'?').toUpperCase();
+      cn.textContent=pi.name+(pi.goal&&pi.goal!=='none'?(' · '+({fatloss:'Fettabbau',fitness:'Training',reha:'Reha',performance:'Leistung'}[pi.goal]||'')):'');
+    } else {
+      chip.hidden=true;
+    }
+  }
   renderBle(s);
   renderCalib(s);
   renderDebug(s);
@@ -1042,7 +1117,10 @@ function renderBle(s){
   const hasP=!!s.profile;
   $('rprof').textContent=pi?(pi.name||pi.id):(s.profile||'(keins)');
   $('rprofsub').textContent=hasP
-    ?('max Stufe '+lvDisp(pi&&pi.maxLevelTenths)+' · max '+(pi&&pi.maxPowerW||'-')+' W')
+    ?((pi.goal&&pi.goal!=='none'?(({fatloss:'Fettabbau',fitness:'Training',reha:'Reha',performance:'Leistung'}[pi.goal]||'')+' · '):'')
+      +'max Stufe '+lvDisp(pi&&pi.maxLevelTenths)+' · max '+(pi&&pi.maxPowerW||'-')+' W'
+      +(pi.weightKg?(' · '+pi.weightKg+' kg'):'')
+      +(pi.hrMax?(' · HRmax '+pi.hrMax):''))
     :'vor LEVEL Profil wählen';
   $('rmode').textContent=mode;
   let msub=mode==='MANUAL_LEVEL'?'Handstufe':(mode==='OFF'?'keine Last':'');
@@ -1315,6 +1393,37 @@ function post(url,msg){
 }
 
 function lvDisp(t){return t==null||t<=0?'-':(t/10).toFixed(1);}
+const PCOLORS=[0xE2802F,0x4EC9A5,0x3FB8B0,0xD8B23A,0xDE5334,0xC9304A,0xA63FB0,0x4CAF63];
+function goalLabel(g){
+  return ({fitness:'Training',fatloss:'Fettabbau',reha:'Reha',performance:'Leistung',none:''}[g]||'');
+}
+function hexColor(n){
+  const v=(n>>>0)&0xffffff;
+  return '#'+('000000'+v.toString(16)).slice(-6);
+}
+function paintColors(sel){
+  const row=$('pf-colors'); if(!row) return;
+  row.innerHTML='';
+  PCOLORS.forEach(c=>{
+    const b=document.createElement('button');
+    b.type='button'; b.style.background=hexColor(c);
+    b.className=(c===(sel>>>0))?'on':'';
+    b.onclick=()=>{
+      $('pf-color').value=String(c);
+      paintColors(c);
+    };
+    row.appendChild(b);
+  });
+}
+function updateHrHint(){
+  const y=+$('pf-birth').value||0;
+  const el=$('pf-hrehint');
+  if(!el) return;
+  if(!y){el.textContent=''; return;}
+  const age=2026-y;
+  const est=Math.round(208-0.7*age);
+  el.textContent='Tanaka-Schätzung ~'+est+' bpm (Alter '+age+')';
+}
 let _plist=[];
 function fillProfileForm(p){
   const e=!p;
@@ -1322,8 +1431,19 @@ function fillProfileForm(p){
   $('pf-id').value=p?p.id:'';
   $('pf-id').disabled=!!p;
   $('pf-name').value=p?p.name:'';
+  $('pf-initial').value=p&&p.initial?p.initial:(p&&p.name?p.name.charAt(0):'');
+  const col=p&&p.color?p.color:0xE2802F;
+  $('pf-color').value=String(col);
+  paintColors(col);
+  $('pf-birth').value=p&&p.birthYear?p.birthYear:'';
+  $('pf-weight').value=p&&p.weightKg?p.weightKg:'';
+  $('pf-goal').value=(p&&p.goal)||'none';
   $('pf-ftp').value=p&&p.ftpW?p.ftpW:'';
+  $('pf-ftporig').value=(p&&p.ftpOrigin)||'manual';
   $('pf-hrmax').value=p&&p.hrMax?p.hrMax:'';
+  $('pf-rest').value=p&&p.restingHr?p.restingHr:'';
+  $('pf-lthr').value=p&&p.lthr?p.lthr:'';
+  $('pf-zbasis').value=(p&&p.zoneBasis)||'hrmax';
   $('pf-maxlvl').value=p&&p.maxLevelTenths? (p.maxLevelTenths/10).toFixed(1):'';
   $('pf-maxw').value=p&&p.maxPowerW?p.maxPowerW:'';
   $('pf-maxhr').value=p&&p.maxHr?p.maxHr:'';
@@ -1332,34 +1452,49 @@ function fillProfileForm(p){
   $('pf-loss').value=(p&&p.onHrLoss)||'reduce';
   $('pfdel').disabled=!p;
   $('pfmsg').textContent='';
+  updateHrHint();
+  const st=$('pf-stats');
+  if(st){
+    const ftp=p&&p.ftpW, w=p&&p.weightKg;
+    st.textContent=(ftp&&w)?('≈ '+(ftp/w).toFixed(2)+' W/kg'):'';
+  }
 }
 function loadProfiles(){
   fetch('/api/profile/list').then(r=>r.json()).then(j=>{
-    const t=$('plist'); t.innerHTML='';
+    const box=$('pcards'); box.innerHTML='';
     const act=j.active||null;
     _plist=j.profiles||[];
     $('plnone').style.display=_plist.length?'none':'';
     _plist.forEach(p=>{
-      const tr=document.createElement('tr');
       const on=act&&act===p.id;
-      tr.innerHTML='<td><span class="dot'+(on?' on':'')+'"></span><b>'+(p.name||p.id)+'</b>'
-        +(on?' <span class="tag">aktiv</span>':'')
-        +'<br><span class="k">'+p.id
-        +' · FTP '+(p.ftpW||'-')+' W · max Stufe '+lvDisp(p.maxLevelTenths)
-        +' · max '+(p.maxPowerW||'-')+' W · max HR '+(p.maxHr||'-')+'</span></td>'
-        +'<td class="r"></td>';
-      const td=tr.querySelector('td.r');
-      const be=document.createElement('button');
-      be.className='ghost sm'; be.textContent='Bearbeiten';
-      be.onclick=ev=>{ev.stopPropagation(); fillProfileForm(p);};
-      td.appendChild(be);
+      const card=document.createElement('div');
+      card.className='pcard'+(on?' on':'');
+      card.style.setProperty('--pc', hexColor(p.color||0x4EC9A5));
+      const ini=(p.initial||(p.name||'?').charAt(0)||'?').toUpperCase();
+      const g=goalLabel(p.goal);
+      card.innerHTML='<div class="av" style="background:'+hexColor(p.color||0x4EC9A5)+'">'+ini+'</div>'
+        +'<div class="pn">'+(p.name||p.id)+'</div>'
+        +'<div class="pm">'+(g?g+' · ':'')+'FTP '+(p.ftpW||'—')+' W'
+        +(p.weightKg?(' · '+p.weightKg+' kg'):'')
+        +'<br>HRmax '+(p.hrMax||'—')+(p.birthYear?(' · *'+p.birthYear):'')+'</div>'
+        +'<div class="prow"></div>';
+      const prow=card.querySelector('.prow');
+      const bed=document.createElement('button');
+      bed.className='ghost sm'; bed.textContent='Bearbeiten';
+      bed.onclick=ev=>{ev.stopPropagation(); fillProfileForm(p);};
+      prow.appendChild(bed);
       if(!on){
         const b=document.createElement('button');
         b.className='ghost sm'; b.textContent='Wählen';
         b.onclick=ev=>{ev.stopPropagation(); selectProfile(p.id);};
-        td.appendChild(b);
+        prow.appendChild(b);
+      } else {
+        const t=document.createElement('span');
+        t.className='tag'; t.textContent='aktiv';
+        prow.appendChild(t);
       }
-      t.appendChild(tr);
+      card.onclick=()=>{ if(!on) selectProfile(p.id); else fillProfileForm(p); };
+      box.appendChild(card);
     });
     const ap=_plist.find(x=>x.id===act);
     if(ap) fillProfileForm(ap);
@@ -1380,8 +1515,16 @@ function saveProfile(){
   const id=$('pf-id').value.trim();
   const name=$('pf-name').value.trim();
   if(!id||!name){$('pfmsg').className='msg err';$('pfmsg').textContent='ID und Name nötig';return;}
-  const body={id:id,name:name,
-    ftpW:+$('pf-ftp').value||0, hrMax:+$('pf-hrmax').value||0,
+  let initial=$('pf-initial').value.trim();
+  if(!initial) initial=name.charAt(0);
+  const body={id:id,name:name,initial:initial,
+    color:+$('pf-color').value||0xE2802F,
+    birthYear:+$('pf-birth').value||0,
+    weightKg:+$('pf-weight').value||0,
+    goal:$('pf-goal').value,
+    ftpW:+$('pf-ftp').value||0, ftpOrigin:$('pf-ftporig').value,
+    hrMax:+$('pf-hrmax').value||0, restingHr:+$('pf-rest').value||0,
+    lthr:+$('pf-lthr').value||0, zoneBasis:$('pf-zbasis').value,
     maxPowerW:+$('pf-maxw').value||0, maxHr:+$('pf-maxhr').value||0,
     maxLevelTenths:Math.round((+$('pf-maxlvl').value||0)*10),
     targetCadenceRpm:+$('pf-cad').value||0,
@@ -1410,6 +1553,16 @@ $('pclr').onclick=()=>selectProfile('');
 $('pnew').onclick=()=>fillProfileForm(null);
 $('pfsave').onclick=()=>saveProfile();
 $('pfdel').onclick=()=>deleteProfile();
+$('pf-birth').oninput=()=>updateHrHint();
+$('pfest').onclick=()=>{
+  const y=+$('pf-birth').value||0;
+  if(!y){$('pfmsg').className='msg err';$('pfmsg').textContent='Geburtsjahr setzen';return;}
+  const est=Math.round(208-0.7*(2026-y));
+  $('pf-hrmax').value=est;
+  if(!+$('pf-maxhr').value) $('pf-maxhr').value=est;
+  $('pfmsg').className='msg ok';
+  $('pfmsg').textContent='HRmax ≈ '+est+' (Tanaka) — bitte speichern';
+};
 
 $('scan').onclick=()=>{$('dmsg').textContent='suche 8 s ...';
   fetch('/api/ble/scan/start',{method:'POST'}).catch(()=>{});};

@@ -120,6 +120,9 @@ static void test_save_load_roundtrip(void) {
     p.targetCadenceRpm = 60;
     p.onHrLoss = HrLossPolicy::Stop;
     p.leadingZone = ZoneLead::Hr;
+    p.birthYear = 1981;
+    p.weightKg = 84;
+    p.goal = TrainingGoal::FatLoss;
     TEST_ASSERT_TRUE(a.put(p));
     TEST_ASSERT_TRUE(a.put(make("standard", "Standard", 160, 300, 180)));
     TEST_ASSERT_TRUE(a.select("reha"));
@@ -144,6 +147,15 @@ static void test_save_load_roundtrip(void) {
     TEST_ASSERT_EQUAL_UINT8(60, out.targetCadenceRpm);
     TEST_ASSERT_EQUAL_UINT8(static_cast<uint8_t>(HrLossPolicy::Stop), static_cast<uint8_t>(out.onHrLoss));
     TEST_ASSERT_EQUAL_UINT8(static_cast<uint8_t>(ZoneLead::Hr), static_cast<uint8_t>(out.leadingZone));
+    TEST_ASSERT_EQUAL_UINT16(1981, out.birthYear);
+    TEST_ASSERT_EQUAL_UINT8(84, out.weightKg);
+    TEST_ASSERT_EQUAL_UINT8(static_cast<uint8_t>(TrainingGoal::FatLoss), static_cast<uint8_t>(out.goal));
+}
+
+static void test_hrmax_estimate(void) {
+    // 2026 − 1981 = 45 → 208 − 0.7*45 = 176.5 → 177
+    TEST_ASSERT_EQUAL_UINT8(177, ProfileStore::estimateHrMax(1981, 2026));
+    TEST_ASSERT_EQUAL_UINT8(0, ProfileStore::estimateHrMax(0, 2026));
 }
 
 static void test_load_rejects_bad_magic(void) {
@@ -180,6 +192,7 @@ int main(int, char**) {
     RUN_TEST(test_full_rejects_fifth);
     RUN_TEST(test_update_same_id);
     RUN_TEST(test_save_load_roundtrip);
+    RUN_TEST(test_hrmax_estimate);
     RUN_TEST(test_load_rejects_bad_magic);
     RUN_TEST(test_save_empty_store);
     return UNITY_END();
