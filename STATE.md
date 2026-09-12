@@ -5,8 +5,8 @@ zuerst diese Datei und danach gezielt weiter. Alle anderen Notizen in `debug/`
 sind Protokolle einzelner Arbeitsschritte und beschreiben den Stand *zu ihrem
 Zeitpunkt* — sie werden nicht nachgeführt.
 
-Stand dieser Datei: **2026-09-12** Tablet-Ride-Layout
-([debug/UPDATE_TABLET_RIDE.md](debug/UPDATE_TABLET_RIDE.md)).
+Stand dieser Datei: **2026-09-12** Schritt-Editor
+([debug/UPDATE_WORKOUT_EDITOR.md](debug/UPDATE_WORKOUT_EDITOR.md)).
 
 ---
 
@@ -122,8 +122,10 @@ für die Wirkung — und `guardAllowSim` muss dafür von `false` auf `true`.
     ([debug/UPDATE_TESTS_UI.md](debug/UPDATE_TESTS_UI.md)).
 16. ~~**Tablet-Ride-Layout**~~ — sticky Stufe/STOP, Hero, Zonen-Hysterese
     ([debug/UPDATE_TABLET_RIDE.md](debug/UPDATE_TABLET_RIDE.md)).
-17. Optional: Nachtest 4 / Schritt-Editor / Progression / TestRunner.
-18. ~~`.github/workflows/build.yml`~~ / ~~6a~~ / Profile / OFF|LEVEL — erledigt.
+17. ~~**Schritt-Editor**~~ — Steady-Schritte, Watt/%FTP, JSON-Sync, max. 8
+    ([debug/UPDATE_WORKOUT_EDITOR.md](debug/UPDATE_WORKOUT_EDITOR.md)).
+18. Optional: Nachtest 4 / Progression / TestRunner.
+19. ~~`.github/workflows/build.yml`~~ / ~~6a~~ / Profile / OFF|LEVEL — erledigt.
 
 Noch offen aus dem Hardware-Bericht: ob `Start/Resume` am Varon wirklich nötig
 ist — der UI-Hinweis steht; Messung am Rad offen.

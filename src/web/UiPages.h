@@ -119,8 +119,6 @@ body.js section.on{display:block}
 .ridehero{display:grid;grid-template-columns:1.2fr .9fr;gap:16px;align-items:start}
 @media (max-width:720px){.ridehero{grid-template-columns:1fr}}
 .ridehero .heroBlock .v.hero{font-size:64px}
-.lvldock{display:flex;gap:10px;margin-top:12px;flex-wrap:wrap}
-.lvldock button{flex:1;min-height:52px;font-size:16px;font-weight:800}
 .connline{display:flex;flex-wrap:wrap;gap:14px 22px;align-items:center;font-size:13px}
 .connline .v{font-size:14px}
 .modes{display:flex;flex-wrap:wrap;gap:8px;margin:0 0 12px}
@@ -129,6 +127,17 @@ body.js section.on{display:block}
 .advbox summary{cursor:pointer;color:var(--dim);font-size:12px;letter-spacing:.08em;
   text-transform:uppercase;list-style:none}
 .advbox summary::-webkit-details-marker{display:none}
+.woedrow{display:grid;grid-template-columns:1.4fr .7fr .7fr .55fr .55fr auto;gap:6px;
+  align-items:end;margin:8px 0;padding:8px;background:#0E1116;border:1px solid var(--edge);
+  border-radius:9px}
+.woedrow .k{margin-bottom:3px}
+.woedrow input{padding:8px 9px;font-size:14px}
+.woedrow .ops{display:flex;gap:4px;flex-wrap:wrap}
+.woedrow .ops button{min-height:36px;padding:6px 10px;font-size:12px}
+@media (max-width:720px){
+  .woedrow{grid-template-columns:1fr 1fr}
+  .woedrow .ops{grid-column:1/-1}
+}
 .card{background:var(--card);border:1px solid var(--edge);border-radius:12px;
   padding:18px 20px;margin-bottom:16px}
 .card h2{font-family:'Syne',system-ui,sans-serif;font-size:13px;letter-spacing:.18em;
@@ -309,10 +318,6 @@ footer{color:var(--dim);font-size:12px;text-align:center;margin-top:26px}
             <div class="v big" id="lvl">-</div>
             <div class="segs" id="segs"></div>
             <div class="k" id="lvlsub"></div></div>
-          <div class="lvldock">
-            <button id="lvldn2" class="ghost">Stufe −</button>
-            <button id="lvlup2" class="ghost">Stufe +</button>
-          </div>
           <div class="grid" style="margin-top:14px">
             <div><div class="k">Fahrzeit</div><div class="v" id="el">-</div></div>
             <div><div class="k">Energie</div><div class="v" id="kcal">-</div></div>
@@ -708,7 +713,7 @@ footer{color:var(--dim);font-size:12px;text-align:center;margin-top:26px}
     <div class="card">
       <h2>Programme</h2>
       <div class="hint flat">Eingebaute Programme und Dateien auf LittleFS.
-        Vorschau und Machbarkeit gegen das aktive Profil — voller Editor folgt später.</div>
+        Vorschau, Editor und Machbarkeit gegen das aktive Profil.</div>
       <div class="pcards" id="wocards"></div>
       <table id="wolist" hidden></table>
       <div class="k" id="wonone">lade…</div>
@@ -732,19 +737,36 @@ footer{color:var(--dim);font-size:12px;text-align:center;margin-top:26px}
       </div>
     </div>
     <div class="card">
-      <h2>JSON prüfen / speichern</h2>
-      <label class="drop" id="wodrop"><b>JSON-Datei ablegen oder tippen</b>
-        <span>oder unten einfügen</span>
-        <input type="file" id="wofile" accept="application/json,.json"></label>
-      <textarea id="wojson" rows="8" style="width:100%;font:inherit;background:#0E1116;color:var(--fg);
-        border:1px solid var(--edge);border-radius:9px;padding:10px"></textarea>
+      <h2>Schritt-Editor</h2>
+      <div class="hint flat">Nur Steady-Schritte (max. 8). Intervalblöcke/Rampen später.
+        Änderungen schreiben sofort das JSON und prüfen Machbarkeit.</div>
       <div class="row flat">
+        <label class="f" style="flex:1;margin:0"><div class="k">Name</div>
+          <input type="text" id="woedname" maxlength="39" autocomplete="off"></label>
+        <label class="f" style="flex:1;margin:0"><div class="k">ID</div>
+          <input type="text" id="woedid" maxlength="23" autocomplete="off"></label>
+      </div>
+      <div class="row flat">
+        <button id="woedunit" class="ghost">Ziel: Watt</button>
+        <button id="woedadd" class="ghost">+ Schritt</button>
+        <button id="woedblank" class="ghost">Leer</button>
+      </div>
+      <div id="woedsteps"></div>
+      <div class="row flat">
+        <button id="woedsync" class="ghost">Aus JSON lesen</button>
+        <button id="woeddl" class="ghost">JSON-Datei</button>
         <button id="woval" class="ghost">Prüfen</button>
         <button id="woput" class="ghost">Auf Gerät speichern</button>
       </div>
       <div class="msg" id="wojmsg"></div>
-      <div class="hint flat">Beispiel: Physio mit power + limit.hr_max je Schritt.
-        id wird aus dem Namen abgeleitet, wenn fehlend. ftp_pct braucht FTP im Profil.</div>
+      <details class="advbox" id="wojsonbox">
+        <summary>JSON (Datei / Drop)</summary>
+        <label class="drop" id="wodrop"><b>JSON-Datei ablegen oder tippen</b>
+          <span>oder unten einfügen</span>
+          <input type="file" id="wofile" accept="application/json,.json"></label>
+        <textarea id="wojson" rows="6" style="width:100%;font:inherit;background:#0E1116;color:var(--fg);
+          border:1px solid var(--edge);border-radius:9px;padding:10px"></textarea>
+      </details>
     </div>
     <div class="card">
       <h2>Letzte Session</h2>
@@ -1252,8 +1274,6 @@ function renderBle(s){
   const ergLike=mode==='MANUAL_ERG'||mode==='HR_HOLD'||mode==='REHA'||mode==='WORKOUT';
   $('lvlup').disabled=!hasP||ergLike;
   $('lvldn').disabled=!hasP||ergLike;
-  if($('lvlup2')) $('lvlup2').disabled=!hasP||ergLike;
-  if($('lvldn2')) $('lvldn2').disabled=!hasP||ergLike;
   const adv=$('rideadv');
   if(adv && (mode==='MANUAL_ERG'||mode==='HR_HOLD'||mode==='REHA')) adv.open=true;
   $('mlvl').disabled=!hasP;
@@ -1926,6 +1946,170 @@ function hmsShort(s){
   s=s|0; const m=Math.floor(s/60), r=s%60;
   return m+':'+(r<10?'0':'')+r;
 }
+
+let _woEd={name:'',id:'',unit:'w',steps:[]};
+let _woEdQuiet=false;
+let _woDeb=0;
+function woSlug(s){
+  return String(s||'').toLowerCase().replace(/[^a-z0-9]+/g,'_').replace(/^_|_$/g,'').slice(0,23)||'workout';
+}
+function editorDefaultStep(){
+  return {label:'Schritt',durationS:120,powerW:60,ftpPct:0,hrMax:0,hrSoft:0};
+}
+function editorFromJson(txt){
+  let d=null;
+  try{d=JSON.parse(txt);}catch(e){return false;}
+  if(!d||!Array.isArray(d.steps)) return false;
+  const steps=[];
+  let unit=_woEd.unit;
+  d.steps.slice(0,8).forEach((s,i)=>{
+    const t=(s&&s.target)||{};
+    const lim=(s&&s.limit)||{};
+    const st={label:(s&&s.label)||('Schritt '+(i+1)),
+      durationS:(s&&(s.duration_s||s.durationS))|0,
+      powerW:0,ftpPct:0,
+      hrMax:(lim.hr_max||lim.hrMax||0)|0,
+      hrSoft:(lim.hr_soft||lim.hrSoft||0)|0};
+    if(t.ftp_pct!=null||t.ftpPct!=null){
+      st.ftpPct=+(t.ftp_pct!=null?t.ftp_pct:t.ftpPct)||0; unit='ftp';
+    } else {
+      st.powerW=+(t.power!=null?t.power:(s.powerW||0))||0; if(st.powerW) unit='w';
+    }
+    if(st.durationS<1) st.durationS=60;
+    steps.push(st);
+  });
+  _woEd={name:d.name||'',id:d.id||woSlug(d.name),unit:unit,steps:steps};
+  renderEditor();
+  return true;
+}
+function editorToJson(){
+  const name=($('woedname').value||_woEd.name||'Workout').trim();
+  let id=($('woedid').value||_woEd.id||'').trim()||woSlug(name);
+  _woEd.name=name; _woEd.id=id;
+  const steps=_woEd.steps.map(st=>{
+    const o={type:'steady',duration_s:st.durationS|0,label:st.label||'',
+      target:{},limit:{}};
+    if(_woEd.unit==='ftp') o.target.ftp_pct=+st.ftpPct||0;
+    else o.target.power=+st.powerW||0;
+    if(st.hrMax) o.limit.hr_max=st.hrMax|0;
+    if(st.hrSoft) o.limit.hr_soft=st.hrSoft|0;
+    if(!o.limit.hr_max&&!o.limit.hr_soft) delete o.limit;
+    return o;
+  });
+  return JSON.stringify({name:name,id:id,steps:steps},null,2);
+}
+function pushEditor(validate){
+  if(_woEdQuiet) return;
+  const txt=editorToJson();
+  $('wojson').value=txt;
+  if(validate!==false){
+    clearTimeout(_woDeb);
+    _woDeb=setTimeout(()=>validateWorkoutUi(false),350);
+  }
+}
+function renderEditor(){
+  _woEdQuiet=true;
+  if($('woedname')&&document.activeElement!==$('woedname')) $('woedname').value=_woEd.name||'';
+  if($('woedid')&&document.activeElement!==$('woedid')) $('woedid').value=_woEd.id||'';
+  $('woedunit').textContent=_woEd.unit==='ftp'?'Ziel: % FTP':'Ziel: Watt';
+  const box=$('woedsteps'); box.innerHTML='';
+  _woEd.steps.forEach((st,i)=>{
+    const row=document.createElement('div');
+    row.className='woedrow';
+    const tgtLabel=_woEd.unit==='ftp'?'% FTP':'Watt';
+    const tgtVal=_woEd.unit==='ftp'?st.ftpPct:st.powerW;
+    row.innerHTML=
+      '<label class="f" style="margin:0"><div class="k">Label</div><input data-f="label" type="text" maxlength="23"></label>'+
+      '<label class="f" style="margin:0"><div class="k">Dauer s</div><input data-f="durationS" type="number" min="5" max="7200" step="5"></label>'+
+      '<label class="f" style="margin:0"><div class="k">'+tgtLabel+'</div><input data-f="tgt" type="number" min="0" max="600" step="1"></label>'+
+      '<label class="f" style="margin:0"><div class="k">HR max</div><input data-f="hrMax" type="number" min="0" max="220"></label>'+
+      '<label class="f" style="margin:0"><div class="k">HR soft</div><input data-f="hrSoft" type="number" min="0" max="220"></label>'+
+      '<div class="ops">'+
+        '<button type="button" class="ghost sm" data-a="up">↑</button>'+
+        '<button type="button" class="ghost sm" data-a="dn">↓</button>'+
+        '<button type="button" class="ghost sm" data-a="rm">×</button></div>';
+    row.querySelector('[data-f=label]').value=st.label||'';
+    row.querySelector('[data-f=durationS]').value=st.durationS||60;
+    row.querySelector('[data-f=tgt]').value=tgtVal||0;
+    row.querySelector('[data-f=hrMax]').value=st.hrMax||'';
+    row.querySelector('[data-f=hrSoft]').value=st.hrSoft||'';
+    row.querySelectorAll('input').forEach(inp=>{
+      inp.oninput=()=>{
+        const f=inp.dataset.f;
+        if(f==='label') st.label=inp.value;
+        else if(f==='durationS') st.durationS=+inp.value||60;
+        else if(f==='tgt'){
+          if(_woEd.unit==='ftp'){st.ftpPct=+inp.value||0; st.powerW=0;}
+          else {st.powerW=+inp.value||0; st.ftpPct=0;}
+        }
+        else if(f==='hrMax') st.hrMax=+inp.value||0;
+        else if(f==='hrSoft') st.hrSoft=+inp.value||0;
+        pushEditor(true);
+      };
+    });
+    row.querySelector('[data-a=up]').onclick=()=>{
+      if(i<1) return;
+      const t=_woEd.steps[i-1]; _woEd.steps[i-1]=_woEd.steps[i]; _woEd.steps[i]=t;
+      renderEditor(); pushEditor(true);
+    };
+    row.querySelector('[data-a=dn]').onclick=()=>{
+      if(i>=_woEd.steps.length-1) return;
+      const t=_woEd.steps[i+1]; _woEd.steps[i+1]=_woEd.steps[i]; _woEd.steps[i]=t;
+      renderEditor(); pushEditor(true);
+    };
+    row.querySelector('[data-a=rm]').onclick=()=>{
+      _woEd.steps.splice(i,1); renderEditor(); pushEditor(true);
+    };
+    box.appendChild(row);
+  });
+  $('woedadd').disabled=_woEd.steps.length>=8;
+  _woEdQuiet=false;
+}
+$('woedunit').onclick=()=>{
+  _woEd.unit=_woEd.unit==='ftp'?'w':'ftp';
+  _woEd.steps.forEach(st=>{
+    if(_woEd.unit==='ftp'){ if(!st.ftpPct&&st.powerW) st.ftpPct=50; st.powerW=0; }
+    else { if(!st.powerW&&st.ftpPct) st.powerW=60; st.ftpPct=0; }
+  });
+  renderEditor(); pushEditor(true);
+};
+$('woedadd').onclick=()=>{
+  if(_woEd.steps.length>=8) return;
+  const s=editorDefaultStep();
+  if(_woEd.unit==='ftp'){s.ftpPct=60;s.powerW=0;}
+  _woEd.steps.push(s); renderEditor(); pushEditor(true);
+};
+$('woedblank').onclick=()=>{
+  _woEd={name:'Neu',id:'neu',unit:'w',steps:[editorDefaultStep()]};
+  renderEditor(); pushEditor(true);
+};
+$('woedsync').onclick=()=>{
+  if(!editorFromJson($('wojson').value)){
+    const m=$('wojmsg'); m.className='msg err'; m.textContent='JSON nicht lesbar';
+  } else pushEditor(true);
+};
+$('woeddl').onclick=()=>{
+  const txt=editorToJson();
+  const a=document.createElement('a');
+  a.href=URL.createObjectURL(new Blob([txt],{type:'application/json'}));
+  a.download=(_woEd.id||'workout')+'.json';
+  a.click(); URL.revokeObjectURL(a.href);
+};
+$('woedname').oninput=()=>{
+  _woEd.name=$('woedname').value;
+  if(!$('woedid').dataset.touch) $('woedid').value=woSlug(_woEd.name);
+  _woEd.id=$('woedid').value; pushEditor(true);
+};
+$('woedid').oninput=()=>{ $('woedid').dataset.touch='1'; _woEd.id=$('woedid').value; pushEditor(true); };
+if(!_woEd.steps.length){
+  _woEd={name:'Physio Grundlage',id:'physio',unit:'w',steps:[
+    {label:'Einfahren',durationS:120,powerW:40,ftpPct:0,hrMax:120,hrSoft:115},
+    {label:'Hauptteil',durationS:600,powerW:60,ftpPct:0,hrMax:120,hrSoft:115},
+    {label:'Ausfahren',durationS:120,powerW:35,ftpPct:0,hrMax:120,hrSoft:0}
+  ]};
+  renderEditor(); pushEditor(false);
+}
+
 function drawWorkoutPreview(tl){
   const cv=$('woprev'); if(!cv) return;
   const ctx=cv.getContext('2d');
@@ -1993,6 +2177,7 @@ function previewWorkoutId(id){
   _woSelId=id;
   fetch('/api/workout/download?id='+encodeURIComponent(id)).then(r=>r.text()).then(txt=>{
     $('wojson').value=txt;
+    editorFromJson(txt);
     return fetch('/api/workout/validate',{method:'POST',headers:{'Content-Type':'application/json'},body:txt});
   }).then(r=>r.json()).then(d=>{
     showWorkoutPreview(d, id);
@@ -2060,7 +2245,6 @@ function validateWorkoutUi(showMsg){
   });
 }
 $('woval').onclick=()=>validateWorkoutUi(true);
-let _woDeb=0;
 $('wojson').addEventListener('input',()=>{
   clearTimeout(_woDeb);
   _woDeb=setTimeout(()=>{ if($('wojson').value.trim().length>8) validateWorkoutUi(false); },450);
@@ -2068,7 +2252,7 @@ $('wojson').addEventListener('input',()=>{
 function readWoFile(f){
   if(!f) return;
   const r=new FileReader();
-  r.onload=()=>{ $('wojson').value=String(r.result||''); validateWorkoutUi(true); };
+  r.onload=()=>{ $('wojson').value=String(r.result||''); editorFromJson($('wojson').value); validateWorkoutUi(true); };
   r.readAsText(f);
 }
 $('wofile').onchange=e=>readWoFile(e.target.files&&e.target.files[0]);
@@ -2102,8 +2286,6 @@ $('hrgo').onclick=()=>{
 };
 $('lvlup').onclick=()=>step(+10);
 $('lvldn').onclick=()=>step(-10);
-if($('lvlup2')) $('lvlup2').onclick=()=>step(+10);
-if($('lvldn2')) $('lvldn2').onclick=()=>step(-10);
 function step(delta){
   fetch('/api/status').then(r=>r.json()).then(s=>{
     if(!s.profile){
