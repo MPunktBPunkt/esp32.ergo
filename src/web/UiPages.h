@@ -194,6 +194,10 @@ footer{color:var(--dim);font-size:12px;text-align:center;margin-top:26px}
       <h2>Messwerte</h2>
       <div class="msg warn" id="startHint" hidden>Nach STOP: ggf. <b>Start</b> drücken und
         erneut treten — die Freigabe am Bike kann sonst fehlen.</div>
+      <div class="msg warn" id="pauseHint" hidden>Auto-Pause: keine Trittfrequenz —
+        Last gehalten. Weiter treten setzt die Session fort.</div>
+      <div class="msg warn" id="freezeHint" hidden>Pulsverlust — Stufe eingefroren.
+        Nach Timeout Rückfall auf LEVEL.</div>
       <div class="grid">
         <div id="pwtile"><div class="k">Leistung</div><div class="v" id="pw">-</div>
           <div class="k" id="pwsub"></div></div>
@@ -583,6 +587,23 @@ footer{color:var(--dim);font-size:12px;text-align:center;margin-top:26px}
     </div>
   </section>
 
+  <section id="t-verlauf">
+    <div class="card">
+      <h2>Session-Verlauf</h2>
+      <p class="k">Die letzten Fahrten auf dem Gerät (LittleFS). Neueste zuerst.</p>
+      <div class="row flat">
+        <button id="sessreload" class="ghost">Aktualisieren</button>
+      </div>
+      <div class="msg" id="sessmsg"></div>
+      <table id="sesslist"></table>
+      <div class="k" id="sessnone" hidden>noch keine Sessions</div>
+    </div>
+    <div class="card">
+      <h2>Letzte Session</h2>
+      <div class="v" id="sesslast">-</div>
+    </div>
+  </section>
+
   <section id="t-soon">
     <div class="card"><div class="soonbox">
       <b id="soont">-</b>
@@ -600,7 +621,7 @@ const NAV=[
  ['ride','Ride','',''],
  ['workouts','Workouts','',''],
  ['tests','Tests','v0.2','Geführte Tests: Rampe, 20 Minuten, Recovery. Ergebnis wird vorgeschlagen, nie automatisch übernommen.'],
- ['verlauf','Verlauf','v0.2','Sessions je Profil, Zonenverteilung, Physio-Progression, Ghost-Vergleich.'],
+ ['verlauf','Verlauf','',''],
  ['profile','Profile','',''],
  ['dev','Geräte','',''],
  ['calib','Kalibrierung','',''],
@@ -636,6 +657,7 @@ function tab(n){
   if(n==='calib') loadMap();
   if(n==='profile') loadProfiles();
   if(n==='workouts') loadWorkouts();
+  if(n==='verlauf') loadSessions();
 }
 
 function num(v,d,u){return (v==null)?'-':(d?v.toFixed(d):Math.round(v))+(u||'');}
@@ -783,6 +805,14 @@ function renderBle(s){
     const show=afterStop && !!s.bikeLink && mode==='OFF';
     sh.hidden=!show;
   }
+  const sess=s.session||{};
+  const ph=$('pauseHint');
+  if(ph) ph.hidden=!(sess.active && sess.paused && mode!=='OFF');
+  const fh=$('freezeHint');
+  if(fh){
+    const freeze=(mode==='HR_HOLD'&&hh.lost)||((mode==='REHA'||mode==='WORKOUT')&&rh.lost);
+    fh.hidden=!freeze;
+  }
 
   const ceil=!!(erg.ceiling && (mode==='MANUAL_ERG'||mode==='REHA'||mode==='HR_HOLD'||mode==='WORKOUT'));
   $('pw').className='v'+(leadHr?'':(' hero'+(ceil?' ceil':'')));
@@ -926,6 +956,13 @@ function renderBle(s){
       +(rh.lost?' · PULSVERLUST':'');
   }
   $('rmodesub').textContent=msub;
+  if(sess.active){
+    const ds=sess.durationS!=null?sess.durationS:0;
+    const extra=(sess.paused?' · PAUSE':'')
+      +(sess.workKj!=null?(' · '+sess.workKj.toFixed(1)+' kJ'):'')
+      +(sess.autoPauses?(' · AutoPause '+sess.autoPauses+'×'):'');
+    $('rmodesub').textContent=(msub?msub+' · ':'')+'Session '+hms(ds)+extra;
+  }
   $('moff').classList.toggle('ghost', mode!=='OFF');
   $('mlvl').classList.toggle('ghost', mode!=='MANUAL_LEVEL');
   $('merg').classList.toggle('ghost', mode!=='MANUAL_ERG');
@@ -1321,11 +1358,46 @@ function loadWorkouts(){
   fetch('/api/session/last').then(r=>r.json()).then(d=>{
     if(!d.ok){$('wosess').textContent='noch keine'; return;}
     $('wosess').textContent=(d.mode||'')+' · '+(d.workoutName||'')+' · '+
-      (d.durationS||0)+' s · Deckel '+(d.interventions||0)+'× · '+
-      (d.endReason||'')+(d.avgDesiredW?(' · Ø '+Math.round(d.avgDesiredW)+' W'):'');
+      (d.durationS||0)+' s'+(d.pausedS?(' (Pause '+d.pausedS+' s)'):'')+
+      ' · Deckel '+(d.interventions||0)+'× · '+(d.endReason||'')+
+      (d.avgPowerW?(' · Ø '+Math.round(d.avgPowerW)+' W'):'')+
+      (d.workKj!=null?(' · '+Number(d.workKj).toFixed(1)+' kJ'):'');
   }).catch(()=>{});
 }
 $('woreload').onclick=()=>loadWorkouts();
+
+function fmtSess(d){
+  return (d.mode||'')+' · '+(d.workoutName||d.profileId||'')+' · '+
+    (d.durationS||0)+' s'+(d.pausedS?(' / Pause '+d.pausedS+' s'):'')+
+    (d.avgPowerW!=null?(' · Ø '+Math.round(d.avgPowerW)+' W'):'')+
+    (d.workKj!=null?(' · '+Number(d.workKj).toFixed(1)+' kJ'):'')+
+    (d.hrAvg?(' · HR '+d.hrAvg+(d.hrMax?('/'+d.hrMax):'')+' bpm'):'')+
+    (d.interventions?(' · Deckel '+d.interventions+'×'):'')+
+    (d.autoPauses?(' · AutoPause '+d.autoPauses+'×'):'')+
+    (d.endReason?(' · '+d.endReason):'');
+}
+function loadSessions(){
+  const m=$('sessmsg'); if(m){m.className='msg'; m.textContent='';}
+  fetch('/api/session/list').then(r=>r.json()).then(d=>{
+    const rows=d.sessions||[];
+    $('sessnone').hidden=rows.length>0;
+    $('sesslist').innerHTML=rows.length
+      ?('<tr><th>Modus</th><th>Dauer</th><th>Leistung</th><th>Puls</th><th>Ende</th></tr>'+
+        rows.map(x=>'<tr><td>'+(x.mode||'')+(x.workoutName?(' · '+x.workoutName):'')+
+          '</td><td>'+(x.durationS||0)+' s'+(x.pausedS?(' (+'+x.pausedS+' Pause)'):'')+
+          '</td><td>'+(x.avgPowerW!=null?Math.round(x.avgPowerW)+' W':'—')+
+          (x.workKj!=null?(' / '+Number(x.workKj).toFixed(1)+' kJ'):'')+
+          '</td><td>'+(x.hrAvg||'—')+(x.hrMax?(' / '+x.hrMax):'')+
+          '</td><td>'+(x.endReason||'')+
+          (x.interventions?(' · Deckel '+x.interventions):'')+
+          (x.autoPauses?(' · AP '+x.autoPauses):'')+'</td></tr>').join(''))
+      :'';
+  }).catch(e=>{if(m){m.className='msg err'; m.textContent=String(e);}});
+  fetch('/api/session/last').then(r=>r.json()).then(d=>{
+    $('sesslast').textContent=d.ok?fmtSess(d):'noch keine';
+  }).catch(()=>{});
+}
+$('sessreload').onclick=()=>loadSessions();
 $('woval').onclick=()=>{
   const m=$('wojmsg'); m.className='msg'; m.textContent='prüfe…';
   fetch('/api/workout/validate',{method:'POST',headers:{'Content-Type':'application/json'},

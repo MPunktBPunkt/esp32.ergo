@@ -5,8 +5,8 @@ zuerst diese Datei und danach gezielt weiter. Alle anderen Notizen in `debug/`
 sind Protokolle einzelner Arbeitsschritte und beschreiben den Stand *zu ihrem
 Zeitpunkt* — sie werden nicht nachgeführt.
 
-Stand dieser Datei: **2026-09-12** Nacht. LittleFS-Workouts + Hub-Felder
-([debug/UPDATE_NIGHT.md](debug/UPDATE_NIGHT.md)).
+Stand dieser Datei: **2026-09-12** Session-Lifecycle
+([debug/UPDATE_SESSION.md](debug/UPDATE_SESSION.md)).
 
 ---
 
@@ -110,8 +110,10 @@ für die Wirkung — und `guardAllowSim` muss dafür von `false` auf `true`.
    ([debug/UPDATE_WORKOUT.md](debug/UPDATE_WORKOUT.md)).
 10. ~~**LittleFS-Workouts / Hub / Session-Stub**~~
     ([debug/UPDATE_NIGHT.md](debug/UPDATE_NIGHT.md)).
-11. Optional: Nachtest 4 / Editor / Progression / geführte Tests.
-12. ~~`.github/workflows/build.yml`~~ / ~~6a~~ / Profile / OFF|LEVEL — erledigt.
+11. ~~**Session-Lifecycle**~~ — Auto-Pause, Freeze→LEVEL, Archiv, Hub-Export, Verlauf-UI
+    ([debug/UPDATE_SESSION.md](debug/UPDATE_SESSION.md)).
+12. Optional: Nachtest 4 / Editor / Progression / geführte Tests.
+13. ~~`.github/workflows/build.yml`~~ / ~~6a~~ / Profile / OFF|LEVEL — erledigt.
 
 Noch offen aus dem Hardware-Bericht: ob `Start/Resume` am Varon wirklich nötig
 ist — der UI-Hinweis steht; Messung am Rad offen.

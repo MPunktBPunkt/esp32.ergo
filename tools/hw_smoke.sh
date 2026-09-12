@@ -73,6 +73,12 @@ d=json.load(sys.stdin)
 print("session", d)
 assert d.get("ok")
 '
+  curl -sS --max-time 8 "$B/api/session/list" | python3 -c '
+import sys,json
+d=json.load(sys.stdin)
+print("session list", d.get("count"), "items")
+assert d.get("ok") and "sessions" in d
+'
 else
   echo "== skip engine run (kein Profil oder keine Map) =="
 fi

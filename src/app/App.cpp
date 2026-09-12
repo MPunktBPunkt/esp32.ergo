@@ -57,6 +57,8 @@ void App::begin() {
     rehaCtl.setDesiredW(60.0f);
     rehaCtl.setHrLimits(115, 120);
     rehaCtl.setDurationS(600);
+    session_.begin({});
+    loadSessionArchive_();
     journal.begin(ergo::JournalConfig{});
     // Der Ring bleibt nach dem Booten aus und wird bewusst nicht in der
     // Konfiguration gemerkt. Ein Mitschnitt, der einen Neustart ueberlebt und
@@ -400,13 +402,31 @@ void App::buildStatusJson(JsonDocument& doc) {
         JsonObject ls = doc["lastSession"].to<JsonObject>();
         ls["mode"] = lastSession_.mode;
         ls["workoutName"] = lastSession_.workoutName;
+        ls["profileId"] = lastSession_.profileId;
         ls["endReason"] = lastSession_.endReason;
         ls["durationS"] = lastSession_.durationS;
+        ls["pausedS"] = lastSession_.pausedS;
         ls["steps"] = lastSession_.steps;
         ls["interventions"] = lastSession_.interventions;
+        ls["autoPauses"] = lastSession_.autoPauses;
+        ls["avgPowerW"] = lastSession_.avgPowerW;
         ls["avgDesiredW"] = lastSession_.avgDesiredW;
+        ls["workKj"] = lastSession_.workKj;
+        ls["hrAvg"] = lastSession_.hrAvg;
+        ls["hrMax"] = lastSession_.hrMax;
+    }
+    {
+        JsonObject sess = doc["session"].to<JsonObject>();
+        sess["active"] = session_.active();
+        sess["paused"] = session_.paused();
+        sess["durationS"] = session_.elapsedActiveS(millis());
+        sess["autoPauses"] = session_.peek().autoPauses;
+        sess["interventions"] = session_.peek().interventions;
+        sess["avgPowerW"] = session_.peek().avgPowerW;
+        sess["workKj"] = session_.peek().workKj;
     }
     doc["fsReady"] = fsReady_;
+    doc["sessionCount"] = sessionStore_.count();
     if (const ergo::Profile* ap = profiles.active()) {
         doc["profile"] = ap->id;
         JsonObject po = doc["profileInfo"].to<JsonObject>();
@@ -502,11 +522,19 @@ void App::buildHeartbeat(JsonDocument& doc) {
         sa["type"] = "sensor";
         sa["value"] = control.sessionActive() ? 1 : 0;
         sa["unit"] = "";
-        if (sessionStartMs_ > 0 && control.sessionActive()) {
+        if (session_.active() || control.sessionActive()) {
             JsonObject sd = ios["session_duration"].to<JsonObject>();
             sd["type"] = "sensor";
-            sd["value"] = (int)((millis() - sessionStartMs_) / 1000UL);
+            sd["value"] = (int)session_.elapsedActiveS(millis());
             sd["unit"] = "s";
+            JsonObject sp = ios["session_paused"].to<JsonObject>();
+            sp["type"] = "sensor";
+            sp["value"] = session_.paused() ? 1 : 0;
+            sp["unit"] = "";
+            JsonObject wk = ios["work_kj"].to<JsonObject>();
+            wk["type"] = "sensor";
+            wk["value"] = session_.peek().workKj;
+            wk["unit"] = "kJ";
         }
         if (control.powerTargetW() > 0.0f) {
             JsonObject pt = ios["power_target"].to<JsonObject>();
@@ -829,6 +857,13 @@ void App::registerControlRoutes() {
             return;
         }
 
+        if (m == ergo::ControlMode::Off) {
+            if (session_.active()) recordSessionEnd("stop");
+        } else if (m != ergo::ControlMode::Workout) {
+            if (session_.active()) recordSessionEnd("switch");
+            beginSession("");
+        }
+
         JsonDocument doc;
         doc["ok"] = true;
         doc["mode"] = ergo::controlModeName(control.mode());
@@ -952,9 +987,8 @@ void App::registerControlRoutes() {
                 NetUtil::sendError(server, 404, err[0] ? err : "Workout nicht geladen");
                 return;
             }
-            sessionStartMs_ = millis();
-            sessionDesiredSum_ = 0;
-            sessionDesiredN_ = 0;
+            if (session_.active()) recordSessionEnd("switch");
+            beginSession(workout.name());
             doc["workout"] = workout.name();
             doc["id"] = docIn.id;
             doc["scale"] = scale;
@@ -990,7 +1024,11 @@ void App::registerControlRoutes() {
             tenths = (int16_t)lroundf(server.arg("level").toFloat() * 10.0f);
         }
         if (control.mode() != ergo::ControlMode::ManualLevel) {
+            if (session_.active()) recordSessionEnd("switch");
             control.setMode(ergo::ControlMode::ManualLevel);
+            beginSession("");
+        } else if (!session_.active()) {
+            beginSession("");
         }
         control.setLevelTargetTenths(tenths);
         reply(ftms.setLevelTenths(tenths, millis()));
@@ -1029,7 +1067,11 @@ void App::registerControlRoutes() {
                 NetUtil::sendError(server, 409, "Kennfläche leer — zuerst Kalibrierung");
                 return;
             }
+            if (session_.active()) recordSessionEnd("switch");
             control.setMode(ergo::ControlMode::ManualErg);
+            beginSession("");
+        } else if (!session_.active()) {
+            beginSession("");
         }
         control.setPowerTargetW(watt);
         powerCtl.setTargetW(watt);
@@ -1159,9 +1201,8 @@ void App::registerControlRoutes() {
             NetUtil::sendError(server, 500, "Workout-Start fehlgeschlagen");
             return;
         }
-        sessionStartMs_ = millis();
-        sessionDesiredSum_ = 0;
-        sessionDesiredN_ = 0;
+        if (session_.active()) recordSessionEnd("switch");
+        beginSession(workout.name());
         JsonDocument doc;
         workoutJson(doc);
         doc["scale"] = scale;
@@ -1356,11 +1397,44 @@ void App::registerControlRoutes() {
         if (lastSession_.valid) {
             doc["mode"] = lastSession_.mode;
             doc["workoutName"] = lastSession_.workoutName;
+            doc["profileId"] = lastSession_.profileId;
             doc["endReason"] = lastSession_.endReason;
             doc["durationS"] = lastSession_.durationS;
+            doc["pausedS"] = lastSession_.pausedS;
             doc["steps"] = lastSession_.steps;
             doc["interventions"] = lastSession_.interventions;
+            doc["autoPauses"] = lastSession_.autoPauses;
+            doc["avgPowerW"] = lastSession_.avgPowerW;
             doc["avgDesiredW"] = lastSession_.avgDesiredW;
+            doc["workKj"] = lastSession_.workKj;
+            doc["hrAvg"] = lastSession_.hrAvg;
+            doc["hrMax"] = lastSession_.hrMax;
+        }
+        NetUtil::sendJson(server, 200, doc);
+    });
+    server.on("/api/session/list", HTTP_GET, [this]() {
+        JsonDocument doc;
+        doc["ok"] = true;
+        doc["count"] = sessionStore_.count();
+        JsonArray arr = doc["sessions"].to<JsonArray>();
+        for (uint8_t i = 0; i < sessionStore_.count(); i++) {
+            ergo::SessionSummary s;
+            if (!sessionStore_.at(i, s)) continue;
+            JsonObject o = arr.add<JsonObject>();
+            o["mode"] = s.mode;
+            o["workoutName"] = s.workoutName;
+            o["profileId"] = s.profileId;
+            o["endReason"] = s.endReason;
+            o["durationS"] = s.durationS;
+            o["pausedS"] = s.pausedS;
+            o["steps"] = s.steps;
+            o["interventions"] = s.interventions;
+            o["autoPauses"] = s.autoPauses;
+            o["avgPowerW"] = s.avgPowerW;
+            o["avgDesiredW"] = s.avgDesiredW;
+            o["workKj"] = s.workKj;
+            o["hrAvg"] = s.hrAvg;
+            o["hrMax"] = s.hrMax;
         }
         NetUtil::sendJson(server, 200, doc);
     });
@@ -1629,6 +1703,7 @@ void App::loopCalibration(unsigned long now) {
 
 void App::loopErg(unsigned long now) {
     if (!control.allowsErg()) return;
+    if (session_.holdLoad()) return;
     // HR verloren + Freeze: Stufe halten, keine Watt→Level-Anpassung.
     if (control.allowsHrHold() && hrCtl.lost() &&
         hrCtl.lossPolicy() == ergo::HrLossPolicy::Freeze) {
@@ -1696,6 +1771,7 @@ void App::loopHr(unsigned long now) {
         }
         if (ht.lossPolicy == ergo::HrLossPolicy::Stop) {
             ftms.stop(now);
+            recordSessionEnd("hr_lost");
             control.setMode(ergo::ControlMode::Off);
             powerCtl.reset();
             hrCtl.reset();
@@ -1781,6 +1857,7 @@ void App::applyRehaCap(unsigned long now, bool fromWorkout) {
 
     if (!fromWorkout && rt.finished) {
         Serial.printf("[%s] Dauer erreicht — STOP\n", tag);
+        recordSessionEnd("done");
         if (ble.ready(ergo::Role::Bike)) ftms.stop(now);
         control.setMode(ergo::ControlMode::Off);
         powerCtl.reset();
@@ -1796,6 +1873,7 @@ void App::applyRehaCap(unsigned long now, bool fromWorkout) {
             Serial.printf("[%s] Pulsverlust — Politik %d\n", tag, (int)rt.lossPolicy);
         }
         if (rt.lossPolicy == ergo::HrLossPolicy::Stop) {
+            recordSessionEnd("hr_lost");
             if (ble.ready(ergo::Role::Bike)) ftms.stop(now);
             control.setMode(ergo::ControlMode::Off);
             powerCtl.reset();
@@ -1820,14 +1898,17 @@ void App::applyRehaCap(unsigned long now, bool fromWorkout) {
             Serial.printf("[%s] Deckel: %.0f → %.0f W (HR %u, Eingriffe %u)\n", tag, rt.desiredW,
                           rt.effectiveW, (unsigned)hr, (unsigned)rt.interventions);
         }
+        if (rt.interventions > interventionsSeen_) {
+            while (interventionsSeen_ < rt.interventions) {
+                session_.noteIntervention();
+                interventionsSeen_++;
+            }
+        }
     }
 
     control.setPowerTargetW(rt.effectiveW);
     powerCtl.setTargetW(rt.effectiveW);
-    if (fromWorkout && rt.desiredW > 0.0f) {
-        sessionDesiredSum_ += rt.desiredW;
-        sessionDesiredN_++;
-    }
+    if (rt.desiredW > 0.0f) session_.noteDesiredW(rt.desiredW);
 }
 
 bool App::beginFs() {
@@ -1835,7 +1916,8 @@ bool App::beginFs() {
     if (!fsReady_) fsReady_ = LittleFS.begin(true);
     if (fsReady_) {
         if (!LittleFS.exists("/workouts")) LittleFS.mkdir("/workouts");
-        Serial.println("[FS] LittleFS bereit (/workouts)");
+        if (!LittleFS.exists("/sessions")) LittleFS.mkdir("/sessions");
+        Serial.println("[FS] LittleFS bereit (/workouts, /sessions)");
     } else {
         Serial.println("[FS] LittleFS fehlt — nur Builtins");
     }
@@ -1865,44 +1947,142 @@ bool App::loadWorkoutDoc(const ergo::WorkoutDoc& doc, float scale) {
 }
 
 void App::recordSessionEnd(const char* reason) {
-    lastSession_.clear();
-    lastSession_.valid = true;
-    strncpy(lastSession_.mode, ergo::controlModeName(control.mode()), sizeof(lastSession_.mode) - 1);
-    strncpy(lastSession_.workoutName, workout.name(), sizeof(lastSession_.workoutName) - 1);
-    strncpy(lastSession_.endReason, reason ? reason : "end", sizeof(lastSession_.endReason) - 1);
-    lastSession_.steps = workout.stepCount();
-    lastSession_.interventions = rehaCtl.interventions();
-    if (sessionStartMs_ > 0) {
-        lastSession_.durationS = (millis() - sessionStartMs_) / 1000UL;
-    } else if (woSnap_.elapsedS) {
-        lastSession_.durationS = woSnap_.elapsedS;
+    if (!session_.active()) return;
+    ergo::SessionSummary s = session_.end(millis(), reason);
+    if (workout.stepCount() > 0) s.steps = workout.stepCount();
+    if (rehaCtl.interventions() > s.interventions) s.interventions = rehaCtl.interventions();
+    lastSession_ = s;
+    persistSession_(s);
+    Serial.printf("[SESS] %s %s %u s (Pause %u), Ø %.0f W, %.1f kJ, Deckel %u×\n", s.mode,
+                  s.endReason, (unsigned)s.durationS, (unsigned)s.pausedS, s.avgPowerW, s.workKj,
+                  (unsigned)s.interventions);
+}
+
+void App::beginSession(const char* workoutName) {
+    const char* mode = ergo::controlModeName(control.mode());
+    const char* pid = profiles.activeId() ? profiles.activeId() : "";
+    session_.start(millis(), mode, workoutName ? workoutName : "", pid);
+    interventionsSeen_ = rehaCtl.interventions();
+    Serial.printf("[SESS] start %s profile=%s\n", mode, pid);
+}
+
+void App::loopSession(unsigned long now) {
+    if (!session_.active()) return;
+
+    const bool linked = ble.ready(ergo::Role::Bike);
+    const bool fresh = linked && ftms.hasLive() && !ftms.stale(now);
+    const float rpm = fresh ? ftms.live().cadenceRpm() : 0.0f;
+    const float watt = fresh ? (float)ftms.live().powerW : 0.0f;
+    const uint8_t hr = effectiveHr();
+
+    // Link-Verlust und Stillstand gleich behandeln → Auto-Pause.
+    if (!linked || !fresh) {
+        session_.tick(now, 0.0f, 0.0f, hr, true);
+    } else {
+        session_.tick(now, rpm, watt, hr, true);
     }
-    if (sessionDesiredN_ > 0)
-        lastSession_.avgDesiredW = sessionDesiredSum_ / (float)sessionDesiredN_;
-    sessionStartMs_ = 0;
-    sessionDesiredSum_ = 0;
-    sessionDesiredN_ = 0;
-    Serial.printf("[SESS] %s %s %u s, Deckel %u×\n", lastSession_.mode, lastSession_.endReason,
-                  (unsigned)lastSession_.durationS, (unsigned)lastSession_.interventions);
+
+    const bool freezing =
+        (control.allowsHrHold() && hrCtl.lost() &&
+         hrCtl.lossPolicy() == ergo::HrLossPolicy::Freeze) ||
+        ((control.allowsReha() || control.allowsWorkout()) && rehaCtl.lost() &&
+         rehaCtl.lossPolicy() == ergo::HrLossPolicy::Freeze);
+    session_.noteHrLost(now, freezing);
+    if (freezing) applyFreezeToLevel(now);
+}
+
+void App::applyFreezeToLevel(unsigned long now) {
+    if (!session_.freezeTimedOut(now)) return;
+    const int16_t tenths = limiter.currentLevelTenths();
+    Serial.printf("[SESS] Freeze-Timeout → MANUAL_LEVEL Stufe %.1f\n", tenths / 10.0f);
+    control.setMode(ergo::ControlMode::ManualLevel);
+    if (tenths >= 0) {
+        control.setLevelTargetTenths(tenths);
+        if (ble.ready(ergo::Role::Bike)) ftms.setLevelTenths(tenths, now);
+    }
+    powerCtl.reset();
+    hrCtl.reset();
+    rehaCtl.reset();
+    workout.stop();
+    session_.noteHrLost(now, false);
+    session_.retagMode(ergo::controlModeName(ergo::ControlMode::ManualLevel));
+}
+
+void App::persistSession_(const ergo::SessionSummary& s) {
+    if (!s.valid) return;
+    sessionStore_.append(s);
 
     if (fsReady_) {
-        File f = LittleFS.open("/sessions/last.json", "w");
-        if (!f) {
-            LittleFS.mkdir("/sessions");
-            f = LittleFS.open("/sessions/last.json", "w");
-        }
-        if (f) {
-            char buf[256];
-            snprintf(buf, sizeof(buf),
-                     "{\"mode\":\"%s\",\"workoutName\":\"%s\",\"endReason\":\"%s\","
-                     "\"durationS\":%u,\"steps\":%u,\"interventions\":%u,\"avgDesiredW\":%.1f}",
-                     lastSession_.mode, lastSession_.workoutName, lastSession_.endReason,
-                     (unsigned)lastSession_.durationS, (unsigned)lastSession_.steps,
-                     (unsigned)lastSession_.interventions, lastSession_.avgDesiredW);
-            f.print(buf);
-            f.close();
+        if (!LittleFS.exists("/sessions")) LittleFS.mkdir("/sessions");
+        char line[384];
+        const size_t n = sessionStore_.writeJsonLine(s, line, sizeof(line));
+        if (n > 0) {
+            File f = LittleFS.open("/sessions/log.jsonl", "a");
+            if (f) {
+                f.println(line);
+                f.close();
+            }
+            File last = LittleFS.open("/sessions/last.json", "w");
+            if (last) {
+                last.print(line);
+                last.close();
+            }
         }
     }
+
+    if (config.enableHub) {
+        JsonDocument doc;
+        doc["mac"] = NetUtil::macNoColon();
+        doc["fwType"] = FW_TYPE;
+        doc["name"] = config.deviceName;
+        doc["mode"] = s.mode;
+        doc["workoutName"] = s.workoutName;
+        doc["profileId"] = s.profileId;
+        doc["endReason"] = s.endReason;
+        doc["durationS"] = s.durationS;
+        doc["pausedS"] = s.pausedS;
+        doc["steps"] = s.steps;
+        doc["interventions"] = s.interventions;
+        doc["autoPauses"] = s.autoPauses;
+        doc["avgPowerW"] = s.avgPowerW;
+        doc["avgDesiredW"] = s.avgDesiredW;
+        doc["workKj"] = s.workKj;
+        doc["hrAvg"] = s.hrAvg;
+        doc["hrMax"] = s.hrMax;
+        String payload;
+        serializeJson(doc, payload);
+        const int code = hub.postJson("/api/session-export", payload, 15000);
+        Serial.printf("[SESS] Hub-Export HTTP %d\n", code);
+    }
+}
+
+void App::loadSessionArchive_() {
+    sessionStore_.clear();
+    if (!fsReady_) return;
+    File f = LittleFS.open("/sessions/log.jsonl", "r");
+    if (!f) {
+        File last = LittleFS.open("/sessions/last.json", "r");
+        if (last) {
+            String body = last.readString();
+            last.close();
+            ergo::SessionSummary s;
+            if (sessionStore_.parseJsonLine(body.c_str(), s)) {
+                sessionStore_.append(s);
+                lastSession_ = s;
+            }
+        }
+        return;
+    }
+    while (f.available()) {
+        String line = f.readStringUntil('\n');
+        line.trim();
+        if (!line.length()) continue;
+        ergo::SessionSummary s;
+        if (sessionStore_.parseJsonLine(line.c_str(), s)) sessionStore_.append(s);
+    }
+    f.close();
+    sessionStore_.at(0, lastSession_);
+    Serial.printf("[SESS] Archiv: %u Eintraege\n", (unsigned)sessionStore_.count());
 }
 
 void App::loadPowerMap() {
@@ -2289,6 +2469,7 @@ void App::loop() {
     const unsigned long now = millis();
     loopDebug(now);
     loopCalibration(now);
+    loopSession(now);
     loopHr(now);
     loopReha(now);
     loopWorkout(now);

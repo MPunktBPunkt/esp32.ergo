@@ -21,7 +21,9 @@
 #include "core/ConfigStore.h"
 #include "core/HubClient.h"
 #include "core/Profile.h"
+#include "core/SessionStore.h"
 #include "core/SessionSummary.h"
+#include "core/SessionTracker.h"
 
 /**
  * Shell, BLE, Kalibrierung, Profile, OFF / LEVEL / ERG / HR_HOLD / REHA / WORKOUT.
@@ -78,6 +80,10 @@ private:
     void saveProfiles();
     bool beginFs();
     void recordSessionEnd(const char* reason);
+    void beginSession(const char* workoutName = "");
+    void loopSession(unsigned long now);
+    void persistSession_(const ergo::SessionSummary& s);
+    void loadSessionArchive_();
     bool loadWorkoutDoc(const ergo::WorkoutDoc& doc, float scale);
 
     void profileToJson(const ergo::Profile& p, JsonObject obj) const;
@@ -95,6 +101,7 @@ private:
     void loopWorkout(unsigned long now);
     /** Gemeinsame Pulsdeckel-Last fuer REHA und WORKOUT. */
     void applyRehaCap(unsigned long now, bool fromWorkout);
+    void applyFreezeToLevel(unsigned long now);
     /** Fertige Sweep-Punkte in die Kennflaeche uebernehmen und protokollieren. */
     void harvestSweepPoints();
     void appendCalibJson(JsonObject obj) const;
@@ -145,8 +152,8 @@ private:
     const char* codecSelfTest_ = "nicht gelaufen";
     ergo::WorkoutEngine::Tick woSnap_{};
     ergo::SessionSummary lastSession_{};
+    ergo::SessionTracker session_;
+    ergo::SessionStore sessionStore_;
     bool fsReady_ = false;
-    uint32_t sessionStartMs_ = 0;
-    float sessionDesiredSum_ = 0.0f;
-    uint32_t sessionDesiredN_ = 0;
+    uint16_t interventionsSeen_ = 0;
 };
