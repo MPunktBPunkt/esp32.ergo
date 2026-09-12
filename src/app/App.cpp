@@ -1433,6 +1433,71 @@ void App::registerControlRoutes() {
             doc["id"] = d.id;
             doc["name"] = d.name;
             doc["steps"] = d.stepCount;
+            uint16_t ftp = 0;
+            int16_t maxPw = 0;
+            uint8_t maxHr = 0;
+            const char* pid = nullptr;
+            if (const ergo::Profile* ap = profiles.active()) {
+                ftp = ap->ftpW;
+                maxPw = ap->maxPowerW;
+                maxHr = ap->maxHr ? ap->maxHr : ap->hrMax;
+                pid = ap->id;
+            }
+            doc["profileId"] = pid ? pid : nullptr;
+            doc["ftpW"] = ftp;
+            uint32_t totalS = 0;
+            float peakW = 0.0f;
+            float workJ = 0.0f;
+            bool needFtp = false;
+            JsonArray arr = doc["timeline"].to<JsonArray>();
+            for (uint8_t i = 0; i < d.stepCount; i++) {
+                const ergo::WorkoutStep& st = d.steps[i];
+                totalS += st.durationS;
+                float w = st.powerW;
+                if (w <= 0.0f && st.ftpPct > 0.0f) {
+                    needFtp = true;
+                    if (ftp > 0) w = (float)ftp * st.ftpPct / 100.0f;
+                }
+                if (w > peakW) peakW = w;
+                if (w > 0.0f) workJ += w * (float)st.durationS;
+                JsonObject o = arr.add<JsonObject>();
+                o["i"] = i;
+                o["label"] = st.label;
+                o["durationS"] = st.durationS;
+                if (st.powerW > 0.0f) o["powerW"] = st.powerW;
+                if (st.ftpPct > 0.0f) o["ftpPct"] = st.ftpPct;
+                if (w > 0.0f) o["resolvedW"] = w;
+                o["hrMax"] = st.hrMax;
+                o["hrSoft"] = st.hrSoft;
+            }
+            doc["durationS"] = totalS;
+            doc["peakW"] = peakW;
+            doc["avgW"] = totalS > 0 ? (workJ / (float)totalS) : 0.0f;
+            doc["needFtp"] = needFtp;
+            JsonArray warns = doc["warnings"].to<JsonArray>();
+            if (needFtp && ftp == 0) warns.add("ftp_pct braucht FTP im aktiven Profil");
+            if (maxPw > 0 && peakW > (float)maxPw) {
+                String wmsg = "Spitze " + String((int)peakW) + " W über Profil-max " + String((int)maxPw) + " W";
+                warns.add(wmsg);
+            }
+            if (maxHr > 0) {
+                for (uint8_t i = 0; i < d.stepCount; i++) {
+                    if (d.steps[i].hrMax > maxHr) {
+                        warns.add("Schritt-Pulsdeckel über Profil-maxHr");
+                        break;
+                    }
+                }
+            }
+            if (powerMap.ready() && powerMap.pointCount() > 0 && peakW > 0.0f) {
+                bool ceil = false;
+                int16_t lvl = -1;
+                if (powerMap.bestLevel(peakW, 80.0f, lvl, ceil)) {
+                    doc["mapLevelTenths"] = lvl;
+                    doc["mapCeiling"] = ceil;
+                    if (ceil) warns.add("Spitze über Kennfläche bei ~80 rpm");
+                }
+            }
+            doc["feasible"] = warns.size() == 0;
         } else {
             doc["error"] = err;
         }

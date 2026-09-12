@@ -680,8 +680,9 @@ footer{color:var(--dim);font-size:12px;text-align:center;margin-top:26px}
     <div class="card">
       <h2>Programme</h2>
       <div class="hint flat">Eingebaute Programme und Dateien auf LittleFS.
-        Editor folgt später — hier Upload als JSON und Start mit optionalem Zeitfaktor.</div>
-      <table id="wolist"></table>
+        Vorschau und Machbarkeit gegen das aktive Profil — voller Editor folgt später.</div>
+      <div class="pcards" id="wocards"></div>
+      <table id="wolist" hidden></table>
       <div class="k" id="wonone">lade…</div>
       <div class="row flat">
         <label class="f" style="flex:1;margin:0"><div class="k">Zeitfaktor</div>
@@ -691,7 +692,22 @@ footer{color:var(--dim);font-size:12px;text-align:center;margin-top:26px}
       <div class="msg" id="womsg"></div>
     </div>
     <div class="card">
+      <h2>Vorschau</h2>
+      <div class="k" id="woprevmeta">Programm wählen oder JSON prüfen</div>
+      <canvas id="woprev" width="640" height="96" aria-label="Workout-Vorschau"
+        style="display:block;width:100%;height:96px;margin:10px 0;background:#0E1116;
+        border-radius:8px;border:1px solid var(--edge)"></canvas>
+      <table id="wosteps"></table>
+      <div class="msg" id="wowarn"></div>
+      <div class="row flat">
+        <button id="wostartsel" class="ghost" disabled>Auswahl starten</button>
+      </div>
+    </div>
+    <div class="card">
       <h2>JSON prüfen / speichern</h2>
+      <label class="drop" id="wodrop"><b>JSON-Datei ablegen oder tippen</b>
+        <span>oder unten einfügen</span>
+        <input type="file" id="wofile" accept="application/json,.json"></label>
       <textarea id="wojson" rows="8" style="width:100%;font:inherit;background:#0E1116;color:var(--fg);
         border:1px solid var(--edge);border-radius:9px;padding:10px"></textarea>
       <div class="row flat">
@@ -700,7 +716,7 @@ footer{color:var(--dim);font-size:12px;text-align:center;margin-top:26px}
       </div>
       <div class="msg" id="wojmsg"></div>
       <div class="hint flat">Beispiel: Physio mit power + limit.hr_max je Schritt.
-        id wird aus dem Namen abgeleitet, wenn fehlend.</div>
+        id wird aus dem Namen abgeleitet, wenn fehlend. ftp_pct braucht FTP im Profil.</div>
     </div>
     <div class="card">
       <h2>Letzte Session</h2>
@@ -1598,41 +1614,132 @@ $('wopause').onclick=()=>post('/api/workout/pause');
 $('woresume').onclick=()=>post('/api/workout/resume');
 $('woskip').onclick=()=>post('/api/workout/skip');
 
+let _woSelId='';
+let _woPreview=null;
 function loadWorkouts(){
   const m=$('womsg'); m.className='msg'; m.textContent='';
   fetch('/api/workout/list').then(r=>r.json()).then(d=>{
     const rows=[];
-    (d.builtins||[]).forEach(x=>rows.push(x));
-    (d.files||[]).forEach(x=>rows.push(x));
+    (d.builtins||[]).forEach(x=>rows.push(Object.assign({source:'builtin'},x)));
+    (d.files||[]).forEach(x=>rows.push(Object.assign({source:x.source||'file'},x)));
     $('wonone').hidden=rows.length>0;
-    $('wolist').innerHTML=rows.length
-      ?('<tr><th>ID</th><th>Name</th><th>Quelle</th><th></th></tr>'+rows.map(x=>{
-        const id=x.id||'';
-        return '<tr><td class="mac">'+id+'</td><td>'+(x.name||id)+'</td><td>'+(x.source||'')+
-          (x.bytes?(' · '+x.bytes+' B'):'')+'</td><td class="r">'+
-          '<button class="ghost sm" data-start="'+id+'">Start</button> '+
-          '<button class="ghost sm" data-dl="'+id+'">JSON</button></td></tr>';
-      }).join('')):'';
-    $('wolist').querySelectorAll('[data-start]').forEach(b=>{
-      b.onclick=()=>{
+    $('wonone').textContent=rows.length?'':'keine Programme';
+    const box=$('wocards'); box.innerHTML='';
+    rows.forEach(x=>{
+      const id=x.id||'';
+      const card=document.createElement('div');
+      card.className='pcard'+(id===_woSelId?' on':'');
+      card.dataset.id=id;
+      card.innerHTML='<div class="pn">'+(x.name||id)+'</div>'
+        +'<div class="pm">'+(x.source||'')+(x.bytes?(' · '+x.bytes+' B'):'')+'</div>'
+        +'<div class="prow"></div>';
+      const prow=card.querySelector('.prow');
+      const bPrev=document.createElement('button');
+      bPrev.className='ghost sm'; bPrev.textContent='Vorschau';
+      bPrev.onclick=ev=>{ev.stopPropagation(); previewWorkoutId(id);};
+      prow.appendChild(bPrev);
+      const bGo=document.createElement('button');
+      bGo.className='ghost sm'; bGo.textContent='Start';
+      bGo.onclick=ev=>{
+        ev.stopPropagation();
         const sc=+$('woscale').value||1;
-        post('/api/workout/start?id='+encodeURIComponent(b.dataset.start)+'&scale='+sc,'womsg');
+        post('/api/workout/start?id='+encodeURIComponent(id)+'&scale='+sc,'womsg');
       };
-    });
-    $('wolist').querySelectorAll('[data-dl]').forEach(b=>{
-      b.onclick=()=>window.open('/api/workout/download?id='+encodeURIComponent(b.dataset.dl),'_blank');
+      prow.appendChild(bGo);
+      card.onclick=()=>previewWorkoutId(id);
+      box.appendChild(card);
     });
   }).catch(e=>{m.className='msg err'; m.textContent=String(e);});
   fetch('/api/session/last').then(r=>r.json()).then(d=>{
     if(!d.ok){$('wosess').textContent='noch keine'; return;}
-    $('wosess').textContent=(d.mode||'')+' · '+(d.workoutName||'')+' · '+
-      (d.durationS||0)+' s'+(d.pausedS?(' (Pause '+d.pausedS+' s)'):'')+
-      ' · Deckel '+(d.interventions||0)+'× · '+(d.endReason||'')+
-      (d.avgPowerW?(' · Ø '+Math.round(d.avgPowerW)+' W'):'')+
-      (d.workKj!=null?(' · '+Number(d.workKj).toFixed(1)+' kJ'):'');
+    $('wosess').textContent=fmtSess(d);
   }).catch(()=>{});
 }
 $('woreload').onclick=()=>loadWorkouts();
+
+function hmsShort(s){
+  s=s|0; const m=Math.floor(s/60), r=s%60;
+  return m+':'+(r<10?'0':'')+r;
+}
+function drawWorkoutPreview(tl){
+  const cv=$('woprev'); if(!cv) return;
+  const ctx=cv.getContext('2d');
+  const W=cv.width, H=cv.height;
+  ctx.clearRect(0,0,W,H);
+  if(!tl||!tl.length) return;
+  let tot=0, peak=1;
+  tl.forEach(s=>{tot+=(s.durationS|0); peak=Math.max(peak,s.resolvedW||s.powerW||0);});
+  if(tot<1) return;
+  peak*=1.12;
+  let x=0;
+  const cols=['#3FB8B0','#4CAF63','#D8B23A','#E2802F','#DE5334','#C9304A','#A63FB0'];
+  tl.forEach((s,i)=>{
+    const dur=s.durationS|0;
+    const w=s.resolvedW||s.powerW||0;
+    const bw=W*(dur/tot);
+    const bh=Math.max(2,(w/peak)*(H-16));
+    ctx.fillStyle=cols[i%cols.length];
+    ctx.fillRect(x, H-8-bh, Math.max(1,bw-1), bh);
+    x+=bw;
+  });
+}
+function showWorkoutPreview(d, id){
+  _woPreview=d; _woSelId=id||d.id||'';
+  const meta=$('woprevmeta');
+  if(!d||!d.ok){
+    meta.textContent='ungültig';
+    drawWorkoutPreview([]);
+    $('wosteps').innerHTML='';
+    $('wostartsel').disabled=true;
+    return;
+  }
+  meta.textContent=(d.name||d.id||'')+' · '+hmsShort(d.durationS||0)
+    +' · Spitze '+(d.peakW!=null?Math.round(d.peakW)+' W':'—')
+    +(d.avgW!=null?(' · Ø '+Math.round(d.avgW)+' W'):'')
+    +(d.ftpW?(' · FTP '+d.ftpW):'')
+    +(d.mapLevelTenths!=null?(' · ~Stufe '+(d.mapLevelTenths/10).toFixed(1)):'')
+    +(d.feasible===false?' · Warnungen':(d.feasible?' · machbar':''));
+  drawWorkoutPreview(d.timeline||[]);
+  const steps=d.timeline||[];
+  $('wosteps').innerHTML=steps.length
+    ?('<tr><th>#</th><th>Label</th><th>Dauer</th><th>Ziel</th><th>Puls</th></tr>'+
+      steps.map(s=>{
+        const tgt=s.resolvedW!=null?(Math.round(s.resolvedW)+' W')
+          :(s.ftpPct!=null?(s.ftpPct+' % FTP'):(s.powerW!=null?(Math.round(s.powerW)+' W'):'—'));
+        return '<tr><td>'+(1+(s.i|0))+'</td><td>'+(s.label||'')+'</td><td>'+hmsShort(s.durationS)
+          +'</td><td>'+tgt+'</td><td>'+(s.hrMax?('≤ '+s.hrMax):'—')+'</td></tr>';
+      }).join(''))
+    :'';
+  const w=$('wowarn');
+  const warns=d.warnings||[];
+  if(warns.length){
+    w.className='msg err';
+    w.textContent=warns.join(' · ');
+  } else {
+    w.className='msg ok';
+    w.textContent=d.feasible?'gegen Profil/Kennfläche ok':'';
+  }
+  $('wostartsel').disabled=!_woSelId;
+  document.querySelectorAll('#wocards .pcard').forEach(c=>{
+    c.classList.toggle('on', c.dataset.id===_woSelId);
+  });
+}
+function previewWorkoutId(id){
+  _woSelId=id;
+  fetch('/api/workout/download?id='+encodeURIComponent(id)).then(r=>r.text()).then(txt=>{
+    $('wojson').value=txt;
+    return fetch('/api/workout/validate',{method:'POST',headers:{'Content-Type':'application/json'},body:txt});
+  }).then(r=>r.json()).then(d=>{
+    showWorkoutPreview(d, id);
+  }).catch(e=>{
+    const m=$('wowarn'); m.className='msg err'; m.textContent=String(e);
+  });
+}
+$('wostartsel').onclick=()=>{
+  if(!_woSelId) return;
+  const sc=+$('woscale').value||1;
+  post('/api/workout/start?id='+encodeURIComponent(_woSelId)+'&scale='+sc,'womsg');
+};
 
 function fmtSess(d){
   return (d.mode||'')+' · '+(d.workoutName||d.profileId||'')+' · '+
@@ -1666,21 +1773,57 @@ function loadSessions(){
   }).catch(()=>{});
 }
 $('sessreload').onclick=()=>loadSessions();
-$('woval').onclick=()=>{
-  const m=$('wojmsg'); m.className='msg'; m.textContent='prüfe…';
-  fetch('/api/workout/validate',{method:'POST',headers:{'Content-Type':'application/json'},
-    body:$('wojson').value}).then(r=>r.json()).then(d=>{
-    m.className='msg '+(d.ok?'ok':'err');
-    m.textContent=d.ok?('ok · '+d.name+' · '+d.steps+' Schritte'):(d.error||'ungueltig');
-  }).catch(e=>{m.className='msg err'; m.textContent=String(e);});
-};
+
+function validateWorkoutUi(showMsg){
+  const body=$('wojson').value;
+  const m=$('wojmsg');
+  if(showMsg){ m.className='msg'; m.textContent='prüfe…'; }
+  return fetch('/api/workout/validate',{method:'POST',headers:{'Content-Type':'application/json'},
+    body:body}).then(r=>r.json()).then(d=>{
+    if(showMsg){
+      m.className='msg '+(d.ok?'ok':'err');
+      m.textContent=d.ok
+        ?('ok · '+d.name+' · '+d.steps+' Schritte · '+hmsShort(d.durationS)
+          +(d.peakW!=null?(' · Spitze '+Math.round(d.peakW)+' W'):'')
+          +(d.feasible===false?' · Warnungen':''))
+        :(d.error||'ungueltig');
+    }
+    if(d.ok) showWorkoutPreview(d, d.id||_woSelId);
+    return d;
+  }).catch(e=>{
+    if(showMsg){ m.className='msg err'; m.textContent=String(e); }
+  });
+}
+$('woval').onclick=()=>validateWorkoutUi(true);
+let _woDeb=0;
+$('wojson').addEventListener('input',()=>{
+  clearTimeout(_woDeb);
+  _woDeb=setTimeout(()=>{ if($('wojson').value.trim().length>8) validateWorkoutUi(false); },450);
+});
+function readWoFile(f){
+  if(!f) return;
+  const r=new FileReader();
+  r.onload=()=>{ $('wojson').value=String(r.result||''); validateWorkoutUi(true); };
+  r.readAsText(f);
+}
+$('wofile').onchange=e=>readWoFile(e.target.files&&e.target.files[0]);
+const drop=$('wodrop');
+if(drop){
+  drop.addEventListener('dragover',e=>{e.preventDefault(); drop.classList.add('set');});
+  drop.addEventListener('dragleave',()=>drop.classList.remove('set'));
+  drop.addEventListener('drop',e=>{
+    e.preventDefault(); drop.classList.remove('set');
+    const f=e.dataTransfer&&e.dataTransfer.files&&e.dataTransfer.files[0];
+    readWoFile(f);
+  });
+}
 $('woput').onclick=()=>{
   const m=$('wojmsg'); m.className='msg'; m.textContent='speichere…';
   fetch('/api/workout/put',{method:'POST',headers:{'Content-Type':'application/json'},
     body:$('wojson').value}).then(r=>r.json()).then(d=>{
     m.className='msg '+(d.ok?'ok':'err');
     m.textContent=d.ok?('gespeichert · '+d.id):(d.error||'Fehler');
-    if(d.ok) loadWorkouts();
+    if(d.ok){ _woSelId=d.id; loadWorkouts(); validateWorkoutUi(false); }
   }).catch(e=>{m.className='msg err'; m.textContent=String(e);});
 };
 

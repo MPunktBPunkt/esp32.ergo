@@ -5,8 +5,8 @@ zuerst diese Datei und danach gezielt weiter. Alle anderen Notizen in `debug/`
 sind Protokolle einzelner Arbeitsschritte und beschreiben den Stand *zu ihrem
 Zeitpunkt* — sie werden nicht nachgeführt.
 
-Stand dieser Datei: **2026-09-12** Profil-Karten / Martin
-([debug/UPDATE_PROFILES_UI.md](debug/UPDATE_PROFILES_UI.md)).
+Stand dieser Datei: **2026-09-12** Workout-Bibliothek / Vorschau
+([debug/UPDATE_WORKOUT_UI.md](debug/UPDATE_WORKOUT_UI.md)).
 
 ---
 
@@ -116,8 +116,10 @@ für die Wirkung — und `guardAllowSim` muss dafür von `false` auf `true`.
     ([debug/UPDATE_ZONES.md](debug/UPDATE_ZONES.md)).
 13. ~~**Profil-Karten / Mehrbenutzer**~~ — volle Felder, Martin-Vorlage, HRmax-Schätzung
     ([debug/UPDATE_PROFILES_UI.md](debug/UPDATE_PROFILES_UI.md)).
-14. Optional: Nachtest 4 / Editor / Progression / geführte Tests / Tablet-Layout.
-15. ~~`.github/workflows/build.yml`~~ / ~~6a~~ / Profile / OFF|LEVEL — erledigt.
+14. ~~**Workout-Bibliothek / Vorschau**~~ — Zeitachse, Machbarkeit, Drop/JSON
+    ([debug/UPDATE_WORKOUT_UI.md](debug/UPDATE_WORKOUT_UI.md)).
+15. Optional: Nachtest 4 / Schritt-Editor / Progression / geführte Tests / Tablet-Layout.
+16. ~~`.github/workflows/build.yml`~~ / ~~6a~~ / Profile / OFF|LEVEL — erledigt.
 
 Noch offen aus dem Hardware-Bericht: ob `Start/Resume` am Varon wirklich nötig
 ist — der UI-Hinweis steht; Messung am Rad offen.

@@ -29,7 +29,7 @@ echo "== validate =="
 curl -sS --max-time 8 -X POST "$B/api/workout/validate" \
   -H "Content-Type: application/json" \
   --data '{"name":"Smoke","steps":[{"duration_s":30,"target":{"power":40},"limit":{"hr_max":120},"label":"A"}]}' \
-  | python3 -c 'import sys,json;d=json.load(sys.stdin);print(d);assert d.get("ok")'
+  | python3 -c 'import sys,json;d=json.load(sys.stdin);print(d);assert d.get("ok");assert d.get("timeline");assert d.get("durationS")==30;assert d.get("peakW")==40'
 
 echo "== put =="
 curl -sS --max-time 8 -X POST "$B/api/workout/put" \
