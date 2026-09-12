@@ -551,6 +551,38 @@ footer{color:var(--dim);font-size:12px;text-align:center;margin-top:26px}
     </div>
   </section>
 
+  <section id="t-workouts">
+    <div class="card">
+      <h2>Programme</h2>
+      <div class="hint flat">Eingebaute Programme und Dateien auf LittleFS.
+        Editor folgt später — hier Upload als JSON und Start mit optionalem Zeitfaktor.</div>
+      <table id="wolist"></table>
+      <div class="k" id="wonone">lade…</div>
+      <div class="row flat">
+        <label class="f" style="flex:1;margin:0"><div class="k">Zeitfaktor</div>
+          <input type="number" id="woscale" min="0.05" max="2" step="0.05" value="1"></label>
+        <button id="woreload" class="ghost">Neu laden</button>
+      </div>
+      <div class="msg" id="womsg"></div>
+    </div>
+    <div class="card">
+      <h2>JSON prüfen / speichern</h2>
+      <textarea id="wojson" rows="8" style="width:100%;font:inherit;background:#0E1116;color:var(--fg);
+        border:1px solid var(--edge);border-radius:9px;padding:10px"></textarea>
+      <div class="row flat">
+        <button id="woval" class="ghost">Prüfen</button>
+        <button id="woput" class="ghost">Auf Gerät speichern</button>
+      </div>
+      <div class="msg" id="wojmsg"></div>
+      <div class="hint flat">Beispiel: Physio mit power + limit.hr_max je Schritt.
+        id wird aus dem Namen abgeleitet, wenn fehlend.</div>
+    </div>
+    <div class="card">
+      <h2>Letzte Session</h2>
+      <div class="v" id="wosess">-</div>
+    </div>
+  </section>
+
   <section id="t-soon">
     <div class="card"><div class="soonbox">
       <b id="soont">-</b>
@@ -566,7 +598,7 @@ const $=i=>document.getElementById(i);
 // Reiterfolge und -inhalt laut WEBINTERFACE.md §7. Leere Version = fertig.
 const NAV=[
  ['ride','Ride','',''],
- ['workouts','Workouts','v0.1','Eingebaut: Physio 3 Schritte. Editor/LittleFS folgen.'],
+ ['workouts','Workouts','',''],
  ['tests','Tests','v0.2','Geführte Tests: Rampe, 20 Minuten, Recovery. Ergebnis wird vorgeschlagen, nie automatisch übernommen.'],
  ['verlauf','Verlauf','v0.2','Sessions je Profil, Zonenverteilung, Physio-Progression, Ghost-Vergleich.'],
  ['profile','Profile','',''],
@@ -603,6 +635,7 @@ function tab(n){
   if(n==='cfg') loadCfg();
   if(n==='calib') loadMap();
   if(n==='profile') loadProfiles();
+  if(n==='workouts') loadWorkouts();
 }
 
 function num(v,d,u){return (v==null)?'-':(d?v.toFixed(d):Math.round(v))+(u||'');}
@@ -1255,10 +1288,62 @@ $('mreha').onclick=()=>{
   const dur=(min>0)?(Math.round(min*60)):0;
   post('/api/control/mode?mode=reha&watt='+w+'&hrMax='+hr+'&durationS='+dur);
 };
-$('mwo').onclick=()=>post('/api/workout/start');
+$('mwo').onclick=()=>post('/api/workout/start?id=physio');
 $('wopause').onclick=()=>post('/api/workout/pause');
 $('woresume').onclick=()=>post('/api/workout/resume');
 $('woskip').onclick=()=>post('/api/workout/skip');
+
+function loadWorkouts(){
+  const m=$('womsg'); m.className='msg'; m.textContent='';
+  fetch('/api/workout/list').then(r=>r.json()).then(d=>{
+    const rows=[];
+    (d.builtins||[]).forEach(x=>rows.push(x));
+    (d.files||[]).forEach(x=>rows.push(x));
+    $('wonone').hidden=rows.length>0;
+    $('wolist').innerHTML=rows.length
+      ?('<tr><th>ID</th><th>Name</th><th>Quelle</th><th></th></tr>'+rows.map(x=>{
+        const id=x.id||'';
+        return '<tr><td class="mac">'+id+'</td><td>'+(x.name||id)+'</td><td>'+(x.source||'')+
+          (x.bytes?(' · '+x.bytes+' B'):'')+'</td><td class="r">'+
+          '<button class="ghost sm" data-start="'+id+'">Start</button> '+
+          '<button class="ghost sm" data-dl="'+id+'">JSON</button></td></tr>';
+      }).join('')):'';
+    $('wolist').querySelectorAll('[data-start]').forEach(b=>{
+      b.onclick=()=>{
+        const sc=+$('woscale').value||1;
+        post('/api/workout/start?id='+encodeURIComponent(b.dataset.start)+'&scale='+sc,'womsg');
+      };
+    });
+    $('wolist').querySelectorAll('[data-dl]').forEach(b=>{
+      b.onclick=()=>window.open('/api/workout/download?id='+encodeURIComponent(b.dataset.dl),'_blank');
+    });
+  }).catch(e=>{m.className='msg err'; m.textContent=String(e);});
+  fetch('/api/session/last').then(r=>r.json()).then(d=>{
+    if(!d.ok){$('wosess').textContent='noch keine'; return;}
+    $('wosess').textContent=(d.mode||'')+' · '+(d.workoutName||'')+' · '+
+      (d.durationS||0)+' s · Deckel '+(d.interventions||0)+'× · '+
+      (d.endReason||'')+(d.avgDesiredW?(' · Ø '+Math.round(d.avgDesiredW)+' W'):'');
+  }).catch(()=>{});
+}
+$('woreload').onclick=()=>loadWorkouts();
+$('woval').onclick=()=>{
+  const m=$('wojmsg'); m.className='msg'; m.textContent='prüfe…';
+  fetch('/api/workout/validate',{method:'POST',headers:{'Content-Type':'application/json'},
+    body:$('wojson').value}).then(r=>r.json()).then(d=>{
+    m.className='msg '+(d.ok?'ok':'err');
+    m.textContent=d.ok?('ok · '+d.name+' · '+d.steps+' Schritte'):(d.error||'ungueltig');
+  }).catch(e=>{m.className='msg err'; m.textContent=String(e);});
+};
+$('woput').onclick=()=>{
+  const m=$('wojmsg'); m.className='msg'; m.textContent='speichere…';
+  fetch('/api/workout/put',{method:'POST',headers:{'Content-Type':'application/json'},
+    body:$('wojson').value}).then(r=>r.json()).then(d=>{
+    m.className='msg '+(d.ok?'ok':'err');
+    m.textContent=d.ok?('gespeichert · '+d.id):(d.error||'Fehler');
+    if(d.ok) loadWorkouts();
+  }).catch(e=>{m.className='msg err'; m.textContent=String(e);});
+};
+
 $('erggo').onclick=()=>{
   const w=+$('ergw').value||80;
   post('/api/control/power?watt='+w);

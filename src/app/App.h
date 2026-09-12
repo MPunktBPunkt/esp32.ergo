@@ -17,9 +17,11 @@
 #include "control/RehaController.h"
 #include "control/SweepRunner.h"
 #include "control/WorkoutEngine.h"
+#include "control/WorkoutJson.h"
 #include "core/ConfigStore.h"
 #include "core/HubClient.h"
 #include "core/Profile.h"
+#include "core/SessionSummary.h"
 
 /**
  * Shell, BLE, Kalibrierung, Profile, OFF / LEVEL / ERG / HR_HOLD / REHA / WORKOUT.
@@ -74,6 +76,9 @@ private:
     void seedDefaultProfiles();
     void loadProfiles();
     void saveProfiles();
+    bool beginFs();
+    void recordSessionEnd(const char* reason);
+    bool loadWorkoutDoc(const ergo::WorkoutDoc& doc, float scale);
 
     void profileToJson(const ergo::Profile& p, JsonObject obj) const;
     bool profileFromJson(JsonVariantConst v, ergo::Profile& out) const;
@@ -139,4 +144,9 @@ private:
 
     const char* codecSelfTest_ = "nicht gelaufen";
     ergo::WorkoutEngine::Tick woSnap_{};
+    ergo::SessionSummary lastSession_{};
+    bool fsReady_ = false;
+    uint32_t sessionStartMs_ = 0;
+    float sessionDesiredSum_ = 0.0f;
+    uint32_t sessionDesiredN_ = 0;
 };

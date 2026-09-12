@@ -1,6 +1,7 @@
 #include "App.h"
 
 #include <ESPmDNS.h>
+#include <LittleFS.h>
 #include <Preferences.h>
 #include <Update.h>
 #include <WiFi.h>
@@ -27,6 +28,13 @@ void App::begin() {
     Serial.printf("[BOOT] reset reason %d\n", (int)esp_reset_reason());
 
     config.begin();
+    // Alte Probe-Namen still auf Ergo ziehen (einmalig, NVS).
+    if (config.deviceName == "FtmsProbe-S3" || config.deviceName == "FtmsProbe") {
+        config.deviceName = DEVICE_NAME_DEFAULT;
+        config.save();
+        Serial.printf("[CFG] Geraetename → %s\n", config.deviceName.c_str());
+    }
+    beginFs();
     runCodecSelfTest();
     checkResetButton();
     setupWifi();
@@ -388,6 +396,17 @@ void App::buildStatusJson(JsonDocument& doc) {
     wo["stepRemainingS"] = woSnap_.stepRemainingS;
     wo["totalRemainingS"] = woSnap_.totalRemainingS;
     wo["elapsedS"] = woSnap_.elapsedS;
+    if (lastSession_.valid) {
+        JsonObject ls = doc["lastSession"].to<JsonObject>();
+        ls["mode"] = lastSession_.mode;
+        ls["workoutName"] = lastSession_.workoutName;
+        ls["endReason"] = lastSession_.endReason;
+        ls["durationS"] = lastSession_.durationS;
+        ls["steps"] = lastSession_.steps;
+        ls["interventions"] = lastSession_.interventions;
+        ls["avgDesiredW"] = lastSession_.avgDesiredW;
+    }
+    doc["fsReady"] = fsReady_;
     if (const ergo::Profile* ap = profiles.active()) {
         doc["profile"] = ap->id;
         JsonObject po = doc["profileInfo"].to<JsonObject>();
@@ -476,6 +495,45 @@ void App::buildHeartbeat(JsonDocument& doc) {
         hs["type"] = "sensor";
         hs["value"] = ergo::hrSourceName(src);
         hs["unit"] = "";
+    }
+
+    {
+        JsonObject sa = ios["session_active"].to<JsonObject>();
+        sa["type"] = "sensor";
+        sa["value"] = control.sessionActive() ? 1 : 0;
+        sa["unit"] = "";
+        if (sessionStartMs_ > 0 && control.sessionActive()) {
+            JsonObject sd = ios["session_duration"].to<JsonObject>();
+            sd["type"] = "sensor";
+            sd["value"] = (int)((millis() - sessionStartMs_) / 1000UL);
+            sd["unit"] = "s";
+        }
+        if (control.powerTargetW() > 0.0f) {
+            JsonObject pt = ios["power_target"].to<JsonObject>();
+            pt["type"] = "sensor";
+            pt["value"] = (int)lroundf(control.powerTargetW());
+            pt["unit"] = "W";
+        }
+        if (control.levelTargetTenths() >= 0) {
+            JsonObject lt = ios["level_target"].to<JsonObject>();
+            lt["type"] = "sensor";
+            lt["value"] = control.levelTargetTenths() / 10.0f;
+            lt["unit"] = "";
+        }
+        if (control.allowsWorkout() && workout.running()) {
+            JsonObject wn = ios["workout_name"].to<JsonObject>();
+            wn["type"] = "sensor";
+            wn["value"] = workout.name();
+            wn["unit"] = "";
+            JsonObject ws = ios["workout_step"].to<JsonObject>();
+            ws["type"] = "sensor";
+            ws["value"] = woSnap_.label ? woSnap_.label : "";
+            ws["unit"] = "";
+            JsonObject wr = ios["workout_remaining"].to<JsonObject>();
+            wr["type"] = "sensor";
+            wr["value"] = (int)woSnap_.totalRemainingS;
+            wr["unit"] = "s";
+        }
     }
 }
 
@@ -709,6 +767,7 @@ void App::registerControlRoutes() {
     };
 
     server.on("/api/control/stop", HTTP_POST, [this, reply]() {
+        if (control.sessionActive()) recordSessionEnd("panic");
         const auto r = ftms.stop(millis());
         control.setMode(ergo::ControlMode::Off);
         powerCtl.reset();
@@ -868,6 +927,8 @@ void App::registerControlRoutes() {
             float scale = server.hasArg("scale") ? server.arg("scale").toFloat() : 1.0f;
             if (hasBody && !body["scale"].isNull()) scale = body["scale"].as<float>();
             if (scale <= 0.0f) scale = 1.0f;
+            String id = server.hasArg("id") ? server.arg("id") : "physio";
+            if (hasBody && !body["id"].isNull()) id = String(body["id"].as<const char*>());
             if (const ergo::Profile* ap = profiles.active()) {
                 workout.setFtpW(ap->ftpW);
                 rehaCtl.setLossPolicy(ap->onHrLoss);
@@ -875,22 +936,27 @@ void App::registerControlRoutes() {
                 workout.setFtpW(0);
                 rehaCtl.setLossPolicy(ergo::HrLossPolicy::Reduce);
             }
-            if (!workout.loadBuiltinPhysio(scale)) {
-                NetUtil::sendError(server, 500, "Physio-Programm konnte nicht geladen werden");
+            ergo::WorkoutDoc docIn;
+            char err[64] = {0};
+            bool okDoc = ergo::workoutBuiltinById(id.c_str(), docIn);
+            if (!okDoc && fsReady_) {
+                String path = String("/workouts/") + id + ".json";
+                File f = LittleFS.open(path, "r");
+                if (f) {
+                    String bodyStr = f.readString();
+                    f.close();
+                    okDoc = ergo::workoutParseJson(bodyStr.c_str(), docIn, err, sizeof(err));
+                }
+            }
+            if (!okDoc || !loadWorkoutDoc(docIn, scale)) {
+                NetUtil::sendError(server, 404, err[0] ? err : "Workout nicht geladen");
                 return;
             }
-            rehaCtl.setDurationS(0);
-            if (!workout.start(millis())) {
-                NetUtil::sendError(server, 500, "Workout-Start fehlgeschlagen");
-                return;
-            }
-            woSnap_ = workout.tick(millis());
-            rehaCtl.setDesiredW(woSnap_.desiredW);
-            rehaCtl.setHrLimits(woSnap_.hrSoft, woSnap_.hrMax ? woSnap_.hrMax : 120);
-            rehaCtl.reset();
-            control.setPowerTargetW(woSnap_.desiredW);
-            powerCtl.setTargetW(woSnap_.desiredW);
+            sessionStartMs_ = millis();
+            sessionDesiredSum_ = 0;
+            sessionDesiredN_ = 0;
             doc["workout"] = workout.name();
+            doc["id"] = docIn.id;
             doc["scale"] = scale;
             doc["steps"] = workout.stepCount();
             doc["mapPoints"] = powerMap.pointCount();
@@ -1055,6 +1121,29 @@ void App::registerControlRoutes() {
         }
         float scale = server.hasArg("scale") ? server.arg("scale").toFloat() : 1.0f;
         if (scale <= 0.0f) scale = 1.0f;
+        String id = server.hasArg("id") ? server.arg("id") : "physio";
+        ergo::WorkoutDoc docIn;
+        char err[64];
+        bool ok = false;
+        if (ergo::workoutBuiltinById(id.c_str(), docIn)) {
+            ok = true;
+        } else if (fsReady_) {
+            String path = String("/workouts/") + id + ".json";
+            File f = LittleFS.open(path, "r");
+            if (f) {
+                String body = f.readString();
+                f.close();
+                ok = ergo::workoutParseJson(body.c_str(), docIn, err, sizeof(err));
+            } else {
+                strncpy(err, "Datei nicht gefunden", sizeof(err) - 1);
+            }
+        } else {
+            strncpy(err, "unbekanntes Programm", sizeof(err) - 1);
+        }
+        if (!ok) {
+            NetUtil::sendError(server, 404, err[0] ? err : "Workout nicht geladen");
+            return;
+        }
         if (!control.setMode(ergo::ControlMode::Workout)) {
             NetUtil::sendError(server, 409, "Modus abgelehnt");
             return;
@@ -1066,18 +1155,17 @@ void App::registerControlRoutes() {
             workout.setFtpW(ap->ftpW);
             rehaCtl.setLossPolicy(ap->onHrLoss);
         }
-        workout.loadBuiltinPhysio(scale);
-        rehaCtl.setDurationS(0);
-        workout.start(millis());
-        woSnap_ = workout.tick(millis());
-        rehaCtl.setDesiredW(woSnap_.desiredW);
-        rehaCtl.setHrLimits(woSnap_.hrSoft, woSnap_.hrMax ? woSnap_.hrMax : 120);
-        rehaCtl.reset();
-        control.setPowerTargetW(woSnap_.desiredW);
-        powerCtl.setTargetW(woSnap_.desiredW);
+        if (!loadWorkoutDoc(docIn, scale)) {
+            NetUtil::sendError(server, 500, "Workout-Start fehlgeschlagen");
+            return;
+        }
+        sessionStartMs_ = millis();
+        sessionDesiredSum_ = 0;
+        sessionDesiredN_ = 0;
         JsonDocument doc;
         workoutJson(doc);
         doc["scale"] = scale;
+        doc["id"] = docIn.id;
         NetUtil::sendJson(server, 200, doc);
     });
     server.on("/api/workout/skip", HTTP_POST, [this, workoutJson]() {
@@ -1088,6 +1176,7 @@ void App::registerControlRoutes() {
         workout.skip(millis());
         woSnap_ = workout.tick(millis());
         if (woSnap_.finished) {
+            recordSessionEnd("done");
             if (ble.ready(ergo::Role::Bike)) ftms.stop(millis());
             control.setMode(ergo::ControlMode::Off);
             powerCtl.reset();
@@ -1126,6 +1215,7 @@ void App::registerControlRoutes() {
         NetUtil::sendJson(server, 200, doc);
     });
     server.on("/api/workout/stop", HTTP_POST, [this, workoutJson]() {
+        recordSessionEnd("stop");
         if (ble.ready(ergo::Role::Bike)) ftms.stop(millis());
         control.setMode(ergo::ControlMode::Off);
         powerCtl.reset();
@@ -1134,6 +1224,144 @@ void App::registerControlRoutes() {
         woSnap_ = {};
         JsonDocument doc;
         workoutJson(doc);
+        NetUtil::sendJson(server, 200, doc);
+    });
+
+    server.on("/api/workout/list", HTTP_GET, [this]() {
+        JsonDocument doc;
+        doc["ok"] = true;
+        doc["fsReady"] = fsReady_;
+        JsonArray builtins = doc["builtins"].to<JsonArray>();
+        for (uint8_t i = 0; i < ergo::workoutBuiltinCount(); i++) {
+            JsonObject o = builtins.add<JsonObject>();
+            o["id"] = ergo::workoutBuiltinId(i);
+            o["name"] = ergo::workoutBuiltinName(i);
+            o["source"] = "builtin";
+        }
+        JsonArray files = doc["files"].to<JsonArray>();
+        if (fsReady_) {
+            File root = LittleFS.open("/workouts");
+            if (root && root.isDirectory()) {
+                File f = root.openNextFile();
+                while (f) {
+                    String name = f.name();
+                    if (name.endsWith(".json")) {
+                        JsonObject o = files.add<JsonObject>();
+                        int slash = name.lastIndexOf('/');
+                        String base = slash >= 0 ? name.substring(slash + 1) : name;
+                        if (base.endsWith(".json")) base.remove(base.length() - 5);
+                        o["id"] = base;
+                        o["name"] = base;
+                        o["source"] = "fs";
+                        o["bytes"] = (int)f.size();
+                    }
+                    f = root.openNextFile();
+                }
+            }
+        }
+        NetUtil::sendJson(server, 200, doc);
+    });
+
+    server.on("/api/workout/validate", HTTP_POST, [this]() {
+        if (!server.hasArg("plain")) {
+            NetUtil::sendError(server, 400, "JSON-Body fehlt");
+            return;
+        }
+        ergo::WorkoutDoc d;
+        char err[80];
+        const bool ok = ergo::workoutParseJson(server.arg("plain").c_str(), d, err, sizeof(err));
+        JsonDocument doc;
+        doc["ok"] = ok;
+        if (ok) {
+            doc["id"] = d.id;
+            doc["name"] = d.name;
+            doc["steps"] = d.stepCount;
+        } else {
+            doc["error"] = err;
+        }
+        NetUtil::sendJson(server, ok ? 200 : 400, doc);
+    });
+
+    server.on("/api/workout/put", HTTP_POST, [this, requireProfile]() {
+        if (!requireProfile()) return;
+        if (!fsReady_) {
+            NetUtil::sendError(server, 503, "LittleFS nicht bereit");
+            return;
+        }
+        if (!server.hasArg("plain")) {
+            NetUtil::sendError(server, 400, "JSON-Body fehlt");
+            return;
+        }
+        ergo::WorkoutDoc d;
+        char err[80];
+        if (!ergo::workoutParseJson(server.arg("plain").c_str(), d, err, sizeof(err))) {
+            NetUtil::sendError(server, 400, err);
+            return;
+        }
+        char path[48];
+        snprintf(path, sizeof(path), "/workouts/%s.json", d.id);
+        File f = LittleFS.open(path, "w");
+        if (!f) {
+            NetUtil::sendError(server, 500, "Schreiben fehlgeschlagen");
+            return;
+        }
+        char buf[1536];
+        const size_t n = ergo::workoutWriteJson(d, buf, sizeof(buf));
+        if (n == 0 || f.write((const uint8_t*)buf, n) != n) {
+            f.close();
+            NetUtil::sendError(server, 500, "Write unvollstaendig");
+            return;
+        }
+        f.close();
+        JsonDocument doc;
+        doc["ok"] = true;
+        doc["id"] = d.id;
+        doc["path"] = path;
+        doc["bytes"] = (int)n;
+        NetUtil::sendJson(server, 200, doc);
+    });
+
+    server.on("/api/workout/download", HTTP_GET, [this]() {
+        if (!server.hasArg("id")) {
+            NetUtil::sendError(server, 400, "id fehlt");
+            return;
+        }
+        const String id = server.arg("id");
+        ergo::WorkoutDoc d;
+        char err[64];
+        char buf[1536];
+        if (ergo::workoutBuiltinById(id.c_str(), d)) {
+            const size_t n = ergo::workoutWriteJson(d, buf, sizeof(buf));
+            server.send(200, "application/json", n ? buf : "{}");
+            return;
+        }
+        if (!fsReady_) {
+            NetUtil::sendError(server, 404, "nicht gefunden");
+            return;
+        }
+        String path = String("/workouts/") + id + ".json";
+        File f = LittleFS.open(path, "r");
+        if (!f) {
+            NetUtil::sendError(server, 404, "nicht gefunden");
+            return;
+        }
+        server.streamFile(f, "application/json");
+        f.close();
+        (void)err;
+    });
+
+    server.on("/api/session/last", HTTP_GET, [this]() {
+        JsonDocument doc;
+        doc["ok"] = lastSession_.valid;
+        if (lastSession_.valid) {
+            doc["mode"] = lastSession_.mode;
+            doc["workoutName"] = lastSession_.workoutName;
+            doc["endReason"] = lastSession_.endReason;
+            doc["durationS"] = lastSession_.durationS;
+            doc["steps"] = lastSession_.steps;
+            doc["interventions"] = lastSession_.interventions;
+            doc["avgDesiredW"] = lastSession_.avgDesiredW;
+        }
         NetUtil::sendJson(server, 200, doc);
     });
 }
@@ -1506,6 +1734,7 @@ void App::loopWorkout(unsigned long now) {
     woSnap_ = wt;
     if (wt.finished || wt.state == ergo::WorkoutState::Done) {
         Serial.println("[WO] Programm fertig — STOP");
+        recordSessionEnd("done");
         if (ble.ready(ergo::Role::Bike)) ftms.stop(now);
         control.setMode(ergo::ControlMode::Off);
         powerCtl.reset();
@@ -1595,6 +1824,85 @@ void App::applyRehaCap(unsigned long now, bool fromWorkout) {
 
     control.setPowerTargetW(rt.effectiveW);
     powerCtl.setTargetW(rt.effectiveW);
+    if (fromWorkout && rt.desiredW > 0.0f) {
+        sessionDesiredSum_ += rt.desiredW;
+        sessionDesiredN_++;
+    }
+}
+
+bool App::beginFs() {
+    fsReady_ = LittleFS.begin(false);
+    if (!fsReady_) fsReady_ = LittleFS.begin(true);
+    if (fsReady_) {
+        if (!LittleFS.exists("/workouts")) LittleFS.mkdir("/workouts");
+        Serial.println("[FS] LittleFS bereit (/workouts)");
+    } else {
+        Serial.println("[FS] LittleFS fehlt — nur Builtins");
+    }
+    return fsReady_;
+}
+
+bool App::loadWorkoutDoc(const ergo::WorkoutDoc& doc, float scale) {
+    if (doc.stepCount == 0) return false;
+    if (scale < 0.05f) scale = 0.05f;
+    if (scale > 2.0f) scale = 2.0f;
+    ergo::WorkoutStep steps[ergo::WorkoutEngine::kMaxSteps];
+    for (uint8_t i = 0; i < doc.stepCount; i++) {
+        steps[i] = doc.steps[i];
+        steps[i].durationS = (uint32_t)(steps[i].durationS * scale + 0.5f);
+        if (steps[i].durationS < 1) steps[i].durationS = 1;
+    }
+    if (!workout.loadSteps(steps, doc.stepCount, doc.name[0] ? doc.name : doc.id)) return false;
+    rehaCtl.setDurationS(0);
+    if (!workout.start(millis())) return false;
+    woSnap_ = workout.tick(millis());
+    rehaCtl.setDesiredW(woSnap_.desiredW);
+    rehaCtl.setHrLimits(woSnap_.hrSoft, woSnap_.hrMax ? woSnap_.hrMax : 120);
+    rehaCtl.reset();
+    control.setPowerTargetW(woSnap_.desiredW);
+    powerCtl.setTargetW(woSnap_.desiredW);
+    return true;
+}
+
+void App::recordSessionEnd(const char* reason) {
+    lastSession_.clear();
+    lastSession_.valid = true;
+    strncpy(lastSession_.mode, ergo::controlModeName(control.mode()), sizeof(lastSession_.mode) - 1);
+    strncpy(lastSession_.workoutName, workout.name(), sizeof(lastSession_.workoutName) - 1);
+    strncpy(lastSession_.endReason, reason ? reason : "end", sizeof(lastSession_.endReason) - 1);
+    lastSession_.steps = workout.stepCount();
+    lastSession_.interventions = rehaCtl.interventions();
+    if (sessionStartMs_ > 0) {
+        lastSession_.durationS = (millis() - sessionStartMs_) / 1000UL;
+    } else if (woSnap_.elapsedS) {
+        lastSession_.durationS = woSnap_.elapsedS;
+    }
+    if (sessionDesiredN_ > 0)
+        lastSession_.avgDesiredW = sessionDesiredSum_ / (float)sessionDesiredN_;
+    sessionStartMs_ = 0;
+    sessionDesiredSum_ = 0;
+    sessionDesiredN_ = 0;
+    Serial.printf("[SESS] %s %s %u s, Deckel %u×\n", lastSession_.mode, lastSession_.endReason,
+                  (unsigned)lastSession_.durationS, (unsigned)lastSession_.interventions);
+
+    if (fsReady_) {
+        File f = LittleFS.open("/sessions/last.json", "w");
+        if (!f) {
+            LittleFS.mkdir("/sessions");
+            f = LittleFS.open("/sessions/last.json", "w");
+        }
+        if (f) {
+            char buf[256];
+            snprintf(buf, sizeof(buf),
+                     "{\"mode\":\"%s\",\"workoutName\":\"%s\",\"endReason\":\"%s\","
+                     "\"durationS\":%u,\"steps\":%u,\"interventions\":%u,\"avgDesiredW\":%.1f}",
+                     lastSession_.mode, lastSession_.workoutName, lastSession_.endReason,
+                     (unsigned)lastSession_.durationS, (unsigned)lastSession_.steps,
+                     (unsigned)lastSession_.interventions, lastSession_.avgDesiredW);
+            f.print(buf);
+            f.close();
+        }
+    }
 }
 
 void App::loadPowerMap() {
