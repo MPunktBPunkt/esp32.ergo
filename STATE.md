@@ -5,15 +5,16 @@ zuerst diese Datei und danach gezielt weiter. Alle anderen Notizen in `debug/`
 sind Protokolle einzelner Arbeitsschritte und beschreiben den Stand *zu ihrem
 Zeitpunkt* — sie werden nicht nachgeführt.
 
-Stand dieser Datei: **2026-09-13** Arbeit an **0.3.9-dev**
-(Nachtest-Probe: SIM-Freigabe, Snapshots, Watch).
+Stand dieser Datei: **2026-09-13** Arbeit an **0.3.10-dev**
+(Nachtest-Force `0x05`, Sim-Reset, Journal/Probe-Fixes).
 FTP-Karriere: [debug/UPDATE_FTP_CAREER.md](debug/UPDATE_FTP_CAREER.md).
 FTP-Builtins: [debug/UPDATE_FTP_BUILTINS.md](debug/UPDATE_FTP_BUILTINS.md).
 ZWO: [debug/UPDATE_ZWO_IMPORT.md](debug/UPDATE_ZWO_IMPORT.md).
 Bridge: [debug/UPDATE_BRIDGE.md](debug/UPDATE_BRIDGE.md).
 Tags/Pause: [debug/UPDATE_WORKOUT_TAGS.md](debug/UPDATE_WORKOUT_TAGS.md).
 Ghost: [debug/UPDATE_GHOST.md](debug/UPDATE_GHOST.md).
-Nachtests: [debug/UPDATE_NACHTEST_PROBE.md](debug/UPDATE_NACHTEST_PROBE.md).
+Nachtests: [debug/UPDATE_NACHTEST_PROBE.md](debug/UPDATE_NACHTEST_PROBE.md),
+[debug/UPDATE_NACHTEST_FORCE.md](debug/UPDATE_NACHTEST_FORCE.md).
 
 ---
 
@@ -26,7 +27,7 @@ Nachtests: [debug/UPDATE_NACHTEST_PROBE.md](debug/UPDATE_NACHTEST_PROBE.md).
 | Hub | `192.168.178.113:8093`, `fwType: ergo` |
 | Rollback-Bin | `nodes/esp32.ftmsprobe/dist/ftmsprobe.0.1.4.esp32s3.bin` |
 | Build-Host | Debian, `/home/martin/projects/esphub/esp32.ergo`, `pio` unter `/home/martin/.venvs/pio/bin/pio` |
-| Aktuelle Bin | `dist/ergo.0.3.9-dev.esp32s3.bin` |
+| Aktuelle Bin | `dist/ergo.0.3.10-dev.esp32s3.bin` |
 
 Die Entwurfs-Instanz auf Windows hat **nur git** — kein PlatformIO, keinen
 Compiler, kein Python. Sie kann nicht bauen und nicht testen. Bauen und Flashen
@@ -67,7 +68,7 @@ Nachtests 2026-09-13: [debug/HW_NACHTEST_20260913.md](debug/HW_NACHTEST_20260913
 |---|---|
 | Bridge-Abnahme | MyWhoosh ERG → Stufen über Emulation |
 | Dichtere Kennfläche / voller Test 2 | optional |
-| Nachtest 3 | Limiter blockt untrusted `0x05` — Draht-Bypass noch offen |
+| Nachtest 3 | `force=1` in 0.3.10 — Draht-Nachweis noch offen |
 | ~~Nachtest 4 `0x11`~~ | **ok** — 1 % NO_EFFECT, 3 %/6 % WORKS |
 | ERG/HR/Reha-Abnahme | Mechanik da |
 
@@ -76,10 +77,11 @@ Nachtests 2026-09-13: [debug/HW_NACHTEST_20260913.md](debug/HW_NACHTEST_20260913
 1. ~~Flash-/UI-Budget~~ … ~~Bridge MVP~~ / ~~Difficulty + HR-Deckel + CPS/CSC~~
 2. ~~Nachtest 4 / Reconnect / Dual-Link~~ (2026-09-13)
 3. **Zuhause:** Bridge-Abnahme (MyWhoosh findet Trainer, ERG, Difficulty, HR-Deckel)
-4. Nachtest 6 Crash unter Last; optional `0x05`-Bypass für Draht-Nachtest 3
+4. Nachtest 6 Crash unter Last; Nachtest 3 am Draht mit `force=1`
 5. `allowSimulation` wieder aus, wenn nicht dauerhaft nötig
 
 Erledigt bis v0.1.1: Caps-Fix … Progression, UI-JS-Fix.
+Erledigt 2026-09-13: Nachtest 4/5/Reconnect; Probe; Force-Pfad 0.3.10.
 
 ## 6. Harte Regeln
 

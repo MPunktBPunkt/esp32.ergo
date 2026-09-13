@@ -1000,6 +1000,10 @@ void App::registerControlRoutes() {
     server.on("/api/control/stop", HTTP_POST, [this, reply]() {
         if (control.sessionActive()) recordSessionEnd("stop");
         const auto r = ftms.stop(millis());
+        // Nachtest 4: Simulation kann Last hinterlassen — Grade 0 zuruecksetzen.
+        if (config.allowSimulation && ble.ready(ergo::Role::Bike)) {
+            ftms.setSimulation(0, 0, 40, 51, millis());
+        }
         control.setMode(ergo::ControlMode::Off);
         powerCtl.reset();
         hrCtl.reset();
@@ -1255,12 +1259,26 @@ void App::registerControlRoutes() {
             if (ap->maxPowerW > 0 && watt > (float)ap->maxPowerW) watt = (float)ap->maxPowerW;
         }
         // Emuliertes ERG-Ziel (nicht Opcode 0x05 — der ist am Varon tot).
+        // raw=1: Versuch 0x05. Ohne force blockt der Limiter (untrusted).
+        // raw=1&force=1: Nachtest 3 — einmalig durch den Limiter mit allowUntrustedPower.
         if (server.arg("raw") == "1") {
-            captureProbeMark_("pre_raw05");
+            const bool force = (server.arg("force") == "1" || server.arg("force") == "true");
+            ergo::LimiterConfig lc = limiter.config();
+            const bool wasUntrusted = lc.allowUntrustedPower;
+            if (force) {
+                lc.allowUntrustedPower = true;
+                limiter.setConfig(lc);
+            }
+            captureProbeMark_(force ? "pre_raw05_force" : "pre_raw05");
             const auto r = ftms.setPowerW((int16_t)wattIn, millis());
+            if (force) {
+                lc.allowUntrustedPower = wasUntrusted;
+                limiter.setConfig(lc);
+            }
             JsonDocument doc;
             doc["ok"] = (r == ergo::FtmsClient::Result::Ok);
             doc["raw"] = true;
+            doc["force"] = force;
             doc["opcode"] = "05";
             doc["watt"] = wattIn;
             doc["result"] = (int)r;
@@ -2937,6 +2955,7 @@ void App::appendProbeJson_(JsonObject obj) const {
     obj["hrBike"] = hrBike;
     obj["hrStrap"] = hrStrap;
     obj["hrEff"] = effectiveHr();
+    obj["hrDelta"] = (int)hrBike - (int)hrStrap;  // GymLink oft +20…30 vs Strap
     obj["hrSource"] = ergo::hrSourceName(resolveHrSource());
     obj["liveStale"] = !liveOk;
     obj["controlGranted"] = ftms.controlGranted();
@@ -3644,13 +3663,15 @@ void App::appendDebugJson(JsonObject obj) const {
         const ergo::JournalEntry* e = journal.at(i);
         if (!e) continue;
         JsonObject o = a.add<JsonObject>();
-        char hex[9] = {0};
+        char hex[17] = {0};
         static const char* kHex = "0123456789ABCDEF";
-        for (uint8_t k = 0; k < e->cmdLen && k < 4; k++) {
+        const uint8_t nHex = e->cmdLen < 8 ? e->cmdLen : 8;
+        for (uint8_t k = 0; k < nHex; k++) {
             hex[k * 2] = kHex[(e->cmd[k] >> 4) & 0xF];
             hex[k * 2 + 1] = kHex[e->cmd[k] & 0xF];
         }
         o["cmd"] = hex;
+        o["cmdLen"] = e->cmdLen;
         o["atMs"] = e->atMs;
         o["from"] = e->fromTenths;
         o["to"] = e->toTenths;

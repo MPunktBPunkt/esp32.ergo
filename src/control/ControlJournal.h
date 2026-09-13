@@ -58,7 +58,7 @@ struct JournalConfig {
 
 /** Ein beurteilter Schreibvorgang. */
 struct JournalEntry {
-    uint8_t cmd[4] = {0};
+    uint8_t cmd[8] = {0};  // 0x11 Simulation braucht 7 Byte
     uint8_t cmdLen = 0;
     int16_t fromTenths = -1;
     int16_t toTenths = -1;

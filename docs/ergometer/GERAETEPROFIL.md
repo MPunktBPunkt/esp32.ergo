@@ -59,14 +59,15 @@ uns irrelevant ist.
 
 ```
 supports_resistance_target = true
-supports_sim              = true     (ungetestet)
+supports_sim              = true     (Nachtest 2026-09-13: wirkt ab ~3 %)
 supports_power_target     = FALSE
 supports_hr_target        = false
 ```
 
 **Das ist der wichtigste Befund des ganzen Laufs.** Es gibt kein
 Set-Target-Power. Klassisches ERG über Opcode `05` ist nicht vorgesehen, und
-passend dazu fehlt `2AD8`.
+passend dazu fehlt `2AD8`. Produktiv bleibt `0x05` gesperrt; Draht-Nachtest
+nur über bewussten Limiter-Bypass (`allowUntrustedPower` / `force=1`).
 
 ## 4. Stellgröße — `2AD6` = `0A00A0000A00`
 
@@ -133,8 +134,13 @@ keine Antwort.
 | `04 64 00` Resistance sint16 | `80 04 01` | Success, **wirkt** |
 | `08 01` Stop | `80 08 01` | Success |
 
-`0x11` Simulation: Feature-Bit gesetzt, **nicht getestet** (Guard der Sonde
-blockt es per Default).
+`0x11` Simulation (Nachtest 2026-09-13, Firmware 0.3.9-dev, Stufe 7, ~75 rpm):
+
+| Grade | Urteil | Δ W/rpm |
+|------:|--------|--------|
+| 1 % | NO_EFFECT (Success, contradictory) | ~0 % |
+| 3 % | WORKS | ~+25 % |
+| 6 % | WORKS | ~+26 % (Peak ~174 W) |
 
 Achtung: `80 xx 01` bedeutet nur „Kommando verstanden". Das Gerät quittiert
 auch `05`, das es laut Feature-Bits nicht kann. Success ist kein Wirkungsbeleg.
@@ -194,16 +200,16 @@ Drei Möglichkeiten, und nur eine Messung entscheidet:
 Variante 3 ist nach der Bedienungsanleitung die wahrscheinlichste — siehe §11.
 Der Sweep in [NACHTESTS.md](NACHTESTS.md) misst es nach.
 
-## 9. Was noch nie gemessen wurde
+## 9. Offen / nachgeführt (Stand 2026-09-13)
 
-| Offen | Warum es zählt |
-|-------|----------------|
-| Stufen-Sweep 1…16 | Entscheidet über Leistungsbereich, Kennlinie und ERG-Emulation |
-| Kadenzabhängigkeit | Entscheidet, ob Stufe→Watt eine Tabelle oder eine Fläche ist |
-| Watt-Nachtest `05` bei durchgehendem Treten | Feature-Bit sagt nein — aber belegt ist es nicht |
-| `0x11` Simulation | Der einzige Kanal mit feiner Auflösung; Feature-Bit ist gesetzt |
-| Dual-Link Bike + H9 | Das Verbindungsbudget ist **unverifiziert**. „H9 war scanbar" ist kein Dual-Link. |
-| Crash unter Last | Was macht das Bike, wenn der Client wegbricht? Sicherheitsrelevant, `probe-run.py crash` lief nie. |
+| Thema | Stand |
+|-------|--------|
+| Stufen-Sweep / Kennfläche | teilweise (LEVEL-Session); dichtere Fläche optional |
+| Watt-Nachtest `05` am Draht | **offen** — 0.3.10 `force=1`; bislang nur Limiter-Deny belegt |
+| `0x11` Simulation | **ok** — wirksam ab ~3 %; 1 % Success ohne Wirkung |
+| Dual-Link Bike + H9 | **ok** unter Last; Bike-HR ≈ Strap +~25 bpm |
+| Reconnect | **ok** — LOST → READY |
+| Crash unter Last | **offen** — Hub-Watchdog / Nachtest 6 |
 
 ## 10. Randbedingungen
 

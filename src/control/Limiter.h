@@ -42,8 +42,14 @@ struct LimiterConfig {
     /** Lebenszeichen-Fenster nach einem Lastkommando. 0 schaltet ab. */
     uint32_t deadmanMs = 0;
 
-    /** 0x11 Simulation ist bis Nachtest 4 gesperrt. */
+    /** 0x11 Simulation — nach Nachtest 4 freigebbar (Config). */
     bool allowSimulation = false;
+
+    /**
+     * Einmaliger/Diagnose-Pfad: 0x05 trotz fehlendem Feature / ohne 0x2AD8.
+     * Nur fuer Nachtest 3 (raw&force). Default aus.
+     */
+    bool allowUntrustedPower = false;
 
     /** Steigungsklemme fuer 0x11, in 0,01 %. */
     int16_t maxGradeHundredth = 800;

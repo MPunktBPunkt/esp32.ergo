@@ -231,6 +231,17 @@ static void test_wattziel_am_varon_abgelehnt() {
     assertVerdict(l.check(watt, 3, 0), Decision::Deny, "05 am Varon");
 }
 
+/** Nachtest-3-Bypass: allowUntrustedPower laesst 0x05 trotz Varon-Caps durch. */
+static void test_wattziel_untrusted_force() {
+    LimiterConfig cfg;
+    cfg.allowUntrustedPower = true;
+    Limiter l = makeLimiter(varonCaps(), cfg);
+    const uint8_t watt[] = {0x05, 0x64, 0x00};
+    Limiter::Verdict v = l.check(watt, 3, 0);
+    TEST_ASSERT_TRUE_MESSAGE(v.sendable(), "force 05 sendable");
+    TEST_ASSERT_EQUAL(Decision::Clamp, v.decision);  // markiert UNTRUSTED
+}
+
 /** Behauptetes Wattziel ohne 0x2AD8 bekommt ebenfalls keinen Durchlass. */
 static void test_wattziel_ohne_bereich_abgelehnt() {
     Capabilities c = varonCaps();
@@ -391,6 +402,7 @@ int main(int, char**) {
     RUN_TEST(test_rampe_nach_oben);
     RUN_TEST(test_runter_geht_sofort);
     RUN_TEST(test_wattziel_am_varon_abgelehnt);
+    RUN_TEST(test_wattziel_untrusted_force);
     RUN_TEST(test_wattziel_ohne_bereich_abgelehnt);
     RUN_TEST(test_wattziel_am_trainer);
     RUN_TEST(test_wattziel_profilgrenze);

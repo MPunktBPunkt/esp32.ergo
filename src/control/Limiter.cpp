@@ -199,19 +199,27 @@ Limiter::Verdict Limiter::checkPower(const uint8_t* cmd, size_t len) const {
     // Der entscheidende Riegel: der Varon quittiert 0x05 mit Success, ohne
     // das Feature zu melden und ohne 0x2AD8. Ohne belegtes Wattziel geht
     // hier nichts durch — gesteuert wird dann ueber den Widerstand.
-    if (!caps_->canTargetPower) return deny("Geraet meldet kein Wattziel");
-    if (!caps_->powerTargetTrusted) return deny("Wattziel ohne 0x2AD8 — nicht belastbar");
+    // Ausnahme: allowUntrustedPower (Nachtest 3, raw&force) — bewusst und eng.
+    if (!cfg_.allowUntrustedPower) {
+        if (!caps_->canTargetPower) return deny("Geraet meldet kein Wattziel");
+        if (!caps_->powerTargetTrusted) return deny("Wattziel ohne 0x2AD8 — nicht belastbar");
+    }
     if (len != 3) return deny("unbekannte Nutzlast fuer 0x05");
 
     const int16_t want = s16le(cmd + 1);
     int16_t lo = 0;
     if (caps_->hasPowerRange && caps_->power.minW > 0) lo = caps_->power.minW;
     const int16_t target = clampI16(want, lo, effectiveMaxPowerW());
-    if (target == want) return allow(cmd, len);
+    if (target == want) {
+        if (cfg_.allowUntrustedPower)
+            return clampTo(cmd, len, "UNTRUSTED 0x05 — Nachtest/Diagnose");
+        return allow(cmd, len);
+    }
 
     uint8_t out[3] = {cmd[0], 0, 0};
     put16le(out + 1, target);
-    return clampTo(out, 3, "auf zulaessigen Wattbereich geklemmt");
+    return clampTo(out, 3,
+                   cfg_.allowUntrustedPower ? "UNTRUSTED 0x05 geklemmt" : "auf zulaessigen Wattbereich geklemmt");
 }
 
 Limiter::Verdict Limiter::checkSimulation(const uint8_t* cmd, size_t len) const {
