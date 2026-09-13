@@ -3701,7 +3701,7 @@ void App::savePowerMap() {
                   (unsigned)powerMap.pointCount());
 }
 
-void App::appendCalibJson(JsonObject obj) const {
+void App::appendCalibJson(JsonObject obj) {
     JsonObject m = obj["map"].to<JsonObject>();
     m["ready"] = powerMap.ready();
     m["levels"] = powerMap.levelCount();
@@ -3716,6 +3716,56 @@ void App::appendCalibJson(JsonObject obj) const {
     if (const ergo::DeviceProfile* d = devices.active()) {
         m["deviceMac"] = d->mac;
         m["ceilingW"] = d->measuredCeilingW;
+    }
+
+    // Passives Lernen: Live-Hinweis, warum eine Zelle gerade (nicht) waechst.
+    {
+        JsonObject pas = obj["passive"].to<JsonObject>();
+        const unsigned long now = millis();
+        const bool bike = ble.ready(ergo::Role::Bike);
+        const bool fresh = bike && ftms.hasLive() && !ftms.stale(now);
+        const float rpm = fresh ? ftms.live().cadenceRpm() : 0.0f;
+        const float watt = fresh ? (float)ftms.live().powerW : 0.0f;
+        const int16_t lvl = limiter.currentLevelTenths();
+        const int8_t bi = ergo::PowerMap::bandOf(rpm);
+        pas["rpm"] = rpm;
+        pas["watt"] = watt;
+        pas["levelTenths"] = lvl;
+        if (bi >= 0) {
+            pas["bandLo"] = (int)(ergo::kCadMin + (float)bi * ergo::kCadStep);
+            pas["bandHi"] =
+                (int)(ergo::kCadMin + (float)(bi + 1) * ergo::kCadStep);
+        }
+        const char* reason = "learning";
+        bool accept = false;
+        uint32_t settleLeft = 0;
+        uint32_t nextSample = 0;
+        if (sweep.running()) {
+            reason = "sweep";
+        } else if (!fresh) {
+            reason = "no_live";
+        } else if (rpm < ergo::kCadMin) {
+            reason = "rpm_low";
+        } else if (bi < 0) {
+            reason = "rpm_high";
+        } else if (watt <= 0.0f) {
+            reason = "watt_zero";
+        } else if (lvl < 0) {
+            reason = "no_level";
+        } else if (now - levelStableSince_ < kPassiveSettleMs) {
+            reason = "settle";
+            settleLeft = (uint32_t)(kPassiveSettleMs - (now - levelStableSince_));
+        } else {
+            accept = true;
+            reason = "learning";
+            if (lastPassive_ != 0 && now < lastPassive_ + kPassivePeriodMs) {
+                nextSample = (uint32_t)(lastPassive_ + kPassivePeriodMs - now);
+            }
+        }
+        pas["accept"] = accept;
+        pas["reason"] = reason;
+        if (settleLeft) pas["settleLeftMs"] = settleLeft;
+        if (nextSample) pas["nextSampleMs"] = nextSample;
     }
 
     JsonObject s = obj["sweep"].to<JsonObject>();

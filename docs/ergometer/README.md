@@ -11,6 +11,7 @@ Steuerung des HAMMER Varon XTR II (BLE-Name `TC174`) über BLE/FTMS, verteilt
 | Datei | Inhalt |
 |-------|--------|
 | [ENTWICKLERDOKU.md](ENTWICKLERDOKU.md) | **Einstieg Technik:** Stack, Probe, Bike/H9-Daten, Debug-Entscheidungen, Kalibriertabellen |
+| [KALIBRIERUNG.md](KALIBRIERUNG.md) | Aktuelle Kennfläche (Heatmap-Tabelle + JSON-Snapshot) |
 | [PFLICHTENHEFT.md](PFLICHTENHEFT.md) | Das Konzept. Revision 4. |
 | [BRIDGE.md](BRIDGE.md) | Bridge-Betrieb: Observer/Controller, Exklusiv-Steuerung, MyWhoosh |
 | [WEBINTERFACE.md](WEBINTERFACE.md) | Designkonzept der WebUI: Zonen, Profile, Workout-Editor, Tests |

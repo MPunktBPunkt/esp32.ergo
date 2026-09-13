@@ -240,8 +240,13 @@ deshalb Sweep mit festem Fenster und Verwerfung.
 
 ## 7. Kalibrierdaten (aktueller Stand)
 
-Persistente Map: NVS Slot 0 / MAC `c2:32:a5:1e:bf:b5` (nicht in git).  
-Nach Test-2-Abend: ~13 Stufen belegt, **ceilingW ≈ 226**.
+**Vollständige Heatmap-Tabelle (Abend 2026-09-13, inkl. passiv ~40 rpm):**
+[`KALIBRIERUNG.md`](KALIBRIERUNG.md) · Roh-JSON
+[`kalibrierung-map-20260913.json`](kalibrierung-map-20260913.json).
+
+Persistente Map: NVS Slot 0 / MAC `c2:32:a5:1e:bf:b5`.  
+Snapshot: **16/16 Stufen**, **7/8 Bänder** (110–120 leer), **ceilingW ≈ 224**,
+~480 Stützstellen. Band 40–50 durch passives Lernen voll; 100–110 nur dünn.
 
 ### 7.1 Test 1 — 60 rpm (2026-09-11)
 

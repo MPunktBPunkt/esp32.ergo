@@ -159,7 +159,7 @@ private:
     void applyFreezeToLevel(unsigned long now);
     /** Fertige Sweep-Punkte in die Kennflaeche uebernehmen und protokollieren. */
     void harvestSweepPoints();
-    void appendCalibJson(JsonObject obj) const;
+    void appendCalibJson(JsonObject obj);
     void loadPowerMap();
     void savePowerMap();
     /** Zeitstempel fuer die Kennflaeche. Unixzeit wenn NTP steht, sonst
