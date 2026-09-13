@@ -5,8 +5,8 @@ zuerst diese Datei und danach gezielt weiter. Alle anderen Notizen in `debug/`
 sind Protokolle einzelner Arbeitsschritte und beschreiben den Stand *zu ihrem
 Zeitpunkt* — sie werden nicht nachgeführt.
 
-Stand dieser Datei: **2026-09-13** Arbeit an **0.3.12-dev**
-(SIM-Steuermodus nach Nachtest 4).
+Stand dieser Datei: **2026-09-13** Arbeit an **0.3.13-dev**
+(ERG-Decken-Assist über 0x11).
 FTP-Karriere: [debug/UPDATE_FTP_CAREER.md](debug/UPDATE_FTP_CAREER.md).
 FTP-Builtins: [debug/UPDATE_FTP_BUILTINS.md](debug/UPDATE_FTP_BUILTINS.md).
 ZWO: [debug/UPDATE_ZWO_IMPORT.md](debug/UPDATE_ZWO_IMPORT.md).
@@ -17,6 +17,7 @@ Nachtests: [debug/UPDATE_NACHTEST_PROBE.md](debug/UPDATE_NACHTEST_PROBE.md),
 [debug/UPDATE_NACHTEST_FORCE.md](debug/UPDATE_NACHTEST_FORCE.md).
 DeviceStore: [debug/UPDATE_DEVICE_STORE.md](debug/UPDATE_DEVICE_STORE.md).
 SIM: [debug/UPDATE_SIM_MODE.md](debug/UPDATE_SIM_MODE.md).
+ERG-Assist: [debug/UPDATE_ERG_SIM_ASSIST.md](debug/UPDATE_ERG_SIM_ASSIST.md).
 
 ---
 
@@ -29,7 +30,7 @@ SIM: [debug/UPDATE_SIM_MODE.md](debug/UPDATE_SIM_MODE.md).
 | Hub | `192.168.178.113:8093`, `fwType: ergo` |
 | Rollback-Bin | `nodes/esp32.ftmsprobe/dist/ftmsprobe.0.1.4.esp32s3.bin` |
 | Build-Host | Debian, `/home/martin/projects/esphub/esp32.ergo`, `pio` unter `/home/martin/.venvs/pio/bin/pio` |
-| Aktuelle Bin | `dist/ergo.0.3.12-dev.esp32s3.bin` |
+| Aktuelle Bin | `dist/ergo.0.3.13-dev.esp32s3.bin` |
 
 Die Entwurfs-Instanz auf Windows hat **nur git** — kein PlatformIO, keinen
 Compiler, kein Python. Sie kann nicht bauen und nicht testen. Bauen und Flashen
@@ -83,7 +84,7 @@ Nachtests 2026-09-13: [debug/HW_NACHTEST_20260913.md](debug/HW_NACHTEST_20260913
 5. `allowSimulation` wieder aus, wenn nicht dauerhaft nötig
 
 Erledigt bis v0.1.1: Caps-Fix … Progression, UI-JS-Fix.
-Erledigt 2026-09-13: Nachtest 4/5/Reconnect; Probe; Force 0.3.10; DeviceStore 0.3.11; SIM-Modus 0.3.12.
+Erledigt 2026-09-13: … SIM 0.3.12; ERG Sim-Assist 0.3.13.
 
 ## 6. Harte Regeln
 
@@ -98,7 +99,7 @@ Erledigt 2026-09-13: Nachtest 4/5/Reconnect; Probe; Force 0.3.10; DeviceStore 0.
    `ProfileStore`, `ControlMode`, `PowerController`, `HrController`,
    `RehaController`, `WorkoutEngine`, `WorkoutJson`, `SessionTracker`,
    `SessionStore`, `Zone`, `Progression`, `TestRunner`, `BridgeAssist`,
-   `CyclingCodec`, `ZwoImport`, `FtpCareer`, `DeviceStore`.
+   `CyclingCodec`, `ZwoImport`, `FtpCareer`, `DeviceStore`, `SimAssist`.
    (`FtmsServer` ist Arduino/NimBLE — Encoder darin nur über den Codec.)
 4. **Jeder FTMS-Write nur durch den Limiter.** Es gibt keine öffentliche Methode,
    die rohe Bytes an den Control Point schreibt; alles läuft durch

@@ -12,6 +12,7 @@
 
 #include "ble/FtmsCodec.h"
 #include "control/ZwoImport.h"
+#include "control/SimAssist.h"
 #include "core/FtpCareer.h"
 #include "core/Progression.h"
 #include "core/NetUtil.h"
@@ -450,6 +451,8 @@ void App::buildStatusJson(JsonDocument& doc) {
     erg["ceiling"] = powerCtl.ceiling();
     erg["levelTenths"] = powerCtl.lastLevelTenths();
     erg["mapReady"] = powerMap.ready() && powerMap.pointCount() > 0;
+    erg["simAssist"] = config.ergSimAssist && config.allowSimulation;
+    erg["simAssistGradePct"] = lastErgAssistGrade_ / 100.0f;
     doc["hrTargetBpm"] = control.hrTargetBpm();
     JsonObject hrhold = doc["hrHold"].to<JsonObject>();
     hrhold["targetBpm"] = hrCtl.targetHr();
@@ -1034,6 +1037,7 @@ void App::registerControlRoutes() {
         if (config.allowSimulation && ble.ready(ergo::Role::Bike)) {
             ftms.setSimulation(0, 0, 40, 51, millis());
         }
+        lastErgAssistGrade_ = 0;
         control.setMode(ergo::ControlMode::Off);
         powerCtl.reset();
         hrCtl.reset();
@@ -2596,7 +2600,13 @@ void App::loopCalibration(unsigned long now) {
 }
 
 void App::loopErg(unsigned long now) {
-    if (!control.allowsErg()) return;
+    if (!control.allowsErg()) {
+        if (lastErgAssistGrade_ != 0 && config.allowSimulation && ble.ready(ergo::Role::Bike)) {
+            ftms.setSimulation(0, 0, 40, 51, now);
+            lastErgAssistGrade_ = 0;
+        }
+        return;
+    }
     if (session_.holdLoad()) return;
     // HR verloren + Freeze: Stufe halten, keine Watt→Level-Anpassung.
     if (control.allowsHrHold() && hrCtl.lost() &&
@@ -2616,6 +2626,7 @@ void App::loopErg(unsigned long now) {
     }
     if (!ble.ready(ergo::Role::Bike) || !ftms.attached()) return;
     if (sweep.running()) return;
+    if (control.allowsSim()) return;
 
     const bool fresh = ftms.hasLive() && !ftms.stale(now);
     const float rpm = fresh ? ftms.live().cadenceRpm() : 0.0f;
@@ -2627,19 +2638,45 @@ void App::loopErg(unsigned long now) {
     }
 
     const ergo::PowerController::Tick t = powerCtl.tick(now, rpm, watt, fresh, powerMap);
-    if (!t.wantWrite || t.levelTenths < 0) return;
+    if (t.wantWrite && t.levelTenths >= 0) {
+        const ergo::FtmsClient::Result r = ftms.setLevelTenths(t.levelTenths, now);
+        if (r == ergo::FtmsClient::Result::Ok) {
+            const char* tag = "ERG";
+            if (control.allowsHrHold()) tag = "HR";
+            else if (control.allowsWorkout()) tag = "WO";
+            else if (control.allowsReha()) tag = "REHA";
+            Serial.printf("[%s] Ziel %.0f W → Stufe %d%s (Ist~%.0f W, rpm=%.0f)\n", tag, t.targetW,
+                          (int)t.levelTenths, t.ceiling ? " CEILING" : "", t.smoothedW, rpm);
+        } else if (r != ergo::FtmsClient::Result::Deferred) {
+            Serial.printf("[ERG] Write abgelehnt: %s (%s)\n", ergo::FtmsClient::resultName(r),
+                          ftms.lastDenyReason());
+        }
+    }
 
-    const ergo::FtmsClient::Result r = ftms.setLevelTenths(t.levelTenths, now);
-    if (r == ergo::FtmsClient::Result::Ok) {
-        const char* tag = "ERG";
-        if (control.allowsHrHold()) tag = "HR";
-        else if (control.allowsWorkout()) tag = "WO";
-        else if (control.allowsReha()) tag = "REHA";
-        Serial.printf("[%s] Ziel %.0f W → Stufe %d%s (Ist~%.0f W, rpm=%.0f)\n", tag, t.targetW,
-                      (int)t.levelTenths, t.ceiling ? " CEILING" : "", t.smoothedW, rpm);
-    } else if (r != ergo::FtmsClient::Result::Deferred) {
-        Serial.printf("[ERG] Write abgelehnt: %s (%s)\n", ergo::FtmsClient::resultName(r),
-                      ftms.lastDenyReason());
+    // Decken-Assist ueber 0x11 (Nachtest 4), optional.
+    if (!(config.allowSimulation && config.ergSimAssist)) {
+        if (lastErgAssistGrade_ != 0) {
+            ftms.setSimulation(0, 0, 40, 51, now);
+            lastErgAssistGrade_ = 0;
+        }
+        return;
+    }
+    if (!fresh) return;
+
+    const int16_t want =
+        ergo::simAssistGradeHundredth(t.targetW, t.smoothedW, t.ceiling || powerCtl.ceiling());
+    const bool due =
+        (want != lastErgAssistGrade_) || (now - lastErgAssistWriteMs_ >= 8000UL);
+    if (!due) return;
+    const auto sr = ftms.setSimulation(0, want, 40, 51, now);
+    if (sr == ergo::FtmsClient::Result::Ok) {
+        if (want != lastErgAssistGrade_) {
+            Serial.printf("[ERG] SimAssist grade=%.2f%% (Ziel %.0f Ist~%.0f ceiling=%d)\n",
+                          want / 100.0f, t.targetW, t.smoothedW,
+                          (int)(t.ceiling || powerCtl.ceiling()));
+        }
+        lastErgAssistGrade_ = want;
+        lastErgAssistWriteMs_ = now;
     }
 }
 

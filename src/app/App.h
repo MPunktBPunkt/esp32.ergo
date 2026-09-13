@@ -183,6 +183,8 @@ private:
     unsigned long mapSaved_ = 0;
     bool simDirty_ = false;
     unsigned long lastSimWriteMs_ = 0;
+    int16_t lastErgAssistGrade_ = 0;
+    unsigned long lastErgAssistWriteMs_ = 0;
 
     // ── Debug-Modus und Steuer-Journal ──────────────────────────────────────
     /**

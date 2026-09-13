@@ -80,6 +80,12 @@ public:
      */
     bool allowSimulation = false;
 
+    /**
+     * Bei ERG/HR/REHA/WORKOUT: wenn die Stufendecke greift, Zusatzlast ueber 0x11.
+     * Braucht allowSimulation. Default aus.
+     */
+    bool ergSimAssist = false;
+
     void begin();
     void load();
     void save();
@@ -89,5 +95,5 @@ public:
     bool fromJson(JsonVariantConst obj);
 
 private:
-    static constexpr uint8_t kConfigVersion = 5;  // 5: allowSimulation
+    static constexpr uint8_t kConfigVersion = 6;  // 6: ergSimAssist
 };
