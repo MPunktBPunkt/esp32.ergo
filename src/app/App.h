@@ -144,6 +144,7 @@ private:
     // ── Kalibrierung ────────────────────────────────────────────────────────
     void loopCalibration(unsigned long now);
     void loopErg(unsigned long now);
+    void loopSim(unsigned long now);
     void loopHr(unsigned long now);
     void loopReha(unsigned long now);
     void loopWorkout(unsigned long now);
@@ -180,6 +181,8 @@ private:
     unsigned long lastPassive_ = 0;
     bool mapDirty_ = false;
     unsigned long mapSaved_ = 0;
+    bool simDirty_ = false;
+    unsigned long lastSimWriteMs_ = 0;
 
     // ── Debug-Modus und Steuer-Journal ──────────────────────────────────────
     /**

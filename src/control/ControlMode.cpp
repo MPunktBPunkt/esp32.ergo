@@ -56,24 +56,35 @@ bool controlModeFromToken(const char* token, ControlMode& out) {
 
 bool ControlState::setMode(ControlMode m) {
     if (m != ControlMode::Off && m != ControlMode::ManualLevel && m != ControlMode::ManualErg &&
-        m != ControlMode::HrHold && m != ControlMode::Reha && m != ControlMode::Workout)
+        m != ControlMode::HrHold && m != ControlMode::Reha && m != ControlMode::Workout &&
+        m != ControlMode::Sim)
         return false;
     mode_ = m;
     if (m == ControlMode::Off) {
         levelTargetTenths_ = -1;
         powerTargetW_ = 0.0f;
         hrTargetBpm_ = 0;
+        gradeTargetHundredth_ = 0;
     } else if (m == ControlMode::ManualLevel) {
         powerTargetW_ = 0.0f;
         hrTargetBpm_ = 0;
+        gradeTargetHundredth_ = 0;
     } else if (m == ControlMode::ManualErg) {
         levelTargetTenths_ = -1;
         hrTargetBpm_ = 0;
+        gradeTargetHundredth_ = 0;
     } else if (m == ControlMode::HrHold) {
         levelTargetTenths_ = -1;
+        gradeTargetHundredth_ = 0;
     } else if (m == ControlMode::Reha || m == ControlMode::Workout) {
         levelTargetTenths_ = -1;
         hrTargetBpm_ = 0;
+        gradeTargetHundredth_ = 0;
+    } else if (m == ControlMode::Sim) {
+        levelTargetTenths_ = -1;
+        powerTargetW_ = 0.0f;
+        hrTargetBpm_ = 0;
+        // grade bleibt / wird per setGrade gesetzt
     }
     return true;
 }
@@ -98,6 +109,15 @@ bool ControlState::setHrTargetBpm(uint8_t bpm) {
     if (mode_ != ControlMode::HrHold) return false;
     if (bpm < 40 || bpm > 220) return false;
     hrTargetBpm_ = bpm;
+    return true;
+}
+
+bool ControlState::setGradeTargetHundredth(int16_t hundredth) {
+    if (mode_ != ControlMode::Sim) return false;
+    // Limiter klemmt weiter; hier nur grober Rahmen (±20 %).
+    if (hundredth < -2000) hundredth = -2000;
+    if (hundredth > 2000) hundredth = 2000;
+    gradeTargetHundredth_ = hundredth;
     return true;
 }
 

@@ -66,10 +66,18 @@ static void test_reha(void) {
     TEST_ASSERT_FALSE(c.setHrTargetBpm(120));
 }
 
-static void test_unimplemented_modes(void) {
+static void test_sim_mode(void) {
     ControlState c;
-    TEST_ASSERT_FALSE(c.setMode(ControlMode::Sim));
-    TEST_ASSERT_EQUAL_INT((int)ControlMode::Off, (int)c.mode());
+    TEST_ASSERT_TRUE(c.setMode(ControlMode::Sim));
+    TEST_ASSERT_TRUE(c.allowsSim());
+    TEST_ASSERT_TRUE(c.allowsAnyLoadWrite());
+    TEST_ASSERT_FALSE(c.allowsLevelWrite());
+    TEST_ASSERT_FALSE(c.allowsErg());
+    TEST_ASSERT_TRUE(c.setGradeTargetHundredth(300));  // 3 %
+    TEST_ASSERT_EQUAL_INT16(300, c.gradeTargetHundredth());
+    TEST_ASSERT_FALSE(c.setPowerTargetW(100.0f));
+    TEST_ASSERT_TRUE(c.setMode(ControlMode::Off));
+    TEST_ASSERT_EQUAL_INT16(0, c.gradeTargetHundredth());
 }
 
 static void test_workout_mode(void) {
@@ -121,7 +129,7 @@ int main(int, char**) {
     RUN_TEST(test_workout_mode);
     RUN_TEST(test_off_clears_target);
     RUN_TEST(test_level_while_off_denied);
-    RUN_TEST(test_unimplemented_modes);
+    RUN_TEST(test_sim_mode);
     RUN_TEST(test_token_parse);
     RUN_TEST(test_names);
     return UNITY_END();

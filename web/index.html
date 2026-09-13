@@ -337,6 +337,7 @@ footer{color:var(--dim);font-size:12px;text-align:center;margin-top:26px}
         <button id="moff" class="ghost">OFF</button>
         <button id="mlvl" class="ghost">LEVEL</button>
         <button id="merg" class="ghost">ERG</button>
+        <button id="msim" class="ghost">SIM</button>
         <button id="mhr" class="ghost">HR</button>
         <button id="mreha" class="ghost">REHA</button>
         <button id="mwo" class="ghost">PHYSIO</button>
@@ -352,6 +353,11 @@ footer{color:var(--dim);font-size:12px;text-align:center;margin-top:26px}
           <label class="f" style="flex:1;margin:0"><div class="k">Zielwatt (ERG)</div>
             <input type="number" id="ergw" min="20" max="300" step="5" value="80"></label>
           <button id="erggo" class="ghost">Ziel setzen</button>
+        </div>
+        <div class="row flat">
+          <label class="f" style="flex:1;margin:0"><div class="k">Steigung % (SIM)</div>
+            <input type="number" id="simg" min="-10" max="20" step="0.5" value="3"></label>
+          <button id="simgo" class="ghost">Steigung setzen</button>
         </div>
         <div class="row flat">
           <label class="f" style="flex:1;margin:0"><div class="k">Zielpuls (HR)</div>
@@ -626,9 +632,9 @@ footer{color:var(--dim);font-size:12px;text-align:center;margin-top:26px}
         Wattziele der App werden über die Kennfläche in Stufen übersetzt — nicht als
         <code>0x05</code> ans Bike. Difficulty skaliert App-Watt (100 % = 1:1).
         HR-Deckel senkt die Last bei hohem Puls, ohne die App-Verbindung zu stören.</div>
-      <label class="chk"><input type="checkbox" id="c-allowSimulation"> Simulation 0x11 freigeben (Nachtest 4)</label>
-      <div class="hint">Nur einschalten für den Simulationstest. Steigung kann stark wirken —
-        mit 1&nbsp;% beginnen, Not-Stop bereithalten. Speichern aktiviert den Limiter neu.</div>
+      <label class="chk"><input type="checkbox" id="c-allowSimulation"> Simulation 0x11 freigeben (SIM-Modus / Bridge / Nachtest)</label>
+      <div class="hint">Nach Nachtest 4 belegt wirksam ab ~3&nbsp;%. Ride-Button SIM braucht dieses Häkchen.
+        Steigung vorsichtig — mit 1–3&nbsp;% starten, Not-Stop bereithalten.</div>
       <h3 style="margin-top:1.2rem">Aktives Bike (Geräteprofil)</h3>
       <div class="hint" id="dev-sum">Kein Gerät — Bike verbinden (Kennfläche wird je MAC gehalten).</div>
       <div class="fgrid">
@@ -1172,7 +1178,7 @@ function renderBle(s){
   const hh=s.hrHold||{};
   const rh=s.reha||{};
   const wo=s.workout||{};
-  const loadModes={MANUAL_LEVEL:1,MANUAL_ERG:1,HR_HOLD:1,REHA:1,WORKOUT:1};
+  const loadModes={MANUAL_LEVEL:1,MANUAL_ERG:1,HR_HOLD:1,REHA:1,WORKOUT:1,SIM:1};
   if(loadModes[prevMode] && mode==='OFF') afterStop=true;
   if(mode!=='OFF') afterStop=false;
   prevMode=mode;
@@ -1358,6 +1364,10 @@ function renderBle(s){
       +(erg.ceiling?' · Decke':'')
       +(erg.smoothedW!=null?(' · Ist~'+Math.round(erg.smoothedW)+' W'):'');
   }
+  if(mode==='SIM'){
+    const gp=s.gradeTargetPct!=null?s.gradeTargetPct:(s.gradeTargetHundredth||0)/100;
+    msub='Steigung '+(gp!=null?Number(gp).toFixed(1):'?')+' % · 0x11';
+  }
   if(mode==='HR_HOLD'){
     msub='Ziel '+(hh.targetBpm||s.hrTargetBpm||'-')+' bpm'
       +(hh.powerTargetW!=null?(' · ~'+Math.round(hh.powerTargetW)+' W'):'')
@@ -1402,17 +1412,20 @@ function renderBle(s){
   $('moff').classList.toggle('ghost', mode!=='OFF');
   $('mlvl').classList.toggle('ghost', mode!=='MANUAL_LEVEL');
   $('merg').classList.toggle('ghost', mode!=='MANUAL_ERG');
+  if($('msim')) $('msim').classList.toggle('ghost', mode!=='SIM');
   $('mhr').classList.toggle('ghost', mode!=='HR_HOLD');
   $('mreha').classList.toggle('ghost', mode!=='REHA');
   $('mwo').classList.toggle('ghost', mode!=='WORKOUT');
   drawRidePlan(s);
-  const ergLike=mode==='MANUAL_ERG'||mode==='HR_HOLD'||mode==='REHA'||(mode==='WORKOUT'&&!wo.selfPaced);
+  const ergLike=mode==='MANUAL_ERG'||mode==='HR_HOLD'||mode==='REHA'||mode==='SIM'||(mode==='WORKOUT'&&!wo.selfPaced);
   $('lvlup').disabled=!hasP||ergLike;
   $('lvldn').disabled=!hasP||ergLike;
   const adv=$('rideadv');
-  if(adv && (mode==='MANUAL_ERG'||mode==='HR_HOLD'||mode==='REHA')) adv.open=true;
+  if(adv && (mode==='MANUAL_ERG'||mode==='HR_HOLD'||mode==='REHA'||mode==='SIM')) adv.open=true;
   $('mlvl').disabled=!hasP;
   $('merg').disabled=!hasP||!(erg.mapReady);
+  const allowSim=!!(s.allowSimulation);
+  if($('msim')) $('msim').disabled=!hasP||!allowSim;
   $('mhr').disabled=!hasP||!(erg.mapReady);
   $('mreha').disabled=!hasP||!(erg.mapReady);
   $('mwo').disabled=!hasP||!(erg.mapReady);
@@ -1420,8 +1433,11 @@ function renderBle(s){
   $('wopause').disabled=!woOn||wo.state==='PAUSED';
   $('woresume').disabled=!woOn||wo.state!=='PAUSED';
   $('woskip').disabled=!woOn;
-  $('erggo').disabled=!hasP||!(erg.mapReady)||mode==='HR_HOLD';
+  $('erggo').disabled=!hasP||!(erg.mapReady)||mode==='HR_HOLD'||mode==='SIM';
+  if($('simgo')) $('simgo').disabled=!hasP||!allowSim;
   $('hrgo').disabled=!hasP||!(erg.mapReady)||mode!=='HR_HOLD';
+  if(mode==='SIM'&&s.gradeTargetPct!=null&&document.activeElement!==$('simg'))
+    $('simg').value=Number(s.gradeTargetPct).toFixed(1);
   if(hh.targetBpm&&document.activeElement!==$('hrbpm')) $('hrbpm').value=hh.targetBpm;
   if(mode==='REHA'){
     if(rh.desiredW!=null&&document.activeElement!==$('rehaw')) $('rehaw').value=Math.round(rh.desiredW);
@@ -1940,6 +1956,16 @@ $('mlvl').onclick=()=>post('/api/control/mode?mode=level');
 $('merg').onclick=()=>{
   const w=+$('ergw').value||80;
   post('/api/control/mode?mode=erg&watt='+w);
+};
+if($('msim')) $('msim').onclick=()=>{
+  const g=+$('simg').value;
+  const grade=(isFinite(g)?g:3);
+  post('/api/control/mode?mode=sim&grade='+grade);
+};
+if($('simgo')) $('simgo').onclick=()=>{
+  const g=+$('simg').value;
+  const grade=(isFinite(g)?g:3);
+  post('/api/control/sim?grade='+grade);
 };
 $('mhr').onclick=()=>{
   const bpm=+$('hrbpm').value||130;
@@ -3101,9 +3127,9 @@ if($('prt3f')) $('prt3f').onclick=()=>{
   if(!confirm('0x05 mit force an den Varon senden? Nur Nachtest — Success kann lügen.')) return;
   probePost('/api/control/power?watt=100&raw=1&force=1');
 };
-if($('prt4a')) $('prt4a').onclick=()=>probePost('/api/control/sim?grade=1');
-if($('prt4b')) $('prt4b').onclick=()=>probePost('/api/control/sim?grade=3');
-if($('prt4c')) $('prt4c').onclick=()=>probePost('/api/control/sim?grade=6');
+if($('prt4a')) $('prt4a').onclick=()=>probePost('/api/control/sim?grade=1&mode=0');
+if($('prt4b')) $('prt4b').onclick=()=>probePost('/api/control/sim?grade=3&mode=0');
+if($('prt4c')) $('prt4c').onclick=()=>probePost('/api/control/sim?grade=6&mode=0');
 $('rgon').onclick=()=>{
   const on=$('rgst').textContent!=='aus';
   post('/api/debug/ring?on='+(on?0:1),'rgmsg');

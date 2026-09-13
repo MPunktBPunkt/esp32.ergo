@@ -223,7 +223,7 @@ Limiter::Verdict Limiter::checkPower(const uint8_t* cmd, size_t len) const {
 }
 
 Limiter::Verdict Limiter::checkSimulation(const uint8_t* cmd, size_t len) const {
-    if (!cfg_.allowSimulation) return deny("Simulation gesperrt — Nachtest 4 offen");
+    if (!cfg_.allowSimulation) return deny("Simulation gesperrt — allowSimulation aus");
     if (!caps_ || !caps_->valid) return deny("Faehigkeiten des Geraets unbekannt");
     if (!caps_->canSimulate) return deny("Geraet kennt keine Simulation");
     if (len != 7) return deny("unbekannte Nutzlast fuer 0x11");

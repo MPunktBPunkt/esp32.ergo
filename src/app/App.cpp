@@ -442,6 +442,8 @@ void App::buildStatusJson(JsonDocument& doc) {
     doc["mode"] = ergo::controlModeName(control.mode());
     doc["levelTargetTenths"] = control.levelTargetTenths();
     doc["powerTargetW"] = control.powerTargetW();
+    doc["gradeTargetHundredth"] = control.gradeTargetHundredth();
+    doc["gradeTargetPct"] = control.gradeTargetHundredth() / 100.0f;
     JsonObject erg = doc["erg"].to<JsonObject>();
     erg["targetW"] = powerCtl.targetW();
     erg["smoothedW"] = powerCtl.smoothedW();
@@ -637,6 +639,7 @@ void App::buildStatusJson(JsonDocument& doc) {
     // ein Bike haengt. Ein Neustart unter Last laesst das Ergometer gebremst
     // stehen — siehe Nachtest 6.
     doc["bikeLink"] = ble.ready(ergo::Role::Bike);
+    doc["allowSimulation"] = config.allowSimulation;
     {
         JsonObject dev = doc["device"].to<JsonObject>();
         dev["count"] = devices.count();
@@ -1075,11 +1078,17 @@ void App::registerControlRoutes() {
         }
         if (m != ergo::ControlMode::Off && m != ergo::ControlMode::ManualLevel &&
             m != ergo::ControlMode::ManualErg && m != ergo::ControlMode::HrHold &&
-            m != ergo::ControlMode::Reha && m != ergo::ControlMode::Workout) {
+            m != ergo::ControlMode::Reha && m != ergo::ControlMode::Workout &&
+            m != ergo::ControlMode::Sim) {
             NetUtil::sendError(server, 501, "Modus noch nicht implementiert");
             return;
         }
         if (m != ergo::ControlMode::Off && !requireProfile()) return;
+        if (m == ergo::ControlMode::Sim && !config.allowSimulation) {
+            NetUtil::sendError(server, 409,
+                               "Simulation gesperrt — Einstellungen: allowSimulation an");
+            return;
+        }
         if ((m == ergo::ControlMode::ManualErg || m == ergo::ControlMode::HrHold ||
              m == ergo::ControlMode::Reha || m == ergo::ControlMode::Workout) &&
             (!powerMap.ready() || powerMap.pointCount() == 0)) {
@@ -1229,11 +1238,39 @@ void App::registerControlRoutes() {
             doc["steps"] = workout.stepCount();
             doc["mapPoints"] = powerMap.pointCount();
         }
+        if (m == ergo::ControlMode::Sim) {
+            powerCtl.reset();
+            hrCtl.reset();
+            rehaCtl.reset();
+            workout.stop();
+            float gradePct = -999.0f;
+            if (hasBody && !body["grade"].isNull()) gradePct = body["grade"].as<float>();
+            else if (server.hasArg("grade")) gradePct = server.arg("grade").toFloat();
+            if (gradePct < -900.0f) gradePct = 0.0f;
+            if (gradePct < -45.0f) gradePct = -45.0f;
+            if (gradePct > 45.0f) gradePct = 45.0f;
+            const int16_t gh = (int16_t)lroundf(gradePct * 100.0f);
+            control.setGradeTargetHundredth(gh);
+            simDirty_ = true;
+            doc["gradePct"] = gradePct;
+            doc["gradeHundredth"] = gh;
+            if (ble.ready(ergo::Role::Bike)) {
+                const auto r = ftms.setSimulation(0, gh, 40, 51, millis());
+                doc["write"] = ergo::FtmsClient::resultName(r);
+                if (r == ergo::FtmsClient::Result::Ok) {
+                    simDirty_ = false;
+                    lastSimWriteMs_ = millis();
+                } else if (r == ergo::FtmsClient::Result::Denied ||
+                           r == ergo::FtmsClient::Result::Deferred)
+                    doc["reason"] = ftms.lastDenyReason();
+            }
+        }
         if (m == ergo::ControlMode::ManualErg || m == ergo::ControlMode::HrHold) {
             workout.stop();
         }
         if (m == ergo::ControlMode::Off && ble.ready(ergo::Role::Bike)) {
             ftms.stop(millis());
+            if (config.allowSimulation) ftms.setSimulation(0, 0, 40, 51, millis());
             powerCtl.reset();
             hrCtl.reset();
             rehaCtl.reset();
@@ -1373,13 +1410,39 @@ void App::registerControlRoutes() {
             server.hasArg("crr") ? (uint8_t)server.arg("crr").toInt() : (uint8_t)40;
         const uint8_t cw =
             server.hasArg("cw") ? (uint8_t)server.arg("cw").toInt() : (uint8_t)51;
+
+        // Probe-Knöpfe und SIM-Modus: Ziel merken und ggf. Modus setzen.
+        const bool enterMode = server.arg("mode") != "0";
+        if (enterMode && control.mode() != ergo::ControlMode::Sim) {
+            if (control.sessionActive() && control.mode() != ergo::ControlMode::Sim)
+                recordSessionEnd("switch");
+            if (!control.setMode(ergo::ControlMode::Sim)) {
+                NetUtil::sendError(server, 409, "SIM-Modus abgelehnt");
+                return;
+            }
+            powerCtl.reset();
+            hrCtl.reset();
+            rehaCtl.reset();
+            workout.stop();
+            if (!session_.active()) beginSession("SIM");
+        }
+        if (control.mode() == ergo::ControlMode::Sim)
+            control.setGradeTargetHundredth(gradeHundredth);
+
         char lab[24];
         snprintf(lab, sizeof(lab), "pre_sim_g%.0f", (double)gradePct);
         captureProbeMark_(lab);
         const auto r = ftms.setSimulation(windMms, gradeHundredth, crr, cw, millis());
+        if (r == ergo::FtmsClient::Result::Ok) {
+            simDirty_ = false;
+            lastSimWriteMs_ = millis();
+        } else {
+            simDirty_ = true;
+        }
         JsonDocument doc;
         doc["ok"] = (r == ergo::FtmsClient::Result::Ok);
         doc["opcode"] = "11";
+        doc["mode"] = ergo::controlModeName(control.mode());
         doc["gradePct"] = gradePct;
         doc["gradeHundredth"] = gradeHundredth;
         doc["windMms"] = windMms;
@@ -2576,6 +2639,27 @@ void App::loopErg(unsigned long now) {
                       (int)t.levelTenths, t.ceiling ? " CEILING" : "", t.smoothedW, rpm);
     } else if (r != ergo::FtmsClient::Result::Deferred) {
         Serial.printf("[ERG] Write abgelehnt: %s (%s)\n", ergo::FtmsClient::resultName(r),
+                      ftms.lastDenyReason());
+    }
+}
+
+void App::loopSim(unsigned long now) {
+    if (!control.allowsSim()) return;
+    if (!config.allowSimulation) return;
+    if (!ble.ready(ergo::Role::Bike) || !ftms.attached()) return;
+    if (sweep.running()) return;
+
+    // Erneut senden wenn schmutzig oder alle 8 s (Bike vergisst teils Last).
+    const bool due = simDirty_ || (now - lastSimWriteMs_ >= 8000UL);
+    if (!due) return;
+
+    const int16_t gh = control.gradeTargetHundredth();
+    const auto r = ftms.setSimulation(0, gh, 40, 51, now);
+    if (r == ergo::FtmsClient::Result::Ok) {
+        simDirty_ = false;
+        lastSimWriteMs_ = now;
+    } else if (r != ergo::FtmsClient::Result::Deferred) {
+        Serial.printf("[SIM] Write abgelehnt: %s (%s)\n", ergo::FtmsClient::resultName(r),
                       ftms.lastDenyReason());
     }
 }
@@ -4290,6 +4374,7 @@ void App::loop() {
     loopReha(now);
     loopWorkout(now);
     loopErg(now);
+    loopSim(now);
     loopBridge(now);
 
     // Waehrend eines aktiven Links haeufiger senden — beim Fahren sind 2 s
