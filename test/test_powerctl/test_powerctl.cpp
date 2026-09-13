@@ -83,6 +83,7 @@ static void test_integral_raises_level(void) {
     cfg.iLimitW = 50.0f;
     cfg.deadbandW = 5.0f;
     cfg.smoothTauS = 0.5f;
+    cfg.maxStepTenths = 0;  // freier Sprung — Integral-Test isoliert
     pc.begin(cfg);
     pc.setTargetW(90.0f);  // Stufe 8 = 90
 
@@ -100,6 +101,50 @@ static void test_integral_raises_level(void) {
     TEST_ASSERT_TRUE(t1.levelTenths >= 80);
 }
 
+static void test_slew_limits_jump(void) {
+    PowerMap map;
+    fillMap(map);
+    PowerController pc;
+    PowerControllerConfig cfg;
+    cfg.periodMs = 1000;
+    cfg.iGain = 0.0f;
+    cfg.maxStepTenths = 10;  // 1 Stufe
+    cfg.retargetW = 20.0f;
+    pc.begin(cfg);
+    pc.setTargetW(50.0f);  // Stufe ~4 → 40 tenths
+    auto a = pc.tick(1000, 60.0f, 40.0f, true, map);
+    TEST_ASSERT_TRUE(a.wantWrite);
+    TEST_ASSERT_EQUAL_INT16(40, a.levelTenths);
+
+    pc.setTargetW(150.0f);  // Map will ~Stufe 14 — ohne Slew Sprung
+    auto b = pc.tick(2000, 60.0f, 40.0f, true, map);
+    TEST_ASSERT_TRUE(b.wantWrite);
+    TEST_ASSERT_EQUAL_INT16(50, b.levelTenths);  // nur +1 Stufe
+    TEST_ASSERT_TRUE(b.desiredTenths > 50);
+}
+
+static void test_small_retarget_no_immediate_write(void) {
+    PowerMap map;
+    fillMap(map);
+    PowerController pc;
+    PowerControllerConfig cfg;
+    cfg.periodMs = 5000;
+    cfg.iGain = 0.0f;
+    cfg.retargetW = 20.0f;
+    pc.begin(cfg);
+    pc.setTargetW(80.0f);
+    auto a = pc.tick(1000, 60.0f, 70.0f, true, map);
+    TEST_ASSERT_TRUE(a.wantWrite);
+
+    pc.setTargetW(85.0f);  // < retargetW — kein Sofort-Write
+    auto b = pc.tick(1500, 60.0f, 70.0f, true, map);
+    TEST_ASSERT_FALSE(b.wantWrite);
+
+    pc.setTargetW(120.0f);  // >= retargetW — sofort faellig
+    auto c = pc.tick(1600, 60.0f, 70.0f, true, map);
+    TEST_ASSERT_TRUE(c.wantWrite);
+}
+
 void setUp(void) {}
 void tearDown(void) {}
 
@@ -110,5 +155,7 @@ int main(int, char**) {
     RUN_TEST(test_no_map_no_write);
     RUN_TEST(test_period_limits_writes);
     RUN_TEST(test_integral_raises_level);
+    RUN_TEST(test_slew_limits_jump);
+    RUN_TEST(test_small_retarget_no_immediate_write);
     return UNITY_END();
 }

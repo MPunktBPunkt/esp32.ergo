@@ -111,4 +111,5 @@ Siehe auch [`debug/UPDATE_BRIDGE.md`](../../debug/UPDATE_BRIDGE.md).
 5. Coach **STOP** → Lock weg, Bike entlastet; MyWhoosh neu Last → Lock wieder da
 6. Difficulty / HR-Deckel optional prüfen
 
-Offen bleibt ggf. Dämpfung der ERG-Stufenjagd durch Kadenz/Map (separates Thema).
+Offen bleibt ggf. Feintuning der Slew-Parameter nach Bridge-Abnahme
+(siehe Firmware 0.3.15 / [UPDATE_ERG_SLEW](../../debug/UPDATE_ERG_SLEW.md)).

@@ -14,6 +14,9 @@
  * Die Stufe ist diskret (16 Schritte). Das Watt-Ziel wird im Regelfall nicht
  * exakt getroffen; `ceiling` sagt, wenn selbst die hoechste bekannte Stufe
  * nicht reicht.
+ *
+ * Stufenjagd-Schutz (0.3.15): max. eine Stufe pro Regelzyklus Richtung Ziel;
+ * kleine Ziel-Updates (MyWhoosh) loesen keinen Sofort-Sprung aus.
  */
 namespace ergo {
 
@@ -28,6 +31,16 @@ struct PowerControllerConfig {
     float deadbandW = 8.0f;
     /** Glättung der Ist-Leistung (Zeitkonstante, Sekunden). */
     float smoothTauS = 5.0f;
+    /**
+     * Max. Stufenwechsel pro Write in Zehnteln (10 = 1 Stufe).
+     * 0 = unbegrenzter Sprung (nur Tests / Sonderfälle).
+     */
+    uint16_t maxStepTenths = 10;
+    /**
+     * |ΔZielwatt| ab dem I-Reset und sofortiger Write erlaubt wird.
+     * Darunter nur Zielwert aktualisieren (Bridge-Spam).
+     */
+    float retargetW = 20.0f;
 };
 
 class PowerController {
@@ -41,6 +54,8 @@ public:
         float effectiveTargetW = 0.0f;  // inkl. Integral
         float smoothedW = 0.0f;
         float estimatedW = 0.0f;  // Map-Schätzung für gewählte Stufe
+        /** Map-Wunschstufe vor Slew (Diagnose). */
+        int16_t desiredTenths = -1;
     };
 
     void begin(const PowerControllerConfig& cfg = {});

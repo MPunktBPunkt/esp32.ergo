@@ -604,6 +604,9 @@ Weiter gilt:
   Einzelwerte streuen im Labor um ±15 W.
 - Regelzyklus im Bereich 5–10 s. Schneller bringt nichts, weil jede Stufe
   einschwingen muss und die Leistung ohnehin geglättet wird.
+- **Stufen-Slew (0.3.15):** höchstens eine Stufe pro Zyklus Richtung Map-Wunsch;
+  kleine Ziel-Updates (&lt; ~20 W, typisch Bridge-Spam) lösen keinen Sofort-Sprung
+  aus. Siehe [debug/UPDATE_ERG_SLEW.md](../../debug/UPDATE_ERG_SLEW.md).
 
 ### `HrController` — Pulsregelung
 

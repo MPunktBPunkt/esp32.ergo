@@ -1,7 +1,7 @@
 #pragma once
 
 #ifndef FW_VERSION
-#define FW_VERSION "0.3.14-dev"
+#define FW_VERSION "0.3.15-dev"
 #endif
 
 // ------------------------------------------------------------- Identitaet

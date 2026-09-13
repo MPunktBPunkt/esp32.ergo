@@ -1,5 +1,7 @@
 #include "control/PowerController.h"
 
+#include <math.h>
+
 namespace ergo {
 
 void PowerController::begin(const PowerControllerConfig& cfg) {
@@ -9,6 +11,7 @@ void PowerController::begin(const PowerControllerConfig& cfg) {
     if (cfg_.iGain < 0.0f) cfg_.iGain = 0.0f;
     if (cfg_.iLimitW < 0.0f) cfg_.iLimitW = 0.0f;
     if (cfg_.deadbandW < 0.0f) cfg_.deadbandW = 0.0f;
+    if (cfg_.retargetW < 0.0f) cfg_.retargetW = 0.0f;
     reset();
 }
 
@@ -24,11 +27,14 @@ void PowerController::reset() {
 
 void PowerController::setTargetW(float watt) {
     if (watt < 0.0f) watt = 0.0f;
-    if (watt != targetW_) {
-        targetW_ = watt;
-        integralW_ = 0.0f;  // neues Ziel: Vorsteuerung neu anfahren
-        lastLevel_ = -1;
-        lastWriteMs_ = 0;   // sofortigen ersten Write erlauben
+    const float delta = fabsf(watt - targetW_);
+    if (watt == targetW_) return;
+    targetW_ = watt;
+    // Kleine Ziel-Updates (MyWhoosh ERG-Spam): nur Ziel, kein I-Reset,
+    // kein Sofort-Write und vor allem kein lastLevel_=-1 (Stufenjagd).
+    if (delta >= cfg_.retargetW) {
+        integralW_ = 0.0f;
+        lastWriteMs_ = 0;
     }
 }
 
@@ -74,9 +80,9 @@ PowerController::Tick PowerController::tick(uint32_t nowMs, float rpm, float wat
     const float effective = targetW_ + integralW_;
     t.effectiveTargetW = effective;
 
-    int16_t tenths = -1;
+    int16_t desired = -1;
     bool ceiling = false;
-    if (!map.bestLevel(effective, rpm, tenths, ceiling)) {
+    if (!map.bestLevel(effective, rpm, desired, ceiling)) {
         // Keine Stuetzstelle fuer diese Kadenz — kein Write.
         ceiling_ = true;
         t.ceiling = true;
@@ -84,6 +90,15 @@ PowerController::Tick PowerController::tick(uint32_t nowMs, float rpm, float wat
     }
     ceiling_ = ceiling;
     t.ceiling = ceiling;
+    t.desiredTenths = desired;
+
+    int16_t tenths = desired;
+    // Slew: hoechstens maxStepTenths Richtung Map-Wunsch (0 = freier Sprung).
+    if (cfg_.maxStepTenths > 0 && lastLevel_ >= 0) {
+        const int16_t step = (int16_t)cfg_.maxStepTenths;
+        if (tenths > lastLevel_ + step) tenths = (int16_t)(lastLevel_ + step);
+        else if (tenths < lastLevel_ - step) tenths = (int16_t)(lastLevel_ - step);
+    }
     t.levelTenths = tenths;
 
     float est = 0.0f;
