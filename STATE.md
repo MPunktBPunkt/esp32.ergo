@@ -54,28 +54,30 @@ siehe [UPDATE_CAPS_FIX.md](debug/UPDATE_CAPS_FIX.md). Arbeitsregel bleibt:
 
 ## 4. Was ohne Fahrer noch lohnt
 
+Nachtests 2026-09-13: [debug/HW_NACHTEST_20260913.md](debug/HW_NACHTEST_20260913.md).
+
 | Ohne Fahrer | |
 |---|---|
-| Reconnect | Bike aus → `LOST` → an → `READY` |
+| ~~Reconnect~~ | **ok** — LOST → READY, `reconnects: 1` (ESP kurz WLAN-Blip) |
 | Bridge Adv | Bridge an → Phone sieht Indoor Bike / FTMS |
-| Nachtest 5 Dual-Link | Gurt umlegen, sitzen |
-| Nachtest 6 Crash unter Last | entscheidet Hub-Watchdog |
+| ~~Nachtest 5 Dual-Link~~ | **ok** unter Last; Bike-HR ≈ Strap+25 bpm |
+| Nachtest 6 Crash unter Last | entscheidet Hub-Watchdog — **offen** |
 
 | Braucht Fahrer / App | |
 |---|---|
 | Bridge-Abnahme | MyWhoosh ERG → Stufen über Emulation |
 | Dichtere Kennfläche / voller Test 2 | optional |
-| Nachtest 3 | `0x05` tot am Bike |
+| Nachtest 3 | Limiter blockt untrusted `0x05` — Draht-Bypass noch offen |
+| ~~Nachtest 4 `0x11`~~ | **ok** — 1 % NO_EFFECT, 3 %/6 % WORKS |
 | ERG/HR/Reha-Abnahme | Mechanik da |
-
-Nachtest 4 (`0x11`): Quittung ohne Fahrer, Wirkung mit Fahrer; `guardAllowSim`.
 
 ## 5. Nächste Schritte
 
 1. ~~Flash-/UI-Budget~~ … ~~Bridge MVP~~ / ~~Difficulty + HR-Deckel + CPS/CSC~~
-2. **Zuhause:** Bridge-Abnahme (MyWhoosh findet Trainer, ERG, Difficulty, HR-Deckel)
-3. Nachtest 4 → ggf. `allowSimulation` freischalten
-4. Nachtest 5/6 / dichtere Kennfläche
+2. ~~Nachtest 4 / Reconnect / Dual-Link~~ (2026-09-13)
+3. **Zuhause:** Bridge-Abnahme (MyWhoosh findet Trainer, ERG, Difficulty, HR-Deckel)
+4. Nachtest 6 Crash unter Last; optional `0x05`-Bypass für Draht-Nachtest 3
+5. `allowSimulation` wieder aus, wenn nicht dauerhaft nötig
 
 Erledigt bis v0.1.1: Caps-Fix … Progression, UI-JS-Fix.
 

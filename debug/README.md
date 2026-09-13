@@ -21,3 +21,4 @@
 | [PLATFORMIO_FIX.md](PLATFORMIO_FIX.md) | `[common]` und Native-Tests | weiterhin gültige Falle |
 | [RECOMMENDATIONS.md](RECOMMENDATIONS.md) | Kurz-Prioritäten | ersetzt durch `STATE.md` §5 |
 | [commands.sh](commands.sh) | Build- und Testbefehle | — |
+| **[HW_NACHTEST_20260913.md](HW_NACHTEST_20260913.md)** | Nachtests 3–5, Sim, Reconnect, Dual-HR | **2026-09-13** |
