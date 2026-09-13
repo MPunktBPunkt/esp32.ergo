@@ -50,6 +50,16 @@ public:
     bool enabled() const { return enabled_; }
     bool advertising() const { return advertising_; }
     bool controlGranted() const { return controlGranted_; }
+    /**
+     * App hat nach Request Control mindestens ein Lastkommando (Watt/Stufe/Sim)
+     * geschickt — dann hat sie die Regelung, Coach-UI darf nicht mitregeln.
+     * Nur IBD-Abo ohne Last = Observer.
+     */
+    bool isControlling() const { return controlling_; }
+    uint32_t loadCommands() const { return loadCmds_; }
+    const char* clientRole() const;
+    /** Coach-Not-Stop: Exklusiv-Lock freigeben (App kann wieder Last setzen). */
+    void releaseController() { clearController_(); }
     uint8_t clients() const;
     uint8_t subscribedIbd() const;
     const char* name() const { return name_; }
@@ -82,6 +92,8 @@ private:
     void seedStaticChars();
     void indicateControlResponse(ftms::Opcode request, ftms::ControlResult result);
     void notifyMachineStatus(uint8_t op, const uint8_t* param, size_t paramLen);
+    void noteLoadCommand_();
+    void clearController_();
     String effectiveName() const;
 
     ConfigStore* cfg_ = nullptr;
@@ -100,6 +112,9 @@ private:
     bool advertising_ = false;
     bool controlGranted_ = false;
     bool allowSim_ = false;
+    /** true nach erstem Lastkommando bis Stop/Reset/Disconnect. */
+    bool controlling_ = false;
+    uint32_t loadCmds_ = 0;
 
     volatile bool pendingReady_ = false;
     Pending pending_{};

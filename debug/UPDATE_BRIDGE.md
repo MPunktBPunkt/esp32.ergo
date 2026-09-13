@@ -1,6 +1,7 @@
 # UPDATE — Bridge Erweiterungen (v0.3.1-dev)
 
 Stand: 2026-09-12. Open Bridge-Themen ohne Hardware-Abnahme.
+**0.3.14-dev:** Exclusive Control → [UPDATE_BRIDGE_EXCLUSIVE.md](UPDATE_BRIDGE_EXCLUSIVE.md).
 
 ## Neu gegenüber 0.3.0-dev
 
@@ -22,7 +23,7 @@ Stand: 2026-09-12. Open Bridge-Themen ohne Hardware-Abnahme.
 - Bei Freigabe (Nachtest 4): Pending → `FtmsClient::setSimulation` durch Limiter
 
 ## Nicht erledigt (braucht Zuhause / Messung)
-- MyWhoosh-Abnahme ERG / Difficulty / HR-Deckel
+- MyWhoosh-Abnahme ERG / Difficulty / HR-Deckel / Exclusive
 - Nachtest 4 → `allowSimulation=true`
 - Nachtest 5/6
 

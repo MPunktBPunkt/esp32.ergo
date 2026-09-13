@@ -1029,6 +1029,12 @@ void App::registerControlRoutes() {
         NetUtil::sendError(server, 409, "Profil wählen (Reiter Profile)");
         return false;
     };
+    auto requireCoachLoad = [this]() -> bool {
+        if (!bridgeExclusiveControl()) return true;
+        NetUtil::sendError(server, 409,
+                           "Bridge-App steuert — Coach-Last gesperrt (Not-Stop bleibt)");
+        return false;
+    };
 
     server.on("/api/control/stop", HTTP_POST, [this, reply]() {
         if (control.sessionActive()) recordSessionEnd("stop");
@@ -1038,6 +1044,11 @@ void App::registerControlRoutes() {
             ftms.setSimulation(0, 0, 40, 51, millis());
         }
         lastErgAssistGrade_ = 0;
+        bridgeDriving_ = false;
+        bridgeAppWatt_ = 0;
+        bridgeDesiredW_ = 0;
+        bridgeHrCap.reset();
+        bridge.releaseController();
         control.setMode(ergo::ControlMode::Off);
         powerCtl.reset();
         hrCtl.reset();
@@ -1050,7 +1061,7 @@ void App::registerControlRoutes() {
     server.on("/api/control/reset", HTTP_POST, [this, reply]() { reply(ftms.reset(millis())); });
     server.on("/api/control/start", HTTP_POST, [this, reply]() { reply(ftms.start(millis())); });
 
-    server.on("/api/control/mode", HTTP_POST, [this, requireProfile]() {
+    server.on("/api/control/mode", HTTP_POST, [this, requireProfile, requireCoachLoad]() {
         String token;
         int16_t tenths = -1;
         float watt = -1.0f;
@@ -1080,6 +1091,8 @@ void App::registerControlRoutes() {
             NetUtil::sendError(server, 400, "mode fehlt oder unbekannt (off|level|erg|…)");
             return;
         }
+        // OFF und Not-Stop bleiben; jede Last braucht Coach-Freigabe.
+        if (m != ergo::ControlMode::Off && !requireCoachLoad()) return;
         if (m != ergo::ControlMode::Off && m != ergo::ControlMode::ManualLevel &&
             m != ergo::ControlMode::ManualErg && m != ergo::ControlMode::HrHold &&
             m != ergo::ControlMode::Reha && m != ergo::ControlMode::Workout &&
@@ -1286,8 +1299,9 @@ void App::registerControlRoutes() {
         NetUtil::sendJson(server, 200, doc);
     });
 
-    server.on("/api/control/level", HTTP_POST, [this, reply, requireProfile]() {
+    server.on("/api/control/level", HTTP_POST, [this, reply, requireProfile, requireCoachLoad]() {
         if (!requireProfile()) return;
+        if (!requireCoachLoad()) return;
         if (!server.hasArg("tenths") && !server.hasArg("level")) {
             NetUtil::sendError(server, 400, "tenths oder level fehlt");
             return;
@@ -1315,8 +1329,9 @@ void App::registerControlRoutes() {
         reply(ftms.setLevelTenths(tenths, millis()));
     });
 
-    server.on("/api/control/power", HTTP_POST, [this, reply, requireProfile]() {
+    server.on("/api/control/power", HTTP_POST, [this, reply, requireProfile, requireCoachLoad]() {
         if (!requireProfile()) return;
+        if (!requireCoachLoad()) return;
         if (!server.hasArg("watt")) {
             NetUtil::sendError(server, 400, "watt fehlt");
             return;
@@ -1396,8 +1411,9 @@ void App::registerControlRoutes() {
         NetUtil::sendJson(server, 200, doc);
     });
 
-    server.on("/api/control/sim", HTTP_POST, [this, requireProfile]() {
+    server.on("/api/control/sim", HTTP_POST, [this, requireProfile, requireCoachLoad]() {
         if (!requireProfile()) return;
+        if (!requireCoachLoad()) return;
         if (!config.allowSimulation) {
             NetUtil::sendError(server, 409,
                                "Simulation gesperrt — Einstellungen: allowSimulation an");
@@ -1574,8 +1590,9 @@ void App::registerControlRoutes() {
         doc["totalRemainingS"] = woSnap_.totalRemainingS;
     };
 
-    server.on("/api/workout/start", HTTP_POST, [this, requireProfile, workoutJson]() {
+    server.on("/api/workout/start", HTTP_POST, [this, requireProfile, requireCoachLoad, workoutJson]() {
         if (!requireProfile()) return;
+        if (!requireCoachLoad()) return;
         if (!powerMap.ready() || powerMap.pointCount() == 0) {
             NetUtil::sendError(server, 409, "Kennfläche leer — zuerst Kalibrierung");
             return;
@@ -3818,6 +3835,11 @@ void App::registerDeviceRoutes() {
  */
 void App::registerCalibRoutes() {
     server.on("/api/calib/sweep/start", HTTP_POST, [this]() {
+        if (bridgeExclusiveControl()) {
+            NetUtil::sendError(server, 409,
+                               "Bridge-App steuert — Coach-Last gesperrt (Not-Stop bleibt)");
+            return;
+        }
         if (!profiles.active()) {
             NetUtil::sendError(server, 409, "Profil wählen (Reiter Profile)");
             return;
@@ -4058,6 +4080,10 @@ float App::bridgeScaleAppWatt(float appWatt) const {
     return ergo::bridgeApplyDifficulty(appWatt, config.bridgeDifficultyPct, 20.0f, maxW);
 }
 
+bool App::bridgeExclusiveControl() const {
+    return bridge.enabled() && bridge.isControlling();
+}
+
 void App::registerBridgeRoutes() {
     server.on("/api/bridge", HTTP_GET, [this]() {
         JsonDocument doc;
@@ -4072,6 +4098,7 @@ void App::registerBridgeRoutes() {
         doc["effectiveW"] = bridgeHrCap.effectiveW();
         doc["hrCapActive"] = bridgeHrCap.capActive();
         doc["driving"] = bridgeDriving_;
+        doc["exclusive"] = bridgeExclusiveControl();
         NetUtil::sendJson(server, 200, doc);
     });
 
@@ -4187,6 +4214,14 @@ void App::applyBridgePending(const FtmsServer::Pending& p, unsigned long now) {
         }
 
         case FtmsServer::PendingOp::SetResistance: {
+            // MyWhoosh wechselt oft Power↔Resistance; während Bridge-ERG
+            // Stufe ignorieren (BLE schon mit Success quittiert) — sonst
+            // Mode-Kampf und Stufen-Jagd.
+            if (bridgeDriving_) {
+                Serial.printf("[BRIDGE] Stufe %d ignoriert — ERG aktiv (Exklusiv)\n",
+                              (int)p.resistanceTenths);
+                break;
+            }
             const int16_t tenths = p.resistanceTenths;
             bridgeDriving_ = false;
             if (control.mode() == ergo::ControlMode::Workout && workout.running()) {

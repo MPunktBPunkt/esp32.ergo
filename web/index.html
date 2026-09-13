@@ -265,6 +265,8 @@ footer{color:var(--dim);font-size:12px;text-align:center;margin-top:26px}
 
     <div class="card">
       <h2>Fahrt</h2>
+      <div class="msg warn" id="bridgeHint" hidden>Bridge-App steuert exklusiv —
+        Coach-Last gesperrt. STOP bleibt als Not-Aus.</div>
       <div class="msg warn" id="startHint" hidden>Nach STOP: ggf. <b>Start</b> drücken und
         erneut treten — die Freigabe am Bike kann sonst fehlen.</div>
       <div class="msg warn" id="pauseHint" hidden>Auto-Pause: keine Trittfrequenz —
@@ -1166,10 +1168,22 @@ function renderBle(s){
   const br=s.bridge||{};
   const brOn=!!br.enabled;
   const brCli=(br.clients|0)>0;
-  setAll('.j-bridge', brOn?(brCli?'App verbunden':'Bridge an'):'Bridge aus');
+  const brCtrl=!!br.controlling;
+  const brRole=br.clientRole||'none';
+  let brLabel='Bridge aus';
+  if(brOn){
+    if(brCtrl) brLabel='App steuert';
+    else if(brCli && brRole==='observer') brLabel='App beobachtet';
+    else if(brCli) brLabel='App verbunden';
+    else brLabel='Bridge an';
+  }
+  setAll('.j-bridge', brLabel);
   dotAll('.j-brdot', brOn && brCli);
   setAll('.j-brsub',[br.name||'', br.advertising?'wirbt':'',
-    br.controlGranted?'Steuerhoheit App':''].filter(Boolean).join(' / '));
+    brCtrl?'Exklusiv':(br.controlGranted?'Steuerhoheit App':''),
+    br.loadCommands?('Last×'+br.loadCommands):''].filter(Boolean).join(' / '));
+  const bh=$('bridgeHint');
+  if(bh) bh.hidden=!brCtrl;
 
   const live=f.attached&&!f.stale;
   const pi=s.profileInfo||null;
@@ -1420,24 +1434,25 @@ function renderBle(s){
   $('mwo').classList.toggle('ghost', mode!=='WORKOUT');
   drawRidePlan(s);
   const ergLike=mode==='MANUAL_ERG'||mode==='HR_HOLD'||mode==='REHA'||mode==='SIM'||(mode==='WORKOUT'&&!wo.selfPaced);
-  $('lvlup').disabled=!hasP||ergLike;
-  $('lvldn').disabled=!hasP||ergLike;
+  const bridgeLock=!!((s.bridge||{}).controlling);
+  $('lvlup').disabled=!hasP||ergLike||bridgeLock;
+  $('lvldn').disabled=!hasP||ergLike||bridgeLock;
   const adv=$('rideadv');
   if(adv && (mode==='MANUAL_ERG'||mode==='HR_HOLD'||mode==='REHA'||mode==='SIM')) adv.open=true;
-  $('mlvl').disabled=!hasP;
-  $('merg').disabled=!hasP||!(erg.mapReady);
+  $('mlvl').disabled=!hasP||bridgeLock;
+  $('merg').disabled=!hasP||!(erg.mapReady)||bridgeLock;
   const allowSim=!!(s.allowSimulation);
-  if($('msim')) $('msim').disabled=!hasP||!allowSim;
-  $('mhr').disabled=!hasP||!(erg.mapReady);
-  $('mreha').disabled=!hasP||!(erg.mapReady);
-  $('mwo').disabled=!hasP||!(erg.mapReady);
+  if($('msim')) $('msim').disabled=!hasP||!allowSim||bridgeLock;
+  $('mhr').disabled=!hasP||!(erg.mapReady)||bridgeLock;
+  $('mreha').disabled=!hasP||!(erg.mapReady)||bridgeLock;
+  $('mwo').disabled=!hasP||!(erg.mapReady)||bridgeLock;
   const woOn=mode==='WORKOUT';
   $('wopause').disabled=!woOn||wo.state==='PAUSED';
   $('woresume').disabled=!woOn||wo.state!=='PAUSED';
   $('woskip').disabled=!woOn;
-  $('erggo').disabled=!hasP||!(erg.mapReady)||mode==='HR_HOLD'||mode==='SIM';
-  if($('simgo')) $('simgo').disabled=!hasP||!allowSim;
-  $('hrgo').disabled=!hasP||!(erg.mapReady)||mode!=='HR_HOLD';
+  $('erggo').disabled=!hasP||!(erg.mapReady)||mode==='HR_HOLD'||mode==='SIM'||bridgeLock;
+  if($('simgo')) $('simgo').disabled=!hasP||!allowSim||bridgeLock;
+  $('hrgo').disabled=!hasP||!(erg.mapReady)||mode!=='HR_HOLD'||bridgeLock;
   if(mode==='SIM'&&s.gradeTargetPct!=null&&document.activeElement!==$('simg'))
     $('simg').value=Number(s.gradeTargetPct).toFixed(1);
   if(hh.targetBpm&&document.activeElement!==$('hrbpm')) $('hrbpm').value=hh.targetBpm;

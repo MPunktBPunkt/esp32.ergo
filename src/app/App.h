@@ -90,6 +90,8 @@ private:
     void applyBridgePending(const FtmsServer::Pending& p, unsigned long now);
     void syncBridgeHrLimits();
     float bridgeScaleAppWatt(float appWatt) const;
+    /** Bridge-App hat Lastkommandos gesendet — Coach darf nicht mitregeln. */
+    bool bridgeExclusiveControl() const;
     void runCodecSelfTest();
     void applyLimiterConfig();
     void seedDefaultProfiles();

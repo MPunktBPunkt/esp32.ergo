@@ -188,11 +188,29 @@ void FtmsServer::setEnabled(bool on) {
         if (!enabled_ && !serverReady_) return;
         enabled_ = false;
         controlGranted_ = false;
+        clearController_();
         pendingReady_ = false;
         pending_ = Pending{};
         disconnectAll();
         stopAdvertising();
     }
+}
+
+void FtmsServer::noteLoadCommand_() {
+    controlling_ = true;
+    if (loadCmds_ < 0xFFFFFFFFu) loadCmds_++;
+}
+
+void FtmsServer::clearController_() {
+    controlling_ = false;
+    loadCmds_ = 0;
+}
+
+const char* FtmsServer::clientRole() const {
+    if (clients() == 0) return "none";
+    if (controlling_) return "controller";
+    if (subscribedIbd() > 0 || controlGranted_) return "observer";
+    return "connected";
 }
 
 uint8_t FtmsServer::clients() const {
@@ -211,6 +229,7 @@ void FtmsServer::onConnect(uint16_t) {
 
 void FtmsServer::onDisconnect(uint16_t) {
     controlGranted_ = false;
+    clearController_();
     refreshAdvertising();
 }
 
@@ -266,6 +285,7 @@ void FtmsServer::onControlWrite(NimBLECharacteristic* c) {
                 indicateControlResponse(w.op, ftms::ControlResult::ControlNotPermitted);
                 return;
             }
+            clearController_();
             queue(PendingOp::Reset);
             indicateControlResponse(w.op, ftms::ControlResult::Success);
             notifyMachineStatus(0x01, nullptr, 0);
@@ -287,6 +307,7 @@ void FtmsServer::onControlWrite(NimBLECharacteristic* c) {
                 return;
             }
             const bool pause = (w.stopParam == (uint8_t)ftms::StopParam::Pause);
+            if (!pause) clearController_();
             queue(pause ? PendingOp::Pause : PendingOp::Stop);
             indicateControlResponse(w.op, ftms::ControlResult::Success);
             notifyMachineStatus(0x02, &w.stopParam, 1);
@@ -303,6 +324,7 @@ void FtmsServer::onControlWrite(NimBLECharacteristic* c) {
                 indicateControlResponse(w.op, ftms::ControlResult::InvalidParameter);
                 return;
             }
+            noteLoadCommand_();
             queue(PendingOp::SetPower, w.watt, 0);
             indicateControlResponse(w.op, ftms::ControlResult::Success);
             uint8_t p[2] = {(uint8_t)(w.watt & 0xFF), (uint8_t)((w.watt >> 8) & 0xFF)};
@@ -320,6 +342,7 @@ void FtmsServer::onControlWrite(NimBLECharacteristic* c) {
                 indicateControlResponse(w.op, ftms::ControlResult::InvalidParameter);
                 return;
             }
+            noteLoadCommand_();
             queue(PendingOp::SetResistance, 0, w.resistanceTenths);
             indicateControlResponse(w.op, ftms::ControlResult::Success);
             uint8_t p[2] = {(uint8_t)(w.resistanceTenths & 0xFF),
@@ -337,6 +360,7 @@ void FtmsServer::onControlWrite(NimBLECharacteristic* c) {
                 indicateControlResponse(w.op, ftms::ControlResult::NotSupported);
                 return;
             }
+            noteLoadCommand_();
             pending_.op = PendingOp::SetSimulation;
             pending_.watt = 0;
             pending_.resistanceTenths = 0;
@@ -407,6 +431,9 @@ void FtmsServer::appendStatusJson(JsonObject obj) const {
     obj["clients"] = clients();
     obj["ibdSubs"] = subscribedIbd();
     obj["controlGranted"] = controlGranted_;
+    obj["controlling"] = controlling_;
+    obj["clientRole"] = clientRole();
+    obj["loadCommands"] = loadCmds_;
     obj["allowSim"] = allowSim_;
     obj["name"] = name_;
     obj["notifySent"] = notifySent_;
