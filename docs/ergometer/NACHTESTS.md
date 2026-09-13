@@ -63,6 +63,11 @@ tools/probe-run.py --host <ip> control --level 1
 **Zu protokollieren:** je Stufe die mittlere Leistung, die mittlere Kadenz und
 die Streuung. Ohne stabile Kadenz ist der Punkt ungültig.
 
+**Gemessen:** [HW_TEST1_60RPM.md](../../debug/HW_TEST1_60RPM.md),
+[HW_TEST2_LIGHT.md](../../debug/HW_TEST2_LIGHT.md),
+[HW_TEST2_80RPM.md](../../debug/HW_TEST2_80RPM.md). Wattziel-Draht:
+[UPDATE_NACHTEST_RESULTS.md](../../debug/UPDATE_NACHTEST_RESULTS.md).
+
 **Erwartung und Entscheidung:**
 
 | Ergebnis bei Stufe 16 | Folge |

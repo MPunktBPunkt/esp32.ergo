@@ -64,8 +64,11 @@ public:
     /** Caps nach GATT-Ableitung ueberschreiben (Format / Watt-Vertrauen). */
     void applyTo(ftms::Capabilities& caps) const;
 
-    /** Bekannte Varon-Eigenarten setzen, wenn Format noch Unknown. */
+    /** Bekannte Varon-Eigenarten setzen (Format / powerTrusted nur wenn noch auto). */
     static void seedVaronDefaults(DeviceProfile& d);
+
+    /** Labor-Varon: feste MAC oder BLE-Name TC174. */
+    static bool isVaronLike(const DeviceProfile& d);
 
     size_t save(uint8_t* buf, size_t cap) const;
     bool load(const uint8_t* buf, size_t len);

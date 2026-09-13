@@ -100,11 +100,17 @@ int DeviceStore::findIndex(const char* macNorm) const {
 }
 
 void DeviceStore::seedVaronDefaults(DeviceProfile& d) {
-    // Labor: sint16 wirkt, uint8 nicht; Wattziel untrusted.
+    // Labor: sint16 wirkt, uint8 nicht; Wattziel Success ohne Wirkung (Nachtest 3).
     if (d.resistanceFormat == ftms::ResistanceFormat::Unknown)
         d.resistanceFormat = ftms::ResistanceFormat::Sint16;
     if (d.powerTrusted < 0) d.powerTrusted = 0;
     d.requestControlOnReconnect = true;
+}
+
+bool DeviceStore::isVaronLike(const DeviceProfile& d) {
+    if (strcmp(d.mac, "c2:32:a5:1e:bf:b5") == 0) return true;
+    // BLE-Name der Labor-Maschine (MAC-Klon / Factory-Reset).
+    return d.name[0] && strncmp(d.name, "TC174", 5) == 0;
 }
 
 bool DeviceStore::remember(const char* mac, const char* name, uint8_t addrType, uint32_t nowUnix) {
@@ -117,14 +123,14 @@ bool DeviceStore::remember(const char* mac, const char* name, uint8_t addrType, 
         idx = count_++;
         items_[static_cast<uint8_t>(idx)] = DeviceProfile{};
         memcpy(items_[static_cast<uint8_t>(idx)].mac, norm, kDeviceMacLen);
-        // Varon TC174 / bekannte Labor-MAC: Defaults ohne manuelle Messung.
-        if (strcmp(norm, "c2:32:a5:1e:bf:b5") == 0) seedVaronDefaults(items_[static_cast<uint8_t>(idx)]);
     }
     DeviceProfile& d = items_[static_cast<uint8_t>(idx)];
     if (name && name[0]) {
         strncpy(d.name, name, kDeviceNameLen - 1);
         d.name[kDeviceNameLen - 1] = '\0';
     }
+    // Auch bei bestehendem Slot / NVS-Altbestand: auto (−1) → nie vertrauen.
+    if (isVaronLike(d) || strcmp(norm, "c2:32:a5:1e:bf:b5") == 0) seedVaronDefaults(d);
     d.addrType = addrType;
     if (nowUnix) d.lastSeenUnix = nowUnix;
     active_ = static_cast<int8_t>(idx);
@@ -211,6 +217,7 @@ bool DeviceStore::load(const uint8_t* buf, size_t len) {
         d.measuredCeilingW = r16(p);
         d.lastSeenUnix = r32(p);
         if (!d.hasMac()) continue;
+        if (isVaronLike(d)) seedVaronDefaults(d);
         items_[count_++] = d;
     }
     if (act == 0xff || act >= count_) active_ = count_ > 0 ? 0 : -1;

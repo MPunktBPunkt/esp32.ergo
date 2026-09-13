@@ -200,16 +200,22 @@ Drei Möglichkeiten, und nur eine Messung entscheidet:
 Variante 3 ist nach der Bedienungsanleitung die wahrscheinlichste — siehe §11.
 Der Sweep in [NACHTESTS.md](NACHTESTS.md) misst es nach.
 
-## 9. Offen / nachgeführt (Stand 2026-09-13)
+## 9. Offen / nachgeführt (Stand 2026-09-13 Abend)
 
 | Thema | Stand |
 |-------|--------|
-| Stufen-Sweep / Kennfläche | teilweise (LEVEL-Session); dichtere Fläche optional |
-| Watt-Nachtest `05` am Draht | **offen** — 0.3.10 `force=1`; bislang nur Limiter-Deny belegt |
-| `0x11` Simulation | **ok** — wirksam ab ~3 %; 1 % Success ohne Wirkung |
+| Stufen-Sweep 60 rpm | **ok** — [HW_TEST1_60RPM.md](../../debug/HW_TEST1_60RPM.md) |
+| Kadenzfläche 80 rpm | **ok** grob — [HW_TEST2_80RPM.md](../../debug/HW_TEST2_80RPM.md); Stufe 12 optional |
+| Watt-Nachtest `05` am Draht | **NO_EFFECT** trotz Success (`force=1`) — [UPDATE_NACHTEST_RESULTS.md](../../debug/UPDATE_NACHTEST_RESULTS.md) |
+| `0x11` Simulation | **ok** — wirksam ab ~3 %; 1 % Success ohne Wirkung |
 | Dual-Link Bike + H9 | **ok** unter Last; Bike-HR ≈ Strap +~25 bpm |
 | Reconnect | **ok** — LOST → READY |
 | Crash unter Last | **offen** — Hub-Watchdog / Nachtest 6 |
+| Bridge / MyWhoosh | **offen** — Fahrer-Abnahme |
+
+Geräteprofil-Default Labor-Varon (`c2:32:a5:1e:bf:b5` / `TC174`):
+`resistanceFormat=sint16`, `powerTrusted=0`, `requestControlOnReconnect=true`
+(auch nach NVS-Load, ab 0.3.20).
 
 ## 10. Randbedingungen
 

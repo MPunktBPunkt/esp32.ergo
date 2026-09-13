@@ -25,3 +25,7 @@ sein, keine reine Stufe→Watt-Tabelle.
 
 Ein voller Test 2 (Stufen 12/16 @ 80 rpm) ist für die Architekturentscheidung
 **nicht nötig**. Optional später für dichtere Abdeckung der Map.
+
+**Nachtrag 2026-09-13:** grober Lauf 4/8/12/16 @ 80 rpm —
+[HW_TEST2_80RPM.md](HW_TEST2_80RPM.md) (Stufe 12 verworfen, 16 ≈ 245 W).
+Architekturentscheidung unverändert.

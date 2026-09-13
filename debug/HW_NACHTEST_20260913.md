@@ -97,12 +97,12 @@ beim Linkverlust notieren — kein Brick, UI kam zurück.
 
 ---
 
-## Nicht gefahren heute
+## Nicht gefahren am Vormittag / Abend nachgezogen
 
 | Test | Status |
 |------|--------|
-| Test 1 / 2 Sweep | bereits früher belegt; heute nicht wiederholt |
-| Test 3 Draht-`0x05` | blockiert (siehe oben) — Bypass offen |
+| Test 1 / 2 Sweep | Vormittag nicht; Abend: Test 2 grob **ok** → [HW_TEST2_80RPM.md](HW_TEST2_80RPM.md) |
+| Test 3 Draht-`0x05` | Abend: **NO_EFFECT** → [UPDATE_NACHTEST_RESULTS.md](UPDATE_NACHTEST_RESULTS.md) |
 | Test 6 Crash unter Last | **offen** |
 | Bridge / MyWhoosh-Abnahme | **offen** |
 | ERG/HR/Reha Fahrer-Abnahme | Mechanik da, formelle Abnahme offen |
@@ -131,7 +131,7 @@ Aus Status nach den Tests (Ring weiter an, weitere LEVEL-Writes möglich):
 
 ## Nächste Hardware-Schritte
 
-1. Optional: `raw=1&force=1` für echten `0x05`-Drahtversuch.  
+1. ~~`force=1` Draht-`0x05`~~ — NO_EFFECT (Abend).  
 2. Test 6: Stufe ~10, ESP-Reset **ohne** vorheriges STOP.  
 3. Bridge an → MyWhoosh findet Trainer, ERG/Difficulty/HR-Deckel.  
 4. `allowSimulation` nach dem Tag wieder **aus**, wenn nicht dauerhaft gebraucht.

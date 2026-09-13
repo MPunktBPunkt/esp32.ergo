@@ -89,6 +89,32 @@ static void test_remove(void) {
     TEST_ASSERT_EQUAL_STRING("b", s.active()->name);
 }
 
+static void test_load_reseeds_varon_auto_power(void) {
+    // Altbestand: powerTrusted noch „auto“ (−1) → nach load nie vertrauen.
+    DeviceStore s;
+    TEST_ASSERT_TRUE(s.remember("aa:bb:cc:dd:ee:ff", "Other", 0));
+    DeviceProfile* o = s.activeMutable();
+    o->powerTrusted = -1;
+    o->resistanceFormat = ResistanceFormat::Unknown;
+    // zweite Slot: Varon-MAC mit auto
+    TEST_ASSERT_TRUE(s.remember("c2:32:a5:1e:bf:b5", "TC174", 0));
+    DeviceProfile* v = s.activeMutable();
+    v->powerTrusted = -1;
+    v->resistanceFormat = ResistanceFormat::Unknown;
+
+    uint8_t buf[DeviceStore::kMaxBytes];
+    const size_t n = s.save(buf, sizeof(buf));
+    TEST_ASSERT_TRUE(n > 0);
+
+    DeviceStore b;
+    TEST_ASSERT_TRUE(b.load(buf, n));
+    TEST_ASSERT_TRUE(b.select("c2:32:a5:1e:bf:b5"));
+    TEST_ASSERT_EQUAL_INT8(0, b.active()->powerTrusted);
+    TEST_ASSERT_EQUAL((int)ResistanceFormat::Sint16, (int)b.active()->resistanceFormat);
+    TEST_ASSERT_TRUE(b.select("aa:bb:cc:dd:ee:ff"));
+    TEST_ASSERT_EQUAL_INT8(-1, b.active()->powerTrusted);
+}
+
 void setup() {
     UNITY_BEGIN();
     RUN_TEST(test_normalize_mac);
@@ -96,6 +122,7 @@ void setup() {
     RUN_TEST(test_apply_overrides);
     RUN_TEST(test_full_rejects_fifth);
     RUN_TEST(test_remove);
+    RUN_TEST(test_load_reseeds_varon_auto_power);
     UNITY_END();
 }
 

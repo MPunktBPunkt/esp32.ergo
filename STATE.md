@@ -5,8 +5,8 @@ zuerst diese Datei und danach gezielt weiter. Alle anderen Notizen in `debug/`
 sind Protokolle einzelner Arbeitsschritte und beschreiben den Stand *zu ihrem
 Zeitpunkt* — sie werden nicht nachgeführt.
 
-Stand dieser Datei: **2026-09-13** **0.3.19-dev**
-(Dev-UI Tabs: `body.devui` bleibt bei Zone-Render erhalten).
+Stand dieser Datei: **2026-09-13** **0.3.20-dev**
+(Nachtest 2/3 dokumentiert; Varon-Defaults nach NVS-Load).
 FTP-Karriere: [debug/UPDATE_FTP_CAREER.md](debug/UPDATE_FTP_CAREER.md).
 FTP-Builtins: [debug/UPDATE_FTP_BUILTINS.md](debug/UPDATE_FTP_BUILTINS.md).
 ZWO: [debug/UPDATE_ZWO_IMPORT.md](debug/UPDATE_ZWO_IMPORT.md).
@@ -16,6 +16,7 @@ Bridge: [debug/UPDATE_BRIDGE.md](debug/UPDATE_BRIDGE.md),
 [debug/UPDATE_BRIDGE_FAST_RAMP.md](debug/UPDATE_BRIDGE_FAST_RAMP.md),
 Kanondoc: [docs/ergometer/BRIDGE.md](docs/ergometer/BRIDGE.md).
 Dev-UI: [debug/UPDATE_DEV_UI.md](debug/UPDATE_DEV_UI.md).
+Nachtest-Abend: [debug/UPDATE_NACHTEST_RESULTS.md](debug/UPDATE_NACHTEST_RESULTS.md).
 ERG-Slew: [debug/UPDATE_ERG_SLEW.md](debug/UPDATE_ERG_SLEW.md).
 Tags/Pause: [debug/UPDATE_WORKOUT_TAGS.md](debug/UPDATE_WORKOUT_TAGS.md).
 Ghost: [debug/UPDATE_GHOST.md](debug/UPDATE_GHOST.md).
@@ -36,7 +37,7 @@ ERG-Assist: [debug/UPDATE_ERG_SIM_ASSIST.md](debug/UPDATE_ERG_SIM_ASSIST.md).
 | Hub | `192.168.178.113:8093`, `fwType: ergo` |
 | Rollback-Bin | `nodes/esp32.ftmsprobe/dist/ftmsprobe.0.1.4.esp32s3.bin` |
 | Build-Host | Debian, `/home/martin/projects/esphub/esp32.ergo`, `pio` unter `/home/martin/.venvs/pio/bin/pio` |
-| Aktuelle Bin | `dist/ergo.0.3.19-dev.esp32s3.bin` |
+| Aktuelle Bin | `dist/ergo.0.3.20-dev.esp32s3.bin` |
 
 Die Entwurfs-Instanz auf Windows hat **nur git** — kein PlatformIO, keinen
 Compiler, kein Python. Sie kann nicht bauen und nicht testen. Bauen und Flashen
@@ -64,7 +65,9 @@ siehe [UPDATE_CAPS_FIX.md](debug/UPDATE_CAPS_FIX.md). Arbeitsregel bleibt:
 
 ## 4. Was ohne Fahrer noch lohnt
 
-Nachtests 2026-09-13: [debug/HW_NACHTEST_20260913.md](debug/HW_NACHTEST_20260913.md).
+Nachtests 2026-09-13: [debug/HW_NACHTEST_20260913.md](debug/HW_NACHTEST_20260913.md),
+Abend: [debug/UPDATE_NACHTEST_RESULTS.md](debug/UPDATE_NACHTEST_RESULTS.md),
+Kalibrierung 80 rpm: [debug/HW_TEST2_80RPM.md](debug/HW_TEST2_80RPM.md).
 
 | Ohne Fahrer | |
 |---|---|
@@ -76,22 +79,24 @@ Nachtests 2026-09-13: [debug/HW_NACHTEST_20260913.md](debug/HW_NACHTEST_20260913
 | Braucht Fahrer / App | |
 |---|---|
 | Bridge-Abnahme | MyWhoosh ERG → Stufen über Emulation |
-| Dichtere Kennfläche / voller Test 2 | optional |
-| Nachtest 3 | `force=1` in 0.3.10 — Draht-Nachweis noch offen |
+| Dichtere Kennfläche / Stufe 12 @ 80 rpm | optional |
+| ~~Nachtest 3~~ | **NO_EFFECT** am Draht (`force=1`, Success lügt) |
 | ~~Nachtest 4 `0x11`~~ | **ok** — 1 % NO_EFFECT, 3 %/6 % WORKS |
+| ~~Test 2 80 rpm grob~~ | **ok** — Fläche bestätigt ([HW_TEST2_80RPM.md](debug/HW_TEST2_80RPM.md)) |
 | ERG/HR/Reha-Abnahme | Mechanik da |
 
 ## 5. Nächste Schritte
 
 1. ~~Flash-/UI-Budget~~ … ~~Bridge MVP~~ / ~~Difficulty + HR-Deckel + CPS/CSC~~
 2. ~~Nachtest 4 / Reconnect / Dual-Link~~ (2026-09-13)
-3. **Zuhause:** Bridge-Abnahme (MyWhoosh ERG + Exclusive/Observer)
-4. Nachtest 6 Crash unter Last; Nachtest 3 am Draht mit `force=1`
-5. `allowSimulation` wieder aus, wenn nicht dauerhaft nötig
+3. ~~Nachtest 3 Draht / Test 2 80 rpm~~ (Abend 2026-09-13)
+4. **Zuhause:** Bridge-Abnahme (MyWhoosh ERG + Exclusive/Observer)
+5. Nachtest 6 Crash unter Last (Stufe ~10, ESP-Reset **ohne** STOP)
+6. `allowSimulation` wieder aus, wenn nicht dauerhaft nötig
 
 Erledigt bis v0.1.1: Caps-Fix … Progression, UI-JS-Fix.
 Erledigt 2026-09-13: … Bridge Fast-Ramp 0.3.17; Betrieb/Entwickler-UI 0.3.18;
-Dev-Tabs-Fix (`body.devui`) 0.3.19.
+Dev-Tabs-Fix 0.3.19; Nachtest-Doku + Varon-Reseed 0.3.20.
 
 ## 6. Harte Regeln
 
