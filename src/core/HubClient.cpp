@@ -16,6 +16,10 @@ void HubClient::setPayloadBuilder(void (*builder)(JsonDocument& doc)) {
     builder_ = builder;
 }
 
+void HubClient::setOtaAllowed(bool (*fn)()) {
+    otaAllowed_ = fn;
+}
+
 void HubClient::sendNow() {
     sendHeartbeat();
     lastHeartbeat_ = millis();
@@ -44,9 +48,13 @@ void HubClient::loop() {
         sendHeartbeat();
     }
     if (otaPending_) {
-        otaPending_ = false;
-        performOta(otaUrl_);
-        otaUrl_ = "";
+        if (otaAllowed_ && !otaAllowed_()) {
+            // Aufschieben — Heartbeat laeuft weiter.
+        } else {
+            otaPending_ = false;
+            performOta(otaUrl_);
+            otaUrl_ = "";
+        }
     }
 }
 
@@ -82,6 +90,8 @@ void HubClient::sendHeartbeat() {
                 if (u.length() > 0) {
                     otaPending_ = true;
                     otaUrl_ = u;
+                    if (otaAllowed_ && !otaAllowed_())
+                        Serial.println("[OTA] Hub-URL gemerkt — warte auf freies Gerät");
                 }
             }
         }

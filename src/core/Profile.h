@@ -73,10 +73,11 @@ inline void profileCopyId(char* dst, size_t cap, const char* src) {
 
 class ProfileStore {
 public:
-    static constexpr uint8_t kMaxProfiles = 4;
+    static constexpr uint8_t kMaxProfiles = 6;
     /** Absolute Pulsdeckel — auch ein fehlerhaftes Profil darf nicht hoeher. */
     static constexpr uint8_t kHrCeilingMax = 190;
-    static constexpr size_t kMaxBytes = 384;
+    /** 6 × 71 B + Header 22 B = 448 → 512. */
+    static constexpr size_t kMaxBytes = 512;
 
     uint8_t count() const { return count_; }
     const Profile* at(uint8_t i) const { return i < count_ ? &items_[i] : nullptr; }

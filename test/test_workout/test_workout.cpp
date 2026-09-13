@@ -86,6 +86,27 @@ static void test_scale_shortens(void) {
     TEST_ASSERT_TRUE(t.totalRemainingS >= 80);
 }
 
+static void test_self_paced(void) {
+    WorkoutEngine w;
+    WorkoutStep s[2];
+    strncpy(s[0].label, "Warm", sizeof(s[0].label) - 1);
+    s[0].durationS = 5;
+    s[0].ftpPct = 50;
+    strncpy(s[1].label, "Haupt", sizeof(s[1].label) - 1);
+    s[1].durationS = 10;
+    s[1].selfPaced = true;
+    w.setFtpW(200);
+    TEST_ASSERT_TRUE(w.loadSteps(s, 2, "t20"));
+    TEST_ASSERT_TRUE(w.start(0));
+    auto t = w.tick(0);
+    TEST_ASSERT_FALSE(t.selfPaced);
+    TEST_ASSERT_FLOAT_WITHIN(0.1f, 100.0f, t.desiredW);
+    t = w.tick(6000);
+    TEST_ASSERT_TRUE(t.selfPaced);
+    TEST_ASSERT_FLOAT_WITHIN(0.1f, 0.0f, t.desiredW);
+    TEST_ASSERT_EQUAL_STRING("Haupt", t.label);
+}
+
 void setUp(void) {}
 void tearDown(void) {}
 
@@ -97,5 +118,6 @@ int main(int, char**) {
     RUN_TEST(test_pause_freezes_clock);
     RUN_TEST(test_ftp_pct);
     RUN_TEST(test_scale_shortens);
+    RUN_TEST(test_self_paced);
     return UNITY_END();
 }

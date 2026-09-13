@@ -92,13 +92,15 @@ static void test_remove_clears_active(void) {
     TEST_ASSERT_EQUAL_INT16(0, lc.profileMaxLevelTenths);
 }
 
-static void test_full_rejects_fifth(void) {
+static void test_full_rejects_seventh(void) {
     ProfileStore s;
     TEST_ASSERT_TRUE(s.put(make("a", "A", 0, 0)));
     TEST_ASSERT_TRUE(s.put(make("b", "B", 0, 0)));
     TEST_ASSERT_TRUE(s.put(make("c", "C", 0, 0)));
     TEST_ASSERT_TRUE(s.put(make("d", "D", 0, 0)));
-    TEST_ASSERT_FALSE(s.put(make("e", "E", 0, 0)));
+    TEST_ASSERT_TRUE(s.put(make("e", "E", 0, 0)));
+    TEST_ASSERT_TRUE(s.put(make("f", "F", 0, 0)));
+    TEST_ASSERT_FALSE(s.put(make("g", "G", 0, 0)));
 }
 
 static void test_update_same_id(void) {
@@ -189,7 +191,7 @@ int main(int, char**) {
     RUN_TEST(test_select_locked_while_session);
     RUN_TEST(test_hr_ceiling_clamped);
     RUN_TEST(test_remove_clears_active);
-    RUN_TEST(test_full_rejects_fifth);
+    RUN_TEST(test_full_rejects_seventh);
     RUN_TEST(test_update_same_id);
     RUN_TEST(test_save_load_roundtrip);
     RUN_TEST(test_hrmax_estimate);

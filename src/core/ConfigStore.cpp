@@ -22,6 +22,11 @@ void ConfigStore::applyDefaults() {
     hrName = "";
     hrAddrType = -1;
     autoConnect = false;
+    bridgeEnabled = false;
+    bridgeName = "";
+    bridgeDifficultyPct = 100;
+    bridgeHrSoft = 0;
+    bridgeHrMax = 0;
 }
 
 void ConfigStore::begin() {
@@ -58,11 +63,18 @@ void ConfigStore::load() {
     hrName = prefs.getString("hr_name", hrName);
     hrAddrType = (int8_t)prefs.getChar("hr_at", hrAddrType);
     autoConnect = prefs.getBool("auto_c", false);  // fehlt der Schluessel: aus
+    bridgeEnabled = prefs.getBool("br_en", false);
+    bridgeName = prefs.getString("br_name", bridgeName);
+    bridgeDifficultyPct = prefs.getUShort("br_diff", 100);
+    bridgeHrSoft = prefs.getUChar("br_hrs", 0);
+    bridgeHrMax = prefs.getUChar("br_hrm", 0);
     prefs.end();
 
     if (heartbeatIntervalS < 5) heartbeatIntervalS = 5;
     if (ntpServer.length() == 0) ntpServer = NTP_SERVER_DEFAULT;
     if (tz.length() == 0) tz = TZ_DEFAULT;
+    if (bridgeDifficultyPct < 50) bridgeDifficultyPct = 50;
+    if (bridgeDifficultyPct > 150) bridgeDifficultyPct = 150;
 }
 
 void ConfigStore::save() {
@@ -88,6 +100,11 @@ void ConfigStore::save() {
     prefs.putString("hr_name", hrName);
     prefs.putChar("hr_at", (int8_t)hrAddrType);
     prefs.putBool("auto_c", autoConnect);
+    prefs.putBool("br_en", bridgeEnabled);
+    prefs.putString("br_name", bridgeName);
+    prefs.putUShort("br_diff", bridgeDifficultyPct);
+    prefs.putUChar("br_hrs", bridgeHrSoft);
+    prefs.putUChar("br_hrm", bridgeHrMax);
     prefs.end();
 }
 
@@ -119,6 +136,11 @@ void ConfigStore::toJson(JsonObject obj) const {
     obj["hrName"] = hrName;
     obj["hrAddrType"] = hrAddrType;
     obj["autoConnect"] = autoConnect;
+    obj["bridgeEnabled"] = bridgeEnabled;
+    obj["bridgeName"] = bridgeName;
+    obj["bridgeDifficultyPct"] = bridgeDifficultyPct;
+    obj["bridgeHrSoft"] = bridgeHrSoft;
+    obj["bridgeHrMax"] = bridgeHrMax;
     obj["board"] = ERGO_BOARD_ID;
     obj["boardLabel"] = ERGO_BOARD_LABEL;
 }
@@ -148,10 +170,18 @@ bool ConfigStore::fromJson(JsonVariantConst obj) {
     hrName = jsonString(obj["hrName"], hrName);
     if (!obj["hrAddrType"].isNull()) hrAddrType = obj["hrAddrType"].as<int8_t>();
     if (!obj["autoConnect"].isNull()) autoConnect = obj["autoConnect"].as<bool>();
+    if (!obj["bridgeEnabled"].isNull()) bridgeEnabled = obj["bridgeEnabled"].as<bool>();
+    bridgeName = jsonString(obj["bridgeName"], bridgeName);
+    if (!obj["bridgeDifficultyPct"].isNull())
+        bridgeDifficultyPct = obj["bridgeDifficultyPct"].as<uint16_t>();
+    if (!obj["bridgeHrSoft"].isNull()) bridgeHrSoft = obj["bridgeHrSoft"].as<uint8_t>();
+    if (!obj["bridgeHrMax"].isNull()) bridgeHrMax = obj["bridgeHrMax"].as<uint8_t>();
 
     if (heartbeatIntervalS < 5) heartbeatIntervalS = 5;
     if (hubPort < 1 || hubPort > 65535) hubPort = HUB_PORT_DEFAULT;
     if (ntpServer.length() == 0) ntpServer = NTP_SERVER_DEFAULT;
     if (tz.length() == 0) tz = TZ_DEFAULT;
+    if (bridgeDifficultyPct < 50) bridgeDifficultyPct = 50;
+    if (bridgeDifficultyPct > 150) bridgeDifficultyPct = 150;
     return true;
 }

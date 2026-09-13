@@ -62,6 +62,18 @@ public:
      */
     bool autoConnect = false;
 
+    /**
+     * FTMS-Bridge (Peripheral fuer MyWhoosh u. a.).
+     * Default aus: wer nicht bewusst bridged, soll nicht als Trainer erscheinen.
+     */
+    bool bridgeEnabled = false;
+    String bridgeName;
+    /** 100 = App-Watt unverändert; 50..150. */
+    uint16_t bridgeDifficultyPct = 100;
+    /** Soft-/Hard-Pulsdeckel; 0 = aus (Profil-maxHr greift nicht automatisch). */
+    uint8_t bridgeHrSoft = 0;
+    uint8_t bridgeHrMax = 0;
+
     void begin();
     void load();
     void save();
@@ -71,5 +83,5 @@ public:
     bool fromJson(JsonVariantConst obj);
 
 private:
-    static constexpr uint8_t kConfigVersion = 2;  // 2: gemerkte Geraete
+    static constexpr uint8_t kConfigVersion = 4;  // 4: Bridge Difficulty/HR
 };

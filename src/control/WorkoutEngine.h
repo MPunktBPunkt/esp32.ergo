@@ -26,11 +26,14 @@ struct WorkoutStep {
     float ftpPct = 0.0f;
     uint8_t hrMax = 0;
     uint8_t hrSoft = 0;
+    /** Kein Wattziel — Fahrer stellt die Stufe (z. B. 20-Min-Test). */
+    bool selfPaced = false;
 };
 
 class WorkoutEngine {
 public:
-    static constexpr uint8_t kMaxSteps = 8;
+    /** 16 reicht fuer Rampe 60…360 W (+20/min); Editor bleibt bei max. 8. */
+    static constexpr uint8_t kMaxSteps = 16;
 
     struct Tick {
         WorkoutState state = WorkoutState::Idle;
@@ -40,6 +43,7 @@ public:
         float desiredW = 0.0f;
         uint8_t hrMax = 0;
         uint8_t hrSoft = 0;
+        bool selfPaced = false;
         uint32_t stepRemainingS = 0;
         uint32_t totalRemainingS = 0;
         uint32_t elapsedS = 0;

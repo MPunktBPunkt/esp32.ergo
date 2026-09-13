@@ -69,6 +69,7 @@ bool WorkoutEngine::loadBuiltinPhysio(float scale) {
 }
 
 float WorkoutEngine::resolvePower(const WorkoutStep& st) const {
+    if (st.selfPaced) return 0.0f;
     if (st.powerW > 0.0f) return st.powerW;
     if (st.ftpPct > 0.0f && ftpW_ > 0) return (float)ftpW_ * st.ftpPct / 100.0f;
     return 0.0f;
@@ -158,6 +159,7 @@ WorkoutEngine::Tick WorkoutEngine::tick(uint32_t nowMs) {
     t.desiredW = resolvePower(st);
     t.hrMax = st.hrMax;
     t.hrSoft = st.hrSoft;
+    t.selfPaced = st.selfPaced;
 
     uint32_t elapsedMs = 0;
     if (state_ == WorkoutState::Paused) {
@@ -193,6 +195,7 @@ WorkoutEngine::Tick WorkoutEngine::tick(uint32_t nowMs) {
         t.desiredW = resolvePower(ns);
         t.hrMax = ns.hrMax;
         t.hrSoft = ns.hrSoft;
+        t.selfPaced = ns.selfPaced;
         t.stepRemainingS = ns.durationS;
         t.totalRemainingS = remainingFrom(stepIndex_, 0);
         t.justAdvanced = true;

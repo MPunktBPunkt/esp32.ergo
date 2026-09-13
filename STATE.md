@@ -5,8 +5,12 @@ zuerst diese Datei und danach gezielt weiter. Alle anderen Notizen in `debug/`
 sind Protokolle einzelner Arbeitsschritte und beschreiben den Stand *zu ihrem
 Zeitpunkt* — sie werden nicht nachgeführt.
 
-Stand dieser Datei: **2026-09-12** Release **v0.1.0**
-([debug/RELEASE_v0.1.0.md](debug/RELEASE_v0.1.0.md)).
+Stand dieser Datei: **2026-09-13** Arbeit an **0.3.6-dev**
+(FTP-Karriere, Profile×6, OTA-Schutz).
+FTP-Karriere: [debug/UPDATE_FTP_CAREER.md](debug/UPDATE_FTP_CAREER.md).
+FTP-Builtins: [debug/UPDATE_FTP_BUILTINS.md](debug/UPDATE_FTP_BUILTINS.md).
+ZWO: [debug/UPDATE_ZWO_IMPORT.md](debug/UPDATE_ZWO_IMPORT.md).
+Bridge: [debug/UPDATE_BRIDGE.md](debug/UPDATE_BRIDGE.md).
 
 ---
 
@@ -14,11 +18,12 @@ Stand dieser Datei: **2026-09-12** Release **v0.1.0**
 
 | | |
 |---|---|
-| Gerät | ESP32-S3 auf `192.168.178.88`, MAC `68B6B329339C`, `ergo 0.1.0` |
+| Gerät | ESP32-S3 auf `192.168.178.88`, MAC `68B6B329339C` (OTA 0.3.0-dev ggf. ausstehend) |
 | Bike | Hammer Varon XTR II, BLE-Name `TC174`, MAC `c2:32:a5:1e:bf:b5` |
 | Hub | `192.168.178.113:8093`, `fwType: ergo` |
 | Rollback-Bin | `nodes/esp32.ftmsprobe/dist/ftmsprobe.0.1.4.esp32s3.bin` |
 | Build-Host | Debian, `/home/martin/projects/esphub/esp32.ergo`, `pio` unter `/home/martin/.venvs/pio/bin/pio` |
+| Aktuelle Bin | `dist/ergo.0.3.6-dev.esp32s3.bin` |
 
 Die Entwurfs-Instanz auf Windows hat **nur git** — kein PlatformIO, keinen
 Compiler, kein Python. Sie kann nicht bauen und nicht testen. Bauen und Flashen
@@ -42,33 +47,34 @@ siehe [UPDATE_CAPS_FIX.md](debug/UPDATE_CAPS_FIX.md). Arbeitsregel bleibt:
 
 - LEVEL-Session und Builtin-Rampe (`done`, 480 s, Puls max 149) gefahren
 - Profile Martin + Manu; Kopfzeile/Form vereinfacht
-- Flash ~75 %; UI-Seite groß — LittleFS vor weiterem Wachstum empfohlen
+- Flash ~72 % nach Bridge-MVP; UI gzip-PROGMEM
 
 ## 4. Was ohne Fahrer noch lohnt
 
 | Ohne Fahrer | |
 |---|---|
 | Reconnect | Bike aus → `LOST` → an → `READY` |
+| Bridge Adv | Bridge an → Phone sieht Indoor Bike / FTMS |
 | Nachtest 5 Dual-Link | Gurt umlegen, sitzen |
 | Nachtest 6 Crash unter Last | entscheidet Hub-Watchdog |
 
-| Braucht Fahrer | |
+| Braucht Fahrer / App | |
 |---|---|
+| Bridge-Abnahme | MyWhoosh ERG → Stufen über Emulation |
 | Dichtere Kennfläche / voller Test 2 | optional |
-| Nachtest 3 | `0x05` tot |
+| Nachtest 3 | `0x05` tot am Bike |
 | ERG/HR/Reha-Abnahme | Mechanik da |
 
 Nachtest 4 (`0x11`): Quittung ohne Fahrer, Wirkung mit Fahrer; `guardAllowSim`.
 
-## 5. Nächste Schritte (nach v0.1.0)
+## 5. Nächste Schritte
 
-1. Flash-/UI-Budget (LittleFS oder schlanke Seite)
-2. TestRunner (echtes MAP / 20 min / Recovery)
-3. Optional: Nachtest 4 / dichtere Map / Interval-Editor
-4. Entscheidung v0.2 vs v0.3 (Bridge)
+1. ~~Flash-/UI-Budget~~ … ~~Bridge MVP~~ / ~~Difficulty + HR-Deckel + CPS/CSC~~
+2. **Zuhause:** Bridge-Abnahme (MyWhoosh findet Trainer, ERG, Difficulty, HR-Deckel)
+3. Nachtest 4 → ggf. `allowSimulation` freischalten
+4. Nachtest 5/6 / dichtere Kennfläche
 
-Erledigt bis v0.1.0: Caps-Fix, Kalibrierung leicht, ERG/HR/Reha, Session,
-Zonen, Profile, Workout-UI/Editor, Tests-UI, Tablet-Ride, Progression, CI.
+Erledigt bis v0.1.1: Caps-Fix … Progression, UI-JS-Fix.
 
 ## 6. Harte Regeln
 
@@ -82,11 +88,14 @@ Zonen, Profile, Workout-UI/Editor, Tests-UI, Tablet-Ride, Progression, CI.
    `Limiter`, `PowerMap`, `SweepRunner`, `ControlJournal`, `DebugRing`,
    `ProfileStore`, `ControlMode`, `PowerController`, `HrController`,
    `RehaController`, `WorkoutEngine`, `WorkoutJson`, `SessionTracker`,
-   `SessionStore`, `Zone`, `Progression`.
+   `SessionStore`, `Zone`, `Progression`, `TestRunner`, `BridgeAssist`,
+   `CyclingCodec`, `ZwoImport`, `FtpCareer`.
+   (`FtmsServer` ist Arduino/NimBLE — Encoder darin nur über den Codec.)
 4. **Jeder FTMS-Write nur durch den Limiter.** Es gibt keine öffentliche Methode,
    die rohe Bytes an den Control Point schreibt; alles läuft durch
    `FtmsClient::send()`. Ein Bypass müsste die Klasse ändern, nicht sie nur
-   falsch benutzen.
+   falsch benutzen. Bridge-`0x05` von der App geht in den PowerController, nie
+   als `0x05` ans Bike.
 5. **Kein Steuerweg über `0x05`** Set Target Power am Varon. Das Feature-Bit
    fehlt, die Quittung lügt.
 6. **Hub-Watchdog:** steht ein Bike-Link, kein Blind-Restart unter Last — erst
@@ -94,7 +103,8 @@ Zonen, Profile, Workout-UI/Editor, Tests-UI, Tablet-Ride, Progression, CI.
 7. Im NimBLE-Callback wird **nicht** gelesen, gerechnet oder geurteilt. Ein
    GATT-Read dort blockiert den Host-Task und holt den Watchdog. Deshalb
    `pendingUp_`-Flags und Verarbeitung in `loop()`; deshalb sitzt im Callback nur
-   das `memcpy` des Rohbyte-Rings.
+   das `memcpy` des Rohbyte-Rings. Bridge-CP: Decode + Pending + Indicate, keine
+   Stufenrechnung.
 
 ## 7. Abnahmekriterien v0.1 — Stand
 
@@ -129,14 +139,13 @@ Die Liste selbst steht in [PFLICHTENHEFT.md](docs/ergometer/PFLICHTENHEFT.md) §
 
 ## 9. Offene Entscheidungen
 
-- **Reihenfolge v0.2 gegen v0.3.** Die einzige echte Scope-Frage, siehe
-  PFLICHTENHEFT §11 am Ende. Editor und Tests setzen direkt auf v0.1 auf;
-  MyWhoosh ist die Motivation, die erhalten bleiben soll.
-- **Wandert die UI nach LittleFS?** Flash ~75 %, UI-Seite ~110 kB Quelle —
-  vor TestRunner/v0.2-Wachstum dringend messen und entscheiden
-  (WEBINTERFACE.md §8).
-- **Gerätename.** Das gemeinsame NVS `esphub` hält noch `FtmsProbe-S3`.
-  Kosmetisch.
+- ~~**Reihenfolge v0.2 gegen v0.3.**~~ Bridge-MVP liegt als **0.3.0-dev**;
+  Editor/Tests waren vorher. Difficulty/CPS folgen bei Bedarf.
+- **Wandert die UI nach LittleFS?** Gzip-PROGMEM erledigt das Budget vorerst
+  (~33 kB statt ~110 kB). LittleFS nur noch nötig, wenn UI ohne Firmware-OTA
+  austauschbar sein soll.
+- **Gerätename.** Das gemeinsame NVS `esphub` hält noch `FtmsProbe-S3` /
+  inzwischen oft `Ergometer-S3`. Kosmetisch.
 - **mDNS** ist vom Build-Host nicht auflösbar. Bisher nur lästig.
 
 ## 10. Git

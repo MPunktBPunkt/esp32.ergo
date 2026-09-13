@@ -77,6 +77,9 @@ public:
     Result pause(uint32_t nowMs);
     Result setLevelTenths(int16_t tenths, uint32_t nowMs);
     Result setPowerW(int16_t watt, uint32_t nowMs);
+    /** 0x11 — Limiter sperrt bis allowSimulation. */
+    Result setSimulation(int16_t windMms, int16_t gradeHundredth, uint8_t crr10000, uint8_t cw100,
+                         uint32_t nowMs);
 
     /** Zuletzt vom Geraet quittierte Antwort auf 0x2AD9. */
     const ftms::ControlResponse& lastResponse() const { return lastResp_; }

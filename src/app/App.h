@@ -6,8 +6,10 @@
 
 #include "ble/BleCentral.h"
 #include "ble/FtmsClient.h"
+#include "ble/FtmsServer.h"
 #include "ble/HrClient.h"
 #include "ble/DebugRing.h"
+#include "control/BridgeAssist.h"
 #include "control/ControlJournal.h"
 #include "control/ControlMode.h"
 #include "control/HrController.h"
@@ -18,8 +20,10 @@
 #include "control/SweepRunner.h"
 #include "control/WorkoutEngine.h"
 #include "control/WorkoutJson.h"
+#include "control/TestRunner.h"
 #include "core/ConfigStore.h"
 #include "core/HubClient.h"
+#include "core/FtpCareer.h"
 #include "core/Progression.h"
 #include "core/Profile.h"
 #include "core/SessionStore.h"
@@ -39,13 +43,16 @@ public:
 
     ergo::BleCentral ble;
     ergo::FtmsClient ftms;
+    FtmsServer bridge;
     ergo::HrClient hrc;
     ergo::Limiter limiter;
     ergo::PowerMap powerMap;
     ergo::PowerController powerCtl;
     ergo::HrController hrCtl;
     ergo::RehaController rehaCtl;
+    ergo::BridgeHrCap bridgeHrCap;
     ergo::WorkoutEngine workout;
+    ergo::TestRunner testRunner;
     ergo::SweepRunner sweep;
     ergo::DebugRing ring;
     ergo::ControlJournal journal;
@@ -74,6 +81,12 @@ private:
     void registerProfileRoutes();
     void registerCalibRoutes();
     void registerDebugRoutes();
+    void registerTestRoutes();
+    void registerBridgeRoutes();
+    void loopBridge(unsigned long now);
+    void applyBridgePending(const FtmsServer::Pending& p, unsigned long now);
+    void syncBridgeHrLimits();
+    float bridgeScaleAppWatt(float appWatt) const;
     void runCodecSelfTest();
     void applyLimiterConfig();
     void seedDefaultProfiles();
@@ -83,16 +96,24 @@ private:
     void saveProfiles();
     bool beginFs();
     void recordSessionEnd(const char* reason);
-    void beginSession(const char* workoutName = "");
+    void beginSession(const char* workoutName = "", const char* workoutId = "");
     void loopSession(unsigned long now);
     void persistSession_(const ergo::SessionSummary& s);
     void loadSessionArchive_();
     bool loadWorkoutDoc(const ergo::WorkoutDoc& doc, float scale);
     void prepareWorkoutDoc(ergo::WorkoutDoc& doc);
+    void loadWorkoutMeta_();
+    void saveWorkoutMeta_();
+    bool isWorkoutFavorite_(const char* id) const;
+    void setWorkoutFavorite_(const char* id, bool on);
     uint32_t readProgressionMainS(const char* id) const;
     bool writeProgressionMainS(const char* id, uint32_t mainS);
     void maybeOfferProgression(const ergo::SessionSummary& s);
     void appendProgressionOfferJson(JsonObject obj) const;
+    void loadFtpCareer_();
+    void saveFtpCareer_();
+    void maybeOfferFtpCareer_(const ergo::SessionSummary& s);
+    void appendFtpCareerJson_(JsonObject obj) const;
 
     void profileToJson(const ergo::Profile& p, JsonObject obj) const;
     bool profileFromJson(JsonVariantConst v, ergo::Profile& out) const;
@@ -156,16 +177,28 @@ private:
     uint32_t liveSeen_ = 0;
     uint32_t respSeen_ = 0;
     uint16_t judgedSeen_ = 0;
+    uint32_t bridgeLiveSeen_ = 0;
+    float bridgeAppWatt_ = 0.0f;   // vor Difficulty
+    float bridgeDesiredW_ = 0.0f;  // nach Difficulty, vor HR-Deckel
+    bool bridgeDriving_ = false;
+    uint16_t crankRevs_ = 0;
+    uint16_t crankEvent_ = 0;
+    unsigned long crankLastMs_ = 0;
 
     const char* codecSelfTest_ = "nicht gelaufen";
     ergo::WorkoutEngine::Tick woSnap_{};
     ergo::SessionSummary lastSession_{};
     ergo::SessionTracker session_;
     ergo::SessionStore sessionStore_;
-    uint8_t zoneUiPrev_ = 0;
+    uint8_t     zoneUiPrev_ = 0;
+    bool sessWasPaused_ = false;
     bool fsReady_ = false;
     uint16_t interventionsSeen_ = 0;
     char activeWorkoutId_[24] = {};
     ergo::WorkoutDoc::Progression activeProg_{};
     ergo::ProgressionOffer progOffer_{};
+    ergo::FtpCareerState ftpCareer_{};
+    /** Favoriten-IDs (Builtins + Dateien), persistiert in /workouts/meta.json. */
+    char woFavIds_[12][24] = {};
+    uint8_t woFavCount_ = 0;
 };

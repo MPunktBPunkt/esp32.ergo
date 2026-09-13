@@ -17,6 +17,8 @@ public:
 
     void clear();
     bool append(const SessionSummary& s);
+    /** Ersetzt die neueste Session (z. B. RPE/Notiz nachträglich). */
+    bool replaceNewest(const SessionSummary& s);
     uint8_t count() const { return count_; }
     /** 0 = neueste. */
     bool at(uint8_t newestIndex, SessionSummary& out) const;

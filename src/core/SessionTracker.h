@@ -25,7 +25,8 @@ public:
     void begin(const SessionTrackerConfig& cfg = {});
     void reset();
 
-    void start(uint32_t nowMs, const char* mode, const char* workoutName, const char* profileId);
+    void start(uint32_t nowMs, const char* mode, const char* workoutName, const char* profileId,
+               const char* workoutId = nullptr);
     /** Beendet; Summary bleibt bis zum nächsten start lesbar. */
     SessionSummary end(uint32_t nowMs, const char* reason);
 

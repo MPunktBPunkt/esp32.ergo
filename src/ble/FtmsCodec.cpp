@@ -257,6 +257,215 @@ size_t encodeIndoorBikeSimulation(uint8_t* out, size_t cap, int16_t windMms,
     return 7;
 }
 
+size_t encodeIndoorBikeData(const IndoorBikeData& in, uint8_t* out, size_t cap) {
+    if (!out || cap < 2) return 0;
+    uint16_t flags = 0;
+    // Bit 0 invertiert: gesetzt = kein Instantaneous Speed.
+    if (!in.has(kSpeed)) flags |= 0x0001;
+    if (in.has(kAvgSpeed)) flags |= kAvgSpeed;
+    if (in.has(kCadence)) flags |= kCadence;
+    if (in.has(kAvgCadence)) flags |= kAvgCadence;
+    if (in.has(kDistance)) flags |= kDistance;
+    if (in.has(kResistance)) flags |= kResistance;
+    if (in.has(kPower)) flags |= kPower;
+    if (in.has(kAvgPower)) flags |= kAvgPower;
+    if (in.has(kEnergy)) flags |= kEnergy;
+    if (in.has(kHeartRate)) flags |= kHeartRate;
+    if (in.has(kMet)) flags |= kMet;
+    if (in.has(kElapsedTime)) flags |= kElapsedTime;
+    if (in.has(kRemainingTime)) flags |= kRemainingTime;
+
+    size_t need = 2;
+    if (in.has(kSpeed)) need += 2;
+    if (in.has(kAvgSpeed)) need += 2;
+    if (in.has(kCadence)) need += 2;
+    if (in.has(kAvgCadence)) need += 2;
+    if (in.has(kDistance)) need += 3;
+    if (in.has(kResistance)) need += 2;
+    if (in.has(kPower)) need += 2;
+    if (in.has(kAvgPower)) need += 2;
+    if (in.has(kEnergy)) need += 5;
+    if (in.has(kHeartRate)) need += 1;
+    if (in.has(kMet)) need += 1;
+    if (in.has(kElapsedTime)) need += 2;
+    if (in.has(kRemainingTime)) need += 2;
+    if (need > cap || need > kMaxIndoorBikeLen) return 0;
+
+    size_t off = 0;
+    put16le(out + off, flags);
+    off += 2;
+    if (in.has(kSpeed)) {
+        put16le(out + off, in.speedRaw);
+        off += 2;
+    }
+    if (in.has(kAvgSpeed)) {
+        put16le(out + off, in.avgSpeedRaw);
+        off += 2;
+    }
+    if (in.has(kCadence)) {
+        put16le(out + off, in.cadenceRaw);
+        off += 2;
+    }
+    if (in.has(kAvgCadence)) {
+        put16le(out + off, in.avgCadenceRaw);
+        off += 2;
+    }
+    if (in.has(kDistance)) {
+        out[off] = (uint8_t)(in.distanceM & 0xFF);
+        out[off + 1] = (uint8_t)((in.distanceM >> 8) & 0xFF);
+        out[off + 2] = (uint8_t)((in.distanceM >> 16) & 0xFF);
+        off += 3;
+    }
+    if (in.has(kResistance)) {
+        put16le(out + off, (uint16_t)in.resistanceRaw);
+        off += 2;
+    }
+    if (in.has(kPower)) {
+        put16le(out + off, (uint16_t)in.powerW);
+        off += 2;
+    }
+    if (in.has(kAvgPower)) {
+        put16le(out + off, (uint16_t)in.avgPowerW);
+        off += 2;
+    }
+    if (in.has(kEnergy)) {
+        put16le(out + off, in.energyTotalKcal);
+        put16le(out + off + 2, in.energyPerHourKcal);
+        out[off + 4] = in.energyPerMinKcal;
+        off += 5;
+    }
+    if (in.has(kHeartRate)) {
+        out[off++] = in.heartRateBpm;
+    }
+    if (in.has(kMet)) {
+        out[off++] = in.metRaw;
+    }
+    if (in.has(kElapsedTime)) {
+        put16le(out + off, in.elapsedS);
+        off += 2;
+    }
+    if (in.has(kRemainingTime)) {
+        put16le(out + off, in.remainingS);
+        off += 2;
+    }
+    return off;
+}
+
+size_t encodeFeature(const FeatureSet& in, uint8_t* out, size_t cap) {
+    if (!out || cap < 8) return 0;
+    out[0] = (uint8_t)(in.machine & 0xFF);
+    out[1] = (uint8_t)((in.machine >> 8) & 0xFF);
+    out[2] = (uint8_t)((in.machine >> 16) & 0xFF);
+    out[3] = (uint8_t)((in.machine >> 24) & 0xFF);
+    out[4] = (uint8_t)(in.target & 0xFF);
+    out[5] = (uint8_t)((in.target >> 8) & 0xFF);
+    out[6] = (uint8_t)((in.target >> 16) & 0xFF);
+    out[7] = (uint8_t)((in.target >> 24) & 0xFF);
+    return 8;
+}
+
+size_t encodeResistanceRange(const ResistanceRange& in, uint8_t* out, size_t cap) {
+    if (!out || cap < 6) return 0;
+    put16le(out + 0, (uint16_t)in.minRaw);
+    put16le(out + 2, (uint16_t)in.maxRaw);
+    put16le(out + 4, in.stepRaw);
+    return 6;
+}
+
+size_t encodePowerRange(const PowerRange& in, uint8_t* out, size_t cap) {
+    if (!out || cap < 6) return 0;
+    put16le(out + 0, (uint16_t)in.minW);
+    put16le(out + 2, (uint16_t)in.maxW);
+    put16le(out + 4, in.stepW);
+    return 6;
+}
+
+size_t encodeControlResponse(Opcode request, ControlResult result, uint8_t* out, size_t cap) {
+    if (!out || cap < 3) return 0;
+    out[0] = (uint8_t)Opcode::ResponseCode;
+    out[1] = (uint8_t)request;
+    out[2] = (uint8_t)result;
+    return 3;
+}
+
+bool decodeControlWrite(const uint8_t* data, size_t len, ControlWrite& out) {
+    out = ControlWrite{};
+    if (!data || len < 1) return false;
+    out.op = (Opcode)data[0];
+    out.valid = true;
+    switch (out.op) {
+        case Opcode::RequestControl:
+        case Opcode::Reset:
+        case Opcode::StartResume:
+            return true;
+        case Opcode::StopPause:
+            if (len < 2) {
+                out.valid = false;
+                return false;
+            }
+            out.stopParam = data[1];
+            return true;
+        case Opcode::SetTargetResistance:
+            if (len >= 3) {
+                out.resistanceTenths = s16le(data + 1);
+                return true;
+            }
+            if (len >= 2) {
+                out.resistanceTenths = data[1];
+                return true;
+            }
+            out.valid = false;
+            return false;
+        case Opcode::SetTargetPower:
+            if (len < 3) {
+                out.valid = false;
+                return false;
+            }
+            out.watt = s16le(data + 1);
+            return true;
+        case Opcode::SetIndoorBikeSimulation:
+            if (len < 7) {
+                out.valid = false;
+                return false;
+            }
+            out.windMms = s16le(data + 1);
+            out.gradeHundredth = s16le(data + 3);
+            out.crr10000 = data[5];
+            out.cw100 = data[6];
+            return true;
+        default:
+            // Unbekannte Ops bleiben valid mit Opcode — Server antwortet NotSupported.
+            return true;
+    }
+}
+
+FeatureSet bridgeFeatureSet() {
+    FeatureSet f;
+    f.valid = true;
+    f.machine = kFeatCadence | kFeatTotalDistance | kFeatResistanceLevel | kFeatExpendedEnergy |
+                kFeatHeartRate | kFeatElapsedTime | kFeatPowerMeasurement;
+    f.target = kTgtResistance | kTgtPower;
+    return f;
+}
+
+ResistanceRange bridgeResistanceRange() {
+    ResistanceRange r;
+    r.valid = true;
+    r.minRaw = 10;
+    r.maxRaw = 160;
+    r.stepRaw = 10;
+    return r;
+}
+
+PowerRange bridgePowerRange() {
+    PowerRange r;
+    r.valid = true;
+    r.minW = 20;
+    r.maxW = 400;
+    r.stepW = 1;
+    return r;
+}
+
 // ----------------------------------------------------------------- Namen
 
 const char* opcodeName(Opcode op) {

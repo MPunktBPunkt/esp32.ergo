@@ -14,8 +14,12 @@ namespace ergo {
 struct SessionSummary {
     char mode[16] = {};
     char workoutName[40] = {};
+    char workoutId[24] = {};
     char profileId[16] = {};
     char endReason[24] = {};
+    /** 0 = keine Note; 1..10 empfundene Anstrengung. */
+    uint8_t rpe = 0;
+    char note[48] = {};
     uint32_t durationS = 0;
     uint32_t pausedS = 0;
     uint8_t steps = 0;

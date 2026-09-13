@@ -46,7 +46,7 @@ void SessionTracker::setZoneBasis(bool leadHr, uint16_t ftpW, uint8_t hrMax) {
 }
 
 void SessionTracker::start(uint32_t nowMs, const char* mode, const char* workoutName,
-                           const char* profileId) {
+                           const char* profileId, const char* workoutId) {
     const bool lead = leadHr_;
     const uint16_t ftp = ftpW_;
     const uint8_t hrm = hrMax_;
@@ -67,6 +67,10 @@ void SessionTracker::start(uint32_t nowMs, const char* mode, const char* workout
     if (workoutName) {
         strncpy(cur_.workoutName, workoutName, sizeof(cur_.workoutName) - 1);
         cur_.workoutName[sizeof(cur_.workoutName) - 1] = 0;
+    }
+    if (workoutId) {
+        strncpy(cur_.workoutId, workoutId, sizeof(cur_.workoutId) - 1);
+        cur_.workoutId[sizeof(cur_.workoutId) - 1] = 0;
     }
     if (profileId) {
         strncpy(cur_.profileId, profileId, sizeof(cur_.profileId) - 1);

@@ -11,6 +11,8 @@
 #include <time.h>
 
 #include "ble/FtmsCodec.h"
+#include "control/ZwoImport.h"
+#include "core/FtpCareer.h"
 #include "core/Progression.h"
 #include "core/NetUtil.h"
 #include "core/Zone.h"
@@ -37,6 +39,8 @@ void App::begin() {
         Serial.printf("[CFG] Geraetename → %s\n", config.deviceName.c_str());
     }
     beginFs();
+    loadWorkoutMeta_();
+    loadFtpCareer_();
     runCodecSelfTest();
     checkResetButton();
     setupWifi();
@@ -61,6 +65,7 @@ void App::begin() {
     rehaCtl.setDesiredW(60.0f);
     rehaCtl.setHrLimits(115, 120);
     rehaCtl.setDurationS(600);
+    bridgeHrCap.begin({});
     session_.begin({});
     loadSessionArchive_();
     journal.begin(ergo::JournalConfig{});
@@ -73,10 +78,16 @@ void App::begin() {
     ftms.setJournal(&journal);
     ble.begin(&config);
     ble.setLinkEvent([](ergo::Role role, bool up) { App::instance().onLink(role, up); });
+    bridge.begin(&config);
+    syncBridgeHrLimits();
 
     setupWeb();
     hub.begin(&config);
     hub.setPayloadBuilder([](JsonDocument& doc) { App::instance().buildHeartbeat(doc); });
+    hub.setOtaAllowed([]() {
+        App& a = App::instance();
+        return !a.ble.ready(ergo::Role::Bike) && !a.control.sessionActive();
+    });
     if (config.enableHub) hub.sendNow();
 
     // Nur auf ausdrueckliche Ansage. Ein Ergometer, das sich nach einem
@@ -466,15 +477,41 @@ void App::buildStatusJson(JsonDocument& doc) {
     wo["desiredW"] = woSnap_.desiredW;
     wo["hrMax"] = woSnap_.hrMax;
     wo["hrSoft"] = woSnap_.hrSoft;
+    wo["selfPaced"] = woSnap_.selfPaced;
     wo["stepRemainingS"] = woSnap_.stepRemainingS;
     wo["totalRemainingS"] = woSnap_.totalRemainingS;
     wo["elapsedS"] = woSnap_.elapsedS;
+    {
+        JsonObject tr = doc["test"].to<JsonObject>();
+        tr["active"] = testRunner.active();
+        tr["kind"] = ergo::TestRunner::kindName(testRunner.kind());
+        const ergo::TestResult& r = testRunner.result();
+        if (r.valid) {
+            tr["ok"] = true;
+            tr["resultKind"] = ergo::TestRunner::kindName(r.kind);
+            tr["endReason"] = r.endReason;
+            tr["mapW"] = r.mapW;
+            tr["avgMainW"] = r.avgMainW;
+            tr["peakW"] = r.peakW;
+            tr["ftpPropose"] = r.ftpPropose;
+            tr["recoveryNote"] = r.recoveryNote;
+            tr["hrLoad"] = r.hrLoad;
+            tr["hrRecover"] = r.hrRecover;
+            tr["mainSamples"] = r.mainSamples;
+            tr["durationS"] = r.durationS;
+        } else {
+            tr["ok"] = false;
+        }
+    }
     if (lastSession_.valid) {
         JsonObject ls = doc["lastSession"].to<JsonObject>();
         ls["mode"] = lastSession_.mode;
         ls["workoutName"] = lastSession_.workoutName;
+        ls["workoutId"] = lastSession_.workoutId;
         ls["profileId"] = lastSession_.profileId;
         ls["endReason"] = lastSession_.endReason;
+        ls["rpe"] = lastSession_.rpe;
+        ls["note"] = lastSession_.note;
         ls["durationS"] = lastSession_.durationS;
         ls["pausedS"] = lastSession_.pausedS;
         ls["steps"] = lastSession_.steps;
@@ -581,6 +618,7 @@ void App::buildStatusJson(JsonDocument& doc) {
     ble.appendStatusJson(doc["ble"].to<JsonObject>());
     ftms.appendStatusJson(doc["ftms"].to<JsonObject>());
     hrc.appendStatusJson(doc["hr"].to<JsonObject>());
+    bridge.appendStatusJson(doc["bridge"].to<JsonObject>());
 
     doc["hrSource"] = ergo::hrSourceName(resolveHrSource());
     doc["heartRate"] = effectiveHr();
@@ -705,12 +743,18 @@ void App::handleMain() {
     server.sendHeader(F("Cache-Control"), F("no-store, no-cache, must-revalidate, max-age=0"));
     server.sendHeader(F("Pragma"), F("no-cache"));
     server.sendHeader(F("Expires"), F("0"));
-    server.send_P(200, "text/html", PAGE_MAIN);
+    server.sendHeader(F("Content-Encoding"), F("gzip"));
+    server.send_P(200, "text/html", (PGM_P)PAGE_MAIN_GZ, PAGE_MAIN_GZ_LEN);
 }
 
 void App::handleOtaUpload() {
     HTTPUpload& upload = server.upload();
     if (upload.status == UPLOAD_FILE_START) {
+        if (ble.ready(ergo::Role::Bike) || control.sessionActive()) {
+            Serial.println("[OTA] /ota-upload abgelehnt (Bike/Session)");
+            Update.abort();
+            return;
+        }
         Serial.printf("[OTA] Start %s\n", upload.filename.c_str());
         if (!Update.begin(UPDATE_SIZE_UNKNOWN)) Update.printError(Serial);
     } else if (upload.status == UPLOAD_FILE_WRITE) {
@@ -724,6 +768,10 @@ void App::handleOtaUpload() {
 }
 
 void App::handleOtaUploadFinish() {
+    if (ble.ready(ergo::Role::Bike) || control.sessionActive()) {
+        server.send(409, F("text/plain"), F("OTA blockiert: Bike verbunden oder Session aktiv"));
+        return;
+    }
     if (Update.hasError()) server.send(500, F("text/plain"), F("OTA fehlgeschlagen!"));
     else server.send(200, F("text/plain"), F("OK - Neustart..."));
     delay(400);
@@ -773,11 +821,20 @@ void App::registerRoutes() {
     server.on("/api/config/save", HTTP_POST, [this]() {
         JsonDocument doc;
         if (!NetUtil::readJsonBody(server, doc)) return;
+        const bool bridgeWas = config.bridgeEnabled;
+        const String bridgeNameWas = config.bridgeName;
         if (!config.fromJson(doc.as<JsonVariantConst>())) {
             NetUtil::sendError(server, 400, "Konfiguration nicht lesbar");
             return;
         }
         config.save();
+        if (config.bridgeEnabled != bridgeWas || config.bridgeName != bridgeNameWas) {
+            if (config.bridgeEnabled && config.bridgeName != bridgeNameWas && bridge.enabled()) {
+                bridge.setEnabled(false);
+            }
+            bridge.setEnabled(config.bridgeEnabled);
+        }
+        syncBridgeHrLimits();
         JsonDocument out;
         out["ok"] = true;
         config.toJson(out["config"].to<JsonObject>());
@@ -803,9 +860,11 @@ void App::registerRoutes() {
 
     registerBleRoutes();
     registerControlRoutes();
+    registerBridgeRoutes();
     registerProfileRoutes();
     registerCalibRoutes();
     registerDebugRoutes();
+    registerTestRoutes();
 }
 
 // ────────────────────────────────────────────────────────────── BLE-Routen
@@ -923,7 +982,7 @@ void App::registerControlRoutes() {
     };
 
     server.on("/api/control/stop", HTTP_POST, [this, reply]() {
-        if (control.sessionActive()) recordSessionEnd("panic");
+        if (control.sessionActive()) recordSessionEnd("stop");
         const auto r = ftms.stop(millis());
         control.setMode(ergo::ControlMode::Off);
         powerCtl.reset();
@@ -1116,7 +1175,7 @@ void App::registerControlRoutes() {
                 return;
             }
             if (session_.active()) recordSessionEnd("switch");
-            beginSession(workout.name());
+            beginSession(workout.name(), docIn.id);
             doc["workout"] = workout.name();
             doc["id"] = docIn.id;
             doc["scale"] = scale;
@@ -1152,6 +1211,12 @@ void App::registerControlRoutes() {
             tenths = (int16_t)lroundf(server.arg("level").toFloat() * 10.0f);
         }
         if (control.mode() != ergo::ControlMode::ManualLevel) {
+            // Self-paced Workout: Stufe aendern ohne Moduswechsel / Session-Abbruch.
+            if (control.allowsWorkout() && woSnap_.selfPaced && workout.running()) {
+                control.setLevelTargetTenths(tenths);
+                reply(ftms.setLevelTenths(tenths, millis()));
+                return;
+            }
             if (session_.active()) recordSessionEnd("switch");
             control.setMode(ergo::ControlMode::ManualLevel);
             beginSession("");
@@ -1314,6 +1379,14 @@ void App::registerControlRoutes() {
             NetUtil::sendError(server, 404, err[0] ? err : "Workout nicht geladen");
             return;
         }
+        const uint8_t ci = ergo::ftpCareerIndexOf(docIn.id);
+        const bool force =
+            server.hasArg("force") &&
+            (server.arg("force") == "1" || server.arg("force") == "true");
+        if (ci != 255 && !ergo::ftpCareerIsUnlocked(ftpCareer_, ci) && !force) {
+            NetUtil::sendError(server, 403, "FTP-Karriere: Stufe noch gesperrt (force=1 zum Ueberspringen)");
+            return;
+        }
         if (!control.setMode(ergo::ControlMode::Workout)) {
             NetUtil::sendError(server, 409, "Modus abgelehnt");
             return;
@@ -1330,7 +1403,7 @@ void App::registerControlRoutes() {
             return;
         }
         if (session_.active()) recordSessionEnd("switch");
-        beginSession(workout.name());
+        beginSession(workout.name(), docIn.id);
         JsonDocument doc;
         workoutJson(doc);
         doc["scale"] = scale;
@@ -1403,9 +1476,18 @@ void App::registerControlRoutes() {
         JsonArray builtins = doc["builtins"].to<JsonArray>();
         for (uint8_t i = 0; i < ergo::workoutBuiltinCount(); i++) {
             JsonObject o = builtins.add<JsonObject>();
-            o["id"] = ergo::workoutBuiltinId(i);
+            const char* id = ergo::workoutBuiltinId(i);
+            o["id"] = id;
             o["name"] = ergo::workoutBuiltinName(i);
+            o["goal"] = ergo::workoutBuiltinGoal(i);
+            o["favorite"] = isWorkoutFavorite_(id);
             o["source"] = "builtin";
+            const uint8_t ci = ergo::ftpCareerIndexOf(id);
+            if (ci != 255) {
+                o["careerIndex"] = ci;
+                o["careerUnlocked"] = ergo::ftpCareerIsUnlocked(ftpCareer_, ci);
+                o["careerCurrent"] = (ci == ftpCareer_.unlocked);
+            }
         }
         JsonArray files = doc["files"].to<JsonArray>();
         if (fsReady_) {
@@ -1414,20 +1496,103 @@ void App::registerControlRoutes() {
                 File f = root.openNextFile();
                 while (f) {
                     String name = f.name();
-                    if (name.endsWith(".json")) {
+                    if (name.endsWith(".json") && !name.endsWith("meta.json")) {
                         JsonObject o = files.add<JsonObject>();
                         int slash = name.lastIndexOf('/');
                         String base = slash >= 0 ? name.substring(slash + 1) : name;
                         if (base.endsWith(".json")) base.remove(base.length() - 5);
+                        if (base == "meta") {
+                            f = root.openNextFile();
+                            continue;
+                        }
                         o["id"] = base;
                         o["name"] = base;
                         o["source"] = "fs";
                         o["bytes"] = (int)f.size();
+                        o["favorite"] = isWorkoutFavorite_(base.c_str());
+                        String body = f.readString();
+                        ergo::WorkoutDoc wd;
+                        char err[40];
+                        if (ergo::workoutParseJson(body.c_str(), wd, err, sizeof(err))) {
+                            o["name"] = wd.name[0] ? wd.name : base;
+                            o["goal"] = wd.goal;
+                            if (wd.favorite) o["favorite"] = true;
+                        } else {
+                            o["goal"] = "";
+                        }
                     }
                     f = root.openNextFile();
                 }
             }
         }
+        // Zuletzt genutzt (neueste zuerst), aus Session-Archiv.
+        JsonArray recent = doc["recent"].to<JsonArray>();
+        char seen[16][24];
+        uint8_t seenN = 0;
+        for (uint8_t i = 0; i < sessionStore_.count() && recent.size() < 8; i++) {
+            ergo::SessionSummary s;
+            if (!sessionStore_.at(i, s)) continue;
+            if (!s.workoutId[0]) continue;
+            bool dup = false;
+            for (uint8_t k = 0; k < seenN; k++) {
+                if (strcmp(seen[k], s.workoutId) == 0) {
+                    dup = true;
+                    break;
+                }
+            }
+            if (dup) continue;
+            if (seenN < 16) {
+                strncpy(seen[seenN], s.workoutId, sizeof(seen[0]) - 1);
+                seen[seenN][sizeof(seen[0]) - 1] = 0;
+                seenN++;
+            }
+            recent.add(s.workoutId);
+        }
+        appendFtpCareerJson_(doc["ftpCareer"].to<JsonObject>());
+        NetUtil::sendJson(server, 200, doc);
+    });
+
+    server.on("/api/workout/favorite", HTTP_POST, [this]() {
+        if (!server.hasArg("id")) {
+            NetUtil::sendError(server, 400, "id fehlt");
+            return;
+        }
+        const String id = server.arg("id");
+        bool on = true;
+        if (server.hasArg("on")) {
+            const String v = server.arg("on");
+            on = (v == "1" || v == "true" || v == "on");
+        } else if (server.hasArg("favorite")) {
+            const String v = server.arg("favorite");
+            on = (v == "1" || v == "true");
+        }
+        setWorkoutFavorite_(id.c_str(), on);
+        // FS-Datei: favorite-Flag auch ins JSON schreiben, falls vorhanden.
+        if (fsReady_) {
+            String path = String("/workouts/") + id + ".json";
+            File f = LittleFS.open(path, "r");
+            if (f) {
+                String body = f.readString();
+                f.close();
+                ergo::WorkoutDoc d;
+                char err[64];
+                if (ergo::workoutParseJson(body.c_str(), d, err, sizeof(err))) {
+                    d.favorite = on;
+                    char buf[ergo::kWorkoutJsonBuf];
+                    if (ergo::workoutWriteJson(d, buf, sizeof(buf))) {
+                        File w = LittleFS.open(path, "w");
+                        if (w) {
+                            w.print(buf);
+                            w.close();
+                        }
+                    }
+                }
+            }
+        }
+        JsonDocument doc;
+        doc["ok"] = true;
+        doc["id"] = id;
+        doc["favorite"] = isWorkoutFavorite_(id.c_str());
         NetUtil::sendJson(server, 200, doc);
     });
 
@@ -1466,7 +1631,9 @@ void App::registerControlRoutes() {
                 const ergo::WorkoutStep& st = d.steps[i];
                 totalS += st.durationS;
                 float w = st.powerW;
-                if (w <= 0.0f && st.ftpPct > 0.0f) {
+                if (st.selfPaced) {
+                    w = 0.0f;
+                } else if (w <= 0.0f && st.ftpPct > 0.0f) {
                     needFtp = true;
                     if (ftp > 0) w = (float)ftp * st.ftpPct / 100.0f;
                 }
@@ -1476,19 +1643,30 @@ void App::registerControlRoutes() {
                 o["i"] = i;
                 o["label"] = st.label;
                 o["durationS"] = st.durationS;
+                o["selfPaced"] = st.selfPaced;
+                if (st.selfPaced) o["open"] = true;
                 if (st.powerW > 0.0f) o["powerW"] = st.powerW;
                 if (st.ftpPct > 0.0f) o["ftpPct"] = st.ftpPct;
-                if (w > 0.0f) o["resolvedW"] = w;
+                o["resolvedW"] = w;
                 o["hrMax"] = st.hrMax;
                 o["hrSoft"] = st.hrSoft;
             }
             doc["durationS"] = totalS;
             doc["peakW"] = peakW;
             doc["avgW"] = totalS > 0 ? (workJ / (float)totalS) : 0.0f;
+            doc["workKj"] = workJ / 1000.0f;
+            if (ftp > 0 && totalS > 0) {
+                const float avg = workJ / (float)totalS;
+                const float iff = avg / (float)ftp;
+                doc["tss"] = (totalS / 3600.0f) * iff * iff * 100.0f;
+            } else {
+                doc["tss"] = nullptr;
+            }
             doc["needFtp"] = needFtp;
             JsonArray warns = doc["warnings"].to<JsonArray>();
+            const bool isRamp = (strcmp(d.id, "test_ramp") == 0);
             if (needFtp && ftp == 0) warns.add("ftp_pct braucht FTP im aktiven Profil");
-            if (maxPw > 0 && peakW > (float)maxPw) {
+            if (maxPw > 0 && peakW > (float)maxPw && !isRamp) {
                 String wmsg = "Spitze " + String((int)peakW) + " W über Profil-max " + String((int)maxPw) + " W";
                 warns.add(wmsg);
             }
@@ -1506,7 +1684,8 @@ void App::registerControlRoutes() {
                 if (powerMap.bestLevel(peakW, 80.0f, lvl, ceil)) {
                     doc["mapLevelTenths"] = lvl;
                     doc["mapCeiling"] = ceil;
-                    if (ceil) warns.add("Spitze über Kennfläche bei ~80 rpm");
+                    // Rampe darf die Decke ansteuern — Stop = Abbruch.
+                    if (ceil && !isRamp) warns.add("Spitze über Kennfläche bei ~80 rpm");
                 }
             }
             doc["feasible"] = warns.size() == 0;
@@ -1539,9 +1718,9 @@ void App::registerControlRoutes() {
             NetUtil::sendError(server, 500, "Schreiben fehlgeschlagen");
             return;
         }
-        char buf[1536];
-        const size_t n = ergo::workoutWriteJson(d, buf, sizeof(buf));
-        if (n == 0 || f.write((const uint8_t*)buf, n) != n) {
+        // Original-JSON behalten (kompakte Intervalle); Parse hat schon validiert.
+        const String& body = server.arg("plain");
+        if (f.write((const uint8_t*)body.c_str(), body.length()) != body.length()) {
             f.close();
             NetUtil::sendError(server, 500, "Write unvollstaendig");
             return;
@@ -1551,8 +1730,33 @@ void App::registerControlRoutes() {
         doc["ok"] = true;
         doc["id"] = d.id;
         doc["path"] = path;
-        doc["bytes"] = (int)n;
+        doc["bytes"] = (int)body.length();
+        doc["expandedSteps"] = d.stepCount;
         NetUtil::sendJson(server, 200, doc);
+    });
+
+    server.on("/api/workout/import", HTTP_POST, [this]() {
+        if (!server.hasArg("plain")) {
+            NetUtil::sendError(server, 400, "Body fehlt (.zwo)");
+            return;
+        }
+        // Nicht auf dem Callback-Stack — 4k + WorkoutDoc sprengen den Task.
+        static char json[ergo::kWorkoutJsonBuf];
+        char err[80];
+        const size_t n =
+            ergo::zwoToJson(server.arg("plain").c_str(), json, sizeof(json), err, sizeof(err));
+        if (n == 0) {
+            NetUtil::sendError(server, 400, err[0] ? err : "zwo ungueltig");
+            return;
+        }
+        ergo::WorkoutDoc d;
+        char perr[64];
+        if (!ergo::workoutParseJson(json, d, perr, sizeof(perr))) {
+            NetUtil::sendError(server, 400, perr);
+            return;
+        }
+        (void)d;
+        server.send(200, "application/json", json);
     });
 
     server.on("/api/workout/download", HTTP_GET, [this]() {
@@ -1563,11 +1767,15 @@ void App::registerControlRoutes() {
         const String id = server.arg("id");
         ergo::WorkoutDoc d;
         char err[64];
-        char buf[1536];
+        char buf[ergo::kWorkoutJsonBuf];
         if (ergo::workoutBuiltinById(id.c_str(), d)) {
             prepareWorkoutDoc(d);
             const size_t n = ergo::workoutWriteJson(d, buf, sizeof(buf));
-            server.send(200, "application/json", n ? buf : "{}");
+            if (n == 0) {
+                NetUtil::sendError(server, 500, "JSON zu gross");
+                return;
+            }
+            server.send(200, "application/json", buf);
             return;
         }
         if (!fsReady_) {
@@ -1591,8 +1799,11 @@ void App::registerControlRoutes() {
         if (lastSession_.valid) {
             doc["mode"] = lastSession_.mode;
             doc["workoutName"] = lastSession_.workoutName;
+            doc["workoutId"] = lastSession_.workoutId;
             doc["profileId"] = lastSession_.profileId;
             doc["endReason"] = lastSession_.endReason;
+            doc["rpe"] = lastSession_.rpe;
+            doc["note"] = lastSession_.note;
             doc["durationS"] = lastSession_.durationS;
             doc["pausedS"] = lastSession_.pausedS;
             doc["steps"] = lastSession_.steps;
@@ -1682,6 +1893,94 @@ void App::registerControlRoutes() {
         doc["ok"] = true;
         NetUtil::sendJson(server, 200, doc);
     });
+
+    server.on("/api/ftp-career", HTTP_GET, [this]() {
+        JsonDocument doc;
+        JsonObject root = doc.to<JsonObject>();
+        root["ok"] = true;
+        appendFtpCareerJson_(root);
+        NetUtil::sendJson(server, 200, doc);
+    });
+
+    server.on("/api/ftp-career/accept", HTTP_POST, [this]() {
+        if (!ergo::ftpCareerAccept(ftpCareer_)) {
+            NetUtil::sendError(server, 409,
+                               ftpCareer_.offerReason[0] ? ftpCareer_.offerReason : "kein Angebot");
+            return;
+        }
+        saveFtpCareer_();
+        JsonDocument doc;
+        JsonObject root = doc.to<JsonObject>();
+        root["ok"] = true;
+        appendFtpCareerJson_(root);
+        NetUtil::sendJson(server, 200, doc);
+    });
+
+    server.on("/api/ftp-career/decline", HTTP_POST, [this]() {
+        ergo::ftpCareerDecline(ftpCareer_);
+        JsonDocument doc;
+        doc["ok"] = true;
+        NetUtil::sendJson(server, 200, doc);
+    });
+
+    server.on("/api/ftp-career/set", HTTP_POST, [this]() {
+        if (!server.hasArg("unlocked")) {
+            NetUtil::sendError(server, 400, "unlocked fehlt");
+            return;
+        }
+        const int u = server.arg("unlocked").toInt();
+        if (u < 0 || !ergo::ftpCareerSetUnlocked(ftpCareer_, (uint8_t)u)) {
+            NetUtil::sendError(server, 400, "Stufe ungueltig");
+            return;
+        }
+        saveFtpCareer_();
+        JsonDocument doc;
+        JsonObject root = doc.to<JsonObject>();
+        root["ok"] = true;
+        appendFtpCareerJson_(root);
+        NetUtil::sendJson(server, 200, doc);
+    });
+
+    server.on("/api/session/annotate", HTTP_POST, [this]() {
+        if (!lastSession_.valid) {
+            NetUtil::sendError(server, 404, "keine letzte Session");
+            return;
+        }
+        if (server.hasArg("rpe")) {
+            int r = server.arg("rpe").toInt();
+            if (r < 0) r = 0;
+            if (r > 10) r = 10;
+            lastSession_.rpe = (uint8_t)r;
+        }
+        if (server.hasArg("note")) {
+            String n = server.arg("note");
+            size_t o = 0;
+            for (size_t i = 0; i < n.length() && o + 1 < sizeof(lastSession_.note); i++) {
+                char c = n[i];
+                if (c == '"' || c == '\\' || (unsigned char)c < 0x20) continue;
+                lastSession_.note[o++] = c;
+            }
+            lastSession_.note[o] = 0;
+        }
+        sessionStore_.replaceNewest(lastSession_);
+        if (fsReady_) {
+            char line[560];
+            const size_t n = sessionStore_.writeJsonLine(lastSession_, line, sizeof(line));
+            if (n > 0) {
+                File last = LittleFS.open("/sessions/last.json", "w");
+                if (last) {
+                    last.print(line);
+                    last.close();
+                }
+            }
+        }
+        JsonDocument doc;
+        doc["ok"] = true;
+        doc["rpe"] = lastSession_.rpe;
+        doc["note"] = lastSession_.note;
+        NetUtil::sendJson(server, 200, doc);
+    });
+
     server.on("/api/session/list", HTTP_GET, [this]() {
         JsonDocument doc;
         doc["ok"] = true;
@@ -1693,8 +1992,11 @@ void App::registerControlRoutes() {
             JsonObject o = arr.add<JsonObject>();
             o["mode"] = s.mode;
             o["workoutName"] = s.workoutName;
+            o["workoutId"] = s.workoutId;
             o["profileId"] = s.profileId;
             o["endReason"] = s.endReason;
+            o["rpe"] = s.rpe;
+            o["note"] = s.note;
             o["durationS"] = s.durationS;
             o["pausedS"] = s.pausedS;
             o["steps"] = s.steps;
@@ -2114,6 +2416,9 @@ void App::loopWorkout(unsigned long now) {
 
     const ergo::WorkoutEngine::Tick wt = workout.tick(now);
     woSnap_ = wt;
+    if (testRunner.active() && wt.justAdvanced) {
+        testRunner.onStep(wt.stepIndex, wt.label, now);
+    }
     if (wt.finished || wt.state == ergo::WorkoutState::Done) {
         Serial.println("[WO] Programm fertig — STOP");
         recordSessionEnd("done");
@@ -2128,6 +2433,36 @@ void App::loopWorkout(unsigned long now) {
         // Keine neuen Wattziele; Stufe halten.
         return;
     }
+
+    // Self-paced: Fahrer steuert Stufe, kein ERG/Reha-Soll.
+    if (wt.selfPaced) {
+        if (wt.justAdvanced) {
+            Serial.printf("[WO] Schritt %u/%u %s — SELF-PACED (Stufe)\n",
+                          (unsigned)(wt.stepIndex + 1), (unsigned)wt.stepCount, wt.label);
+            powerCtl.reset();
+            rehaCtl.reset();
+            rehaCtl.setDesiredW(0);
+            rehaCtl.setHrLimits(0, 220);
+            control.setPowerTargetW(0);
+            int16_t tenths = limiter.currentLevelTenths();
+            if (tenths < 0) tenths = control.levelTargetTenths();
+            if (tenths < 0 && powerMap.ready()) {
+                // Warmup-Ende: grobe Stufe zu ~FTP oder 150 W.
+                float seedW = 150.0f;
+                if (const ergo::Profile* ap = profiles.active()) {
+                    if (ap->ftpW > 40) seedW = (float)ap->ftpW;
+                }
+                bool ceil = false;
+                int16_t lvl = -1;
+                if (powerMap.bestLevel(seedW, 80.0f, lvl, ceil) && lvl >= 0) tenths = lvl;
+            }
+            if (tenths < 0) tenths = 80;  // Stufe 8 als Fallback
+            control.setLevelTargetTenths(tenths);
+            if (ble.ready(ergo::Role::Bike)) ftms.setLevelTenths(tenths, now);
+        }
+        return;
+    }
+
     if (wt.justAdvanced || fabsf(rehaCtl.desiredW() - wt.desiredW) > 0.5f) {
         Serial.printf("[WO] Schritt %u/%u %s — %.0f W, Puls ≤ %u\n",
                       (unsigned)(wt.stepIndex + 1), (unsigned)wt.stepCount, wt.label,
@@ -2231,6 +2566,69 @@ bool App::beginFs() {
     return fsReady_;
 }
 
+void App::loadWorkoutMeta_() {
+    woFavCount_ = 0;
+    if (!fsReady_) return;
+    File f = LittleFS.open("/workouts/meta.json", "r");
+    if (!f) return;
+    String body = f.readString();
+    f.close();
+    JsonDocument doc;
+    if (deserializeJson(doc, body)) return;
+    JsonArray arr = doc["fav"].as<JsonArray>();
+    if (arr.isNull()) return;
+    for (JsonVariant v : arr) {
+        if (woFavCount_ >= 12) break;
+        const char* id = v.as<const char*>();
+        if (!id || !id[0]) continue;
+        strncpy(woFavIds_[woFavCount_], id, sizeof(woFavIds_[0]) - 1);
+        woFavIds_[woFavCount_][sizeof(woFavIds_[0]) - 1] = 0;
+        woFavCount_++;
+    }
+}
+
+void App::saveWorkoutMeta_() {
+    if (!fsReady_) return;
+    if (!LittleFS.exists("/workouts")) LittleFS.mkdir("/workouts");
+    JsonDocument doc;
+    JsonArray arr = doc["fav"].to<JsonArray>();
+    for (uint8_t i = 0; i < woFavCount_; i++) arr.add(woFavIds_[i]);
+    File f = LittleFS.open("/workouts/meta.json", "w");
+    if (!f) return;
+    serializeJson(doc, f);
+    f.close();
+}
+
+bool App::isWorkoutFavorite_(const char* id) const {
+    if (!id || !id[0]) return false;
+    for (uint8_t i = 0; i < woFavCount_; i++) {
+        if (strcmp(woFavIds_[i], id) == 0) return true;
+    }
+    return false;
+}
+
+void App::setWorkoutFavorite_(const char* id, bool on) {
+    if (!id || !id[0]) return;
+    if (on) {
+        if (isWorkoutFavorite_(id)) return;
+        if (woFavCount_ >= 12) return;
+        strncpy(woFavIds_[woFavCount_], id, sizeof(woFavIds_[0]) - 1);
+        woFavIds_[woFavCount_][sizeof(woFavIds_[0]) - 1] = 0;
+        woFavCount_++;
+    } else {
+        for (uint8_t i = 0; i < woFavCount_; i++) {
+            if (strcmp(woFavIds_[i], id) != 0) continue;
+            for (uint8_t j = i + 1; j < woFavCount_; j++) {
+                memcpy(woFavIds_[j - 1], woFavIds_[j], sizeof(woFavIds_[0]));
+            }
+            woFavCount_--;
+            woFavIds_[woFavCount_][0] = 0;
+            break;
+        }
+    }
+    saveWorkoutMeta_();
+}
+
 bool App::loadWorkoutDoc(const ergo::WorkoutDoc& doc, float scale) {
     if (doc.stepCount == 0) return false;
     if (scale < 0.05f) scale = 0.05f;
@@ -2256,10 +2654,32 @@ bool App::loadWorkoutDoc(const ergo::WorkoutDoc& doc, float scale) {
     rehaCtl.reset();
     control.setPowerTargetW(woSnap_.desiredW);
     powerCtl.setTargetW(woSnap_.desiredW);
+
+    const ergo::TestKind tk = ergo::TestRunner::kindFromWorkoutId(prepared.id);
+    if (tk != ergo::TestKind::None) {
+        const uint32_t t0 = millis();
+        testRunner.start(tk, t0);
+        testRunner.onStep(woSnap_.stepIndex, woSnap_.label, t0);
+    }
     return true;
 }
 
 void App::prepareWorkoutDoc(ergo::WorkoutDoc& doc) {
+    // Rampe: nur bis Profil-max (Abbruch-Test braucht keine Stufen darüber).
+    if (strcmp(doc.id, "test_ramp") == 0 && doc.stepCount > 0) {
+        int maxW = 280;
+        if (const ergo::Profile* ap = profiles.active()) {
+            if (ap->maxPowerW >= 80) maxW = ap->maxPowerW;
+        }
+        uint8_t n = 0;
+        for (uint8_t i = 0; i < doc.stepCount; i++) {
+            if (doc.steps[i].powerW <= (float)maxW + 0.5f) n = (uint8_t)(i + 1);
+            else break;
+        }
+        if (n < 4) n = doc.stepCount < 4 ? doc.stepCount : 4;
+        doc.stepCount = n;
+    }
+
     if (!doc.progression.enabled) return;
     doc.progression.stepIndex = ergo::progressionResolveStepIndex(doc);
     if (doc.progression.baseDurationS == 0)
@@ -2331,23 +2751,89 @@ void App::maybeOfferProgression(const ergo::SessionSummary& s) {
     }
 }
 
+void App::loadFtpCareer_() {
+    ftpCareer_ = ergo::FtpCareerState{};
+    if (!fsReady_) return;
+    File f = LittleFS.open("/progression/ftp_career.json", "r");
+    if (!f) return;
+    String body = f.readString();
+    f.close();
+    ergo::ftpCareerParseJson(body.c_str(), ftpCareer_);
+}
+
+void App::saveFtpCareer_() {
+    if (!fsReady_) return;
+    if (!LittleFS.exists("/progression")) LittleFS.mkdir("/progression");
+    char buf[48];
+    const size_t n = ergo::ftpCareerWriteJson(ftpCareer_, buf, sizeof(buf));
+    if (n == 0) return;
+    File f = LittleFS.open("/progression/ftp_career.json", "w");
+    if (!f) return;
+    f.print(buf);
+    f.close();
+}
+
+void App::maybeOfferFtpCareer_(const ergo::SessionSummary& s) {
+    ergo::ftpCareerOnSessionEnd(ftpCareer_, s);
+}
+
+void App::appendFtpCareerJson_(JsonObject obj) const {
+    obj["unlocked"] = ftpCareer_.unlocked;
+    obj["offerPending"] = ftpCareer_.offerPending;
+    obj["offerClean"] = ftpCareer_.offerClean;
+    obj["offerReason"] = ftpCareer_.offerReason;
+    obj["stageCount"] = ergo::ftpCareerStageCount();
+    if (const ergo::FtpCareerStage* cur = ergo::ftpCareerStage(ftpCareer_.unlocked)) {
+        obj["currentId"] = cur->id;
+        obj["currentName"] = cur->name;
+        obj["currentBlurb"] = cur->blurb;
+    }
+    if (ftpCareer_.unlocked + 1 < ergo::ftpCareerStageCount()) {
+        if (const ergo::FtpCareerStage* nx = ergo::ftpCareerStage(ftpCareer_.unlocked + 1)) {
+            obj["nextId"] = nx->id;
+            obj["nextName"] = nx->name;
+        }
+    }
+    JsonArray arr = obj["stages"].to<JsonArray>();
+    for (uint8_t i = 0; i < ergo::ftpCareerStageCount(); i++) {
+        const ergo::FtpCareerStage* st = ergo::ftpCareerStage(i);
+        if (!st) continue;
+        JsonObject o = arr.add<JsonObject>();
+        o["index"] = i;
+        o["id"] = st->id;
+        o["name"] = st->name;
+        o["blurb"] = st->blurb;
+        o["unlocked"] = ergo::ftpCareerIsUnlocked(ftpCareer_, i);
+        o["current"] = (i == ftpCareer_.unlocked);
+    }
+}
+
 void App::recordSessionEnd(const char* reason) {
     if (!session_.active()) return;
+    if (testRunner.active()) testRunner.finalize(reason, millis());
     ergo::SessionSummary s = session_.end(millis(), reason);
     if (workout.stepCount() > 0) s.steps = workout.stepCount();
     if (rehaCtl.interventions() > s.interventions) s.interventions = rehaCtl.interventions();
     lastSession_ = s;
     persistSession_(s);
     maybeOfferProgression(s);
+    maybeOfferFtpCareer_(s);
     Serial.printf("[SESS] %s %s %u s (Pause %u), Ø %.0f W, %.1f kJ, Deckel %u×\n", s.mode,
                   s.endReason, (unsigned)s.durationS, (unsigned)s.pausedS, s.avgPowerW, s.workKj,
                   (unsigned)s.interventions);
 }
 
-void App::beginSession(const char* workoutName) {
+void App::beginSession(const char* workoutName, const char* workoutId) {
     const char* mode = ergo::controlModeName(control.mode());
     const char* pid = profiles.activeId() ? profiles.activeId() : "";
-    session_.start(millis(), mode, workoutName ? workoutName : "", pid);
+    session_.start(millis(), mode, workoutName ? workoutName : "", pid,
+                   workoutId && workoutId[0] ? workoutId : nullptr);
+    if (workoutId && workoutId[0]) {
+        strncpy(activeWorkoutId_, workoutId, sizeof(activeWorkoutId_) - 1);
+        activeWorkoutId_[sizeof(activeWorkoutId_) - 1] = 0;
+    } else {
+        activeWorkoutId_[0] = 0;
+    }
     bool leadHr = false;
     uint16_t ftp = 0;
     uint8_t hrMax = 0;
@@ -2358,7 +2844,9 @@ void App::beginSession(const char* workoutName) {
     }
     session_.setZoneBasis(leadHr, ftp, hrMax);
     interventionsSeen_ = rehaCtl.interventions();
-    Serial.printf("[SESS] start %s profile=%s zones=%s\n", mode, pid, leadHr ? "HR" : "PWR");
+    sessWasPaused_ = false;
+    Serial.printf("[SESS] start %s profile=%s zones=%s wo=%s\n", mode, pid, leadHr ? "HR" : "PWR",
+                  activeWorkoutId_[0] ? activeWorkoutId_ : "-");
 }
 
 void App::loopSession(unsigned long now) {
@@ -2377,8 +2865,10 @@ void App::loopSession(unsigned long now) {
 
     if (!linked || !fresh) {
         session_.tick(now, 0.0f, 0.0f, hr, true);
+        if (testRunner.active()) testRunner.observe(0, hr, now);
     } else {
         session_.tick(now, rpm, watt, hr, true);
+        if (testRunner.active()) testRunner.observe((uint16_t)watt, hr, now);
     }
 
     const bool freezing =
@@ -2388,6 +2878,17 @@ void App::loopSession(unsigned long now) {
          rehaCtl.lossPolicy() == ergo::HrLossPolicy::Freeze);
     session_.noteHrLost(now, freezing);
     if (freezing) applyFreezeToLevel(now);
+
+    // Auto-Pause soll den Workout-Schritt-Timer mit anhalten (Resume an exakter Stelle).
+    if (control.allowsWorkout() && workout.running()) {
+        const bool p = session_.paused();
+        if (p && !sessWasPaused_) workout.pause(now);
+        else if (!p && sessWasPaused_ && workout.state() == ergo::WorkoutState::Paused)
+            workout.resume(now);
+        sessWasPaused_ = p;
+    } else {
+        sessWasPaused_ = session_.paused();
+    }
 }
 
 void App::applyFreezeToLevel(unsigned long now) {
@@ -2413,7 +2914,7 @@ void App::persistSession_(const ergo::SessionSummary& s) {
 
     if (fsReady_) {
         if (!LittleFS.exists("/sessions")) LittleFS.mkdir("/sessions");
-        char line[480];
+        char line[560];
         const size_t n = sessionStore_.writeJsonLine(s, line, sizeof(line));
         if (n > 0) {
             File f = LittleFS.open("/sessions/log.jsonl", "a");
@@ -2436,6 +2937,7 @@ void App::persistSession_(const ergo::SessionSummary& s) {
         doc["name"] = config.deviceName;
         doc["mode"] = s.mode;
         doc["workoutName"] = s.workoutName;
+        doc["workoutId"] = s.workoutId;
         doc["profileId"] = s.profileId;
         doc["endReason"] = s.endReason;
         doc["durationS"] = s.durationS;
@@ -2799,6 +3301,294 @@ void App::appendDebugJson(JsonObject obj) const {
     }
 }
 
+void App::syncBridgeHrLimits() {
+    bridgeHrCap.setLimits(config.bridgeHrSoft, config.bridgeHrMax);
+    // allowSimulation bleibt false bis Nachtest 4; Flag nur verdrahtet.
+    bridge.setAllowSimulation(limiter.config().allowSimulation);
+}
+
+float App::bridgeScaleAppWatt(float appWatt) const {
+    float maxW = 400.0f;
+    if (const ergo::Profile* ap = profiles.active()) {
+        if (ap->maxPowerW > 0) maxW = (float)ap->maxPowerW;
+    }
+    return ergo::bridgeApplyDifficulty(appWatt, config.bridgeDifficultyPct, 20.0f, maxW);
+}
+
+void App::registerBridgeRoutes() {
+    server.on("/api/bridge", HTTP_GET, [this]() {
+        JsonDocument doc;
+        bridge.appendStatusJson(doc.to<JsonObject>());
+        doc["configEnabled"] = config.bridgeEnabled;
+        doc["configName"] = config.bridgeName;
+        doc["difficultyPct"] = config.bridgeDifficultyPct;
+        doc["hrSoft"] = config.bridgeHrSoft;
+        doc["hrMax"] = config.bridgeHrMax;
+        doc["appWatt"] = bridgeAppWatt_;
+        doc["desiredW"] = bridgeDesiredW_;
+        doc["effectiveW"] = bridgeHrCap.effectiveW();
+        doc["hrCapActive"] = bridgeHrCap.capActive();
+        doc["driving"] = bridgeDriving_;
+        NetUtil::sendJson(server, 200, doc);
+    });
+
+    server.on("/api/bridge", HTTP_POST, [this]() {
+        bool on = config.bridgeEnabled;
+        if (server.hasArg("enabled")) {
+            const String v = server.arg("enabled");
+            on = (v == "1" || v == "true" || v == "on");
+        } else if (server.hasArg("on")) {
+            on = server.arg("on") == "1" || server.arg("on") == "true";
+        }
+        if (server.hasArg("name") && server.arg("name").length()) {
+            config.bridgeName = server.arg("name");
+        }
+        if (server.hasArg("difficulty") || server.hasArg("difficultyPct")) {
+            const int d = server.hasArg("difficultyPct") ? server.arg("difficultyPct").toInt()
+                                                         : server.arg("difficulty").toInt();
+            if (d >= 50 && d <= 150) config.bridgeDifficultyPct = (uint16_t)d;
+        }
+        if (server.hasArg("hrSoft")) config.bridgeHrSoft = (uint8_t)server.arg("hrSoft").toInt();
+        if (server.hasArg("hrMax")) config.bridgeHrMax = (uint8_t)server.arg("hrMax").toInt();
+        config.bridgeEnabled = on;
+        config.save();
+        syncBridgeHrLimits();
+        bridge.setEnabled(on);
+        if (!on) {
+            bridgeDriving_ = false;
+            bridgeAppWatt_ = 0;
+            bridgeDesiredW_ = 0;
+            bridgeHrCap.reset();
+        }
+        JsonDocument doc;
+        doc["ok"] = true;
+        bridge.appendStatusJson(doc["bridge"].to<JsonObject>());
+        doc["difficultyPct"] = config.bridgeDifficultyPct;
+        doc["hrSoft"] = config.bridgeHrSoft;
+        doc["hrMax"] = config.bridgeHrMax;
+        NetUtil::sendJson(server, 200, doc);
+    });
+}
+
+void App::applyBridgePending(const FtmsServer::Pending& p, unsigned long now) {
+    switch (p.op) {
+        case FtmsServer::PendingOp::RequestControl:
+            if (ble.ready(ergo::Role::Bike) && ftms.attached() && !ftms.controlGranted()) {
+                ftms.requestControl(now);
+            }
+            break;
+
+        case FtmsServer::PendingOp::Reset:
+            if (workout.running()) workout.stop();
+            if (session_.active()) recordSessionEnd("bridge_reset");
+            control.setMode(ergo::ControlMode::Off);
+            powerCtl.reset();
+            bridgeDriving_ = false;
+            bridgeAppWatt_ = 0;
+            bridgeDesiredW_ = 0;
+            bridgeHrCap.reset();
+            if (ble.ready(ergo::Role::Bike)) ftms.reset(now);
+            break;
+
+        case FtmsServer::PendingOp::Start:
+            if (ble.ready(ergo::Role::Bike)) ftms.start(now);
+            break;
+
+        case FtmsServer::PendingOp::Stop:
+            if (workout.running()) workout.stop();
+            if (session_.active()) recordSessionEnd("bridge_stop");
+            control.setMode(ergo::ControlMode::Off);
+            powerCtl.reset();
+            bridgeDriving_ = false;
+            bridgeAppWatt_ = 0;
+            bridgeDesiredW_ = 0;
+            bridgeHrCap.reset();
+            if (ble.ready(ergo::Role::Bike)) ftms.stop(now);
+            break;
+
+        case FtmsServer::PendingOp::Pause:
+            if (ble.ready(ergo::Role::Bike)) ftms.pause(now);
+            break;
+
+        case FtmsServer::PendingOp::SetPower: {
+            bridgeAppWatt_ = (float)p.watt;
+            float watt = bridgeScaleAppWatt(bridgeAppWatt_);
+            bridgeDesiredW_ = watt;
+            if (!powerMap.ready() || powerMap.pointCount() == 0) {
+                Serial.printf("[BRIDGE] Wattziel %d — Kennfläche leer, ignoriere\n", (int)p.watt);
+                break;
+            }
+            if (control.mode() == ergo::ControlMode::Workout && workout.running()) {
+                workout.stop();
+                if (session_.active()) recordSessionEnd("bridge_takeover");
+            }
+            if (control.mode() != ergo::ControlMode::ManualErg) {
+                if (session_.active() && control.mode() != ergo::ControlMode::Off) {
+                    recordSessionEnd("bridge_erg");
+                }
+                control.setMode(ergo::ControlMode::ManualErg);
+                beginSession("");
+            } else if (!session_.active()) {
+                beginSession("");
+            }
+            bridgeDriving_ = true;
+            const uint8_t hr = effectiveHr();
+            const bool hrFresh = resolveHrSource() != ergo::HrSource::None && hr > 0;
+            const float eff = bridgeHrCap.tick(now, bridgeDesiredW_, hr, hrFresh);
+            control.setPowerTargetW(eff);
+            powerCtl.setTargetW(eff);
+            Serial.printf("[BRIDGE] App %.0f W × %u%% → %.0f W eff=%.0f%s\n", bridgeAppWatt_,
+                          (unsigned)config.bridgeDifficultyPct, bridgeDesiredW_, eff,
+                          bridgeHrCap.capActive() ? " HR-CAP" : "");
+            break;
+        }
+
+        case FtmsServer::PendingOp::SetResistance: {
+            const int16_t tenths = p.resistanceTenths;
+            bridgeDriving_ = false;
+            if (control.mode() == ergo::ControlMode::Workout && workout.running()) {
+                workout.stop();
+                if (session_.active()) recordSessionEnd("bridge_takeover");
+            }
+            if (control.mode() != ergo::ControlMode::ManualLevel) {
+                if (session_.active() && control.mode() != ergo::ControlMode::Off) {
+                    recordSessionEnd("bridge_level");
+                }
+                control.setMode(ergo::ControlMode::ManualLevel);
+                beginSession("");
+            } else if (!session_.active()) {
+                beginSession("");
+            }
+            control.setLevelTargetTenths(tenths);
+            if (ble.ready(ergo::Role::Bike)) ftms.setLevelTenths(tenths, now);
+            Serial.printf("[BRIDGE] Stufe %d\n", (int)tenths);
+            break;
+        }
+
+        case FtmsServer::PendingOp::SetSimulation:
+            if (ble.ready(ergo::Role::Bike)) {
+                const auto r =
+                    ftms.setSimulation(p.windMms, p.gradeHundredth, p.crr10000, p.cw100, now);
+                Serial.printf("[BRIDGE] 0x11 grade=%.2f%% → %s\n", p.gradeHundredth / 100.0f,
+                              ergo::FtmsClient::resultName(r));
+            }
+            break;
+
+        default:
+            break;
+    }
+}
+
+void App::loopBridge(unsigned long now) {
+    bridge.loop();
+    if (!bridge.enabled()) return;
+
+    FtmsServer::Pending p;
+    while (bridge.takePending(p)) applyBridgePending(p, now);
+
+    if (bridgeDriving_ && control.allowsErg() && bridgeDesiredW_ > 0.0f) {
+        const uint8_t hr = effectiveHr();
+        const bool hrFresh = resolveHrSource() != ergo::HrSource::None && hr > 0;
+        const float eff = bridgeHrCap.tick(now, bridgeDesiredW_, hr, hrFresh);
+        if (fabsf(eff - control.powerTargetW()) > 0.5f) {
+            control.setPowerTargetW(eff);
+            powerCtl.setTargetW(eff);
+        }
+    }
+
+    if (!ftms.hasLive()) return;
+    const uint32_t lc = ftms.liveCount();
+    if (lc == bridgeLiveSeen_) return;
+    bridgeLiveSeen_ = lc;
+
+    ftms::IndoorBikeData d = ftms.live();
+    const uint8_t hr = effectiveHr();
+    if (hr > 0) {
+        d.presence = (uint16_t)(d.presence | ftms::kHeartRate);
+        d.heartRateBpm = hr;
+    }
+    bridge.notifyIndoorBike(d);
+
+    // CSC-Kurbel aus Kadenz integrieren (1/1024 s Event-Zeit).
+    if (crankLastMs_ == 0) crankLastMs_ = now;
+    const unsigned long dtMs = now - crankLastMs_;
+    if (dtMs > 0 && dtMs < 5000) {
+        const float rpm = d.has(ftms::kCadence) ? d.cadenceRpm() : 0.0f;
+        if (rpm > 1.0f) {
+            const float revs = rpm * ((float)dtMs / 60000.0f);
+            crankRevs_ = (uint16_t)((uint32_t)crankRevs_ + (uint32_t)(revs + 0.5f));
+            crankEvent_ = (uint16_t)(crankEvent_ + (uint16_t)((dtMs * 1024UL) / 1000UL));
+        }
+        crankLastMs_ = now;
+    } else {
+        crankLastMs_ = now;
+    }
+    bridge.notifyCycling(d.has(ftms::kPower) ? d.powerW : 0, crankRevs_, crankEvent_);
+}
+
+void App::registerTestRoutes() {
+    auto fillResult = [this](JsonDocument& doc) {
+        const ergo::TestResult& r = testRunner.result();
+        doc["ok"] = r.valid;
+        doc["active"] = testRunner.active();
+        doc["kind"] = ergo::TestRunner::kindName(r.valid ? r.kind : testRunner.kind());
+        if (!r.valid) {
+            doc["error"] = testRunner.active() ? "laeuft" : "kein Ergebnis";
+            return;
+        }
+        doc["endReason"] = r.endReason;
+        doc["mapW"] = r.mapW;
+        doc["avgMainW"] = r.avgMainW;
+        doc["peakW"] = r.peakW;
+        doc["ftpPropose"] = r.ftpPropose;
+        doc["recoveryNote"] = r.recoveryNote;
+        doc["hrLoad"] = r.hrLoad;
+        doc["hrRecover"] = r.hrRecover;
+        doc["mainSamples"] = r.mainSamples;
+        doc["durationS"] = r.durationS;
+    };
+
+    server.on("/api/test/result", HTTP_GET, [this, fillResult]() {
+        JsonDocument doc;
+        fillResult(doc);
+        NetUtil::sendJson(server, 200, doc);
+    });
+
+    server.on("/api/test/accept-ftp", HTTP_POST, [this]() {
+        const ergo::TestResult& r = testRunner.result();
+        if (!r.valid || r.ftpPropose == 0) {
+            NetUtil::sendError(server, 409, "kein FTP-Vorschlag");
+            return;
+        }
+        const char* id = profiles.activeId();
+        String idArg = server.hasArg("id") ? server.arg("id") : "";
+        if (idArg.length()) id = idArg.c_str();
+        if (!id || !id[0]) {
+            NetUtil::sendError(server, 409, "kein aktives Profil");
+            return;
+        }
+        ergo::Profile p;
+        if (!profiles.get(id, p)) {
+            NetUtil::sendError(server, 404, "Profil fehlt");
+            return;
+        }
+        p.ftpW = r.ftpPropose;
+        p.ftpOrigin = ergo::FtpOrigin::Test;
+        p.ftpDateUnix = (uint32_t)(time(nullptr) > 100000 ? time(nullptr) : millis() / 1000UL);
+        if (!profiles.put(p)) {
+            NetUtil::sendError(server, 409, "Profil nicht speicherbar");
+            return;
+        }
+        applyLimiterConfig();
+        saveProfiles();
+        JsonDocument doc;
+        doc["ok"] = true;
+        doc["ftpW"] = p.ftpW;
+        doc["id"] = p.id;
+        NetUtil::sendJson(server, 200, doc);
+    });
+}
+
 void App::registerDebugRoutes() {
     server.on("/api/debug/ring", HTTP_POST, [this]() {
         const String on = server.arg("on");
@@ -2878,6 +3668,7 @@ void App::loop() {
     loopReha(now);
     loopWorkout(now);
     loopErg(now);
+    loopBridge(now);
 
     // Waehrend eines aktiven Links haeufiger senden — beim Fahren sind 2 s
     // eine Ewigkeit, im Leerlauf waere 1 Hz reine Verschwendung.

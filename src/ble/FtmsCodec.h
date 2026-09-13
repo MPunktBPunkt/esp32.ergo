@@ -84,4 +84,38 @@ size_t encodeSetTargetHeartRate(uint8_t* out, size_t cap, uint8_t bpm);
 size_t encodeIndoorBikeSimulation(uint8_t* out, size_t cap, int16_t windMms,
                                   int16_t gradeHundredth, uint8_t crr10000, uint8_t cw100);
 
+/** Peripheral/Bridge: Indoor Bike Data aus dem Struct. */
+size_t encodeIndoorBikeData(const IndoorBikeData& in, uint8_t* out, size_t cap);
+
+/** 0x2ACC Feature — 8 Byte. */
+size_t encodeFeature(const FeatureSet& in, uint8_t* out, size_t cap);
+
+/** 0x2AD6 Resistance Range — 6 Byte. */
+size_t encodeResistanceRange(const ResistanceRange& in, uint8_t* out, size_t cap);
+
+/** 0x2AD8 Power Range — 6 Byte. */
+size_t encodePowerRange(const PowerRange& in, uint8_t* out, size_t cap);
+
+/** 0x2AD9 Response `80 <op> <result>`. */
+size_t encodeControlResponse(Opcode request, ControlResult result, uint8_t* out, size_t cap);
+
+/** Eingehendes Control-Point-Write (vom App-Client). */
+struct ControlWrite {
+    bool valid = false;
+    Opcode op = Opcode::RequestControl;
+    int16_t watt = 0;
+    int16_t resistanceTenths = 0;
+    uint8_t stopParam = 0;
+    int16_t windMms = 0;
+    int16_t gradeHundredth = 0;
+    uint8_t crr10000 = 0;
+    uint8_t cw100 = 0;
+};
+bool decodeControlWrite(const uint8_t* data, size_t len, ControlWrite& out);
+
+/** Feature-Satz der Bridge: Wattziel anbieten, das das Bike nicht hat. */
+FeatureSet bridgeFeatureSet();
+ResistanceRange bridgeResistanceRange();
+PowerRange bridgePowerRange();
+
 }  // namespace ftms

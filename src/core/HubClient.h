@@ -16,6 +16,8 @@ public:
     bool lastOk() const { return lastOk_; }
     unsigned long lastSuccessMs() const { return lastSuccess_; }
     void setPayloadBuilder(void (*builder)(JsonDocument& doc));
+    /** Wenn gesetzt und false liefert: Hub-OTA wird verworfen (Heartbeat bleibt). */
+    void setOtaAllowed(bool (*fn)());
 
 private:
     void sendHeartbeat();
@@ -23,6 +25,7 @@ private:
 
     ConfigStore* config_ = nullptr;
     void (*builder_)(JsonDocument& doc) = nullptr;
+    bool (*otaAllowed_)() = nullptr;
     unsigned long lastHeartbeat_ = 0;
     unsigned long lastSuccess_ = 0;
     bool lastOk_ = false;

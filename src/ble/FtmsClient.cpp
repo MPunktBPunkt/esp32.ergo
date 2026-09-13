@@ -280,6 +280,15 @@ FtmsClient::Result FtmsClient::setPowerW(int16_t watt, uint32_t nowMs) {
     return send(c, n, nowMs);
 }
 
+FtmsClient::Result FtmsClient::setSimulation(int16_t windMms, int16_t gradeHundredth,
+                                             uint8_t crr10000, uint8_t cw100, uint32_t nowMs) {
+    uint8_t c[ftms::kMaxControlLen];
+    const size_t n =
+        ftms::encodeIndoorBikeSimulation(c, sizeof(c), windMms, gradeHundredth, crr10000, cw100);
+    if (!n) return Result::EncodeFailed;
+    return send(c, n, nowMs);
+}
+
 // ───────────────────────────────────────────────────────────────── JSON
 
 void FtmsClient::appendStatusJson(JsonObject obj) const {

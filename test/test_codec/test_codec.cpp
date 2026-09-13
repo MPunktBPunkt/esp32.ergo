@@ -16,6 +16,7 @@
 
 #include "ble/FtmsCapabilities.h"
 #include "ble/FtmsCodec.h"
+#include "ble/CyclingCodec.h"
 #include "fixtures_ibd.h"
 #include "fixtures_synth.h"
 
@@ -364,6 +365,101 @@ static void test_caps_ohne_stellweg() {
     TEST_ASSERT_EQUAL_INT((int)PowerStrategy::None, (int)none.powerStrategy());
 }
 
+// ------------------------------------------------------- Bridge-Encoder
+
+static void test_ibd_roundtrip() {
+    IndoorBikeData in;
+    in.presence = kSpeed | kCadence | kPower | kHeartRate | kElapsedTime;
+    in.speedRaw = 2200;
+    in.cadenceRaw = 120;  // 60 rpm
+    in.powerW = 150;
+    in.heartRateBpm = 142;
+    in.elapsedS = 90;
+
+    uint8_t buf[kMaxIndoorBikeLen];
+    const size_t n = encodeIndoorBikeData(in, buf, sizeof(buf));
+    TEST_ASSERT_TRUE(n >= 2);
+
+    IndoorBikeData out;
+    TEST_ASSERT_EQUAL_INT((int)IbdStatus::Ok, (int)decodeIndoorBikeData(buf, n, out));
+    TEST_ASSERT_EQUAL_HEX16(in.presence, out.presence);
+    TEST_ASSERT_EQUAL_UINT16(2200, out.speedRaw);
+    TEST_ASSERT_EQUAL_UINT16(120, out.cadenceRaw);
+    TEST_ASSERT_EQUAL_INT16(150, out.powerW);
+    TEST_ASSERT_EQUAL_UINT8(142, out.heartRateBpm);
+    TEST_ASSERT_EQUAL_UINT16(90, out.elapsedS);
+}
+
+static void test_bridge_feature_claims_power_target() {
+    const FeatureSet f = bridgeFeatureSet();
+    uint8_t buf[8];
+    TEST_ASSERT_EQUAL_UINT32(8u, (uint32_t)encodeFeature(f, buf, sizeof(buf)));
+
+    FeatureSet round;
+    TEST_ASSERT_TRUE(decodeFeature(buf, 8, round));
+    TEST_ASSERT_TRUE(round.hasTarget(kTgtPower));
+    TEST_ASSERT_TRUE(round.hasTarget(kTgtResistance));
+    TEST_ASSERT_TRUE(round.hasMachine(kFeatPowerMeasurement));
+
+    // Gegenstück zum Varon: Bridge muss Wattziel anbieten.
+    const ResistanceRange rr = bridgeResistanceRange();
+    const PowerRange pr = bridgePowerRange();
+    const Capabilities c = deriveCapabilities(round, &rr, &pr);
+    TEST_ASSERT_TRUE(c.powerTargetTrusted);
+    TEST_ASSERT_EQUAL_INT((int)PowerStrategy::DirectTarget, (int)c.powerStrategy());
+}
+
+static void test_power_range_roundtrip() {
+    const PowerRange in = bridgePowerRange();
+    uint8_t buf[6];
+    TEST_ASSERT_EQUAL_UINT32(6u, (uint32_t)encodePowerRange(in, buf, sizeof(buf)));
+    PowerRange out;
+    TEST_ASSERT_TRUE(decodePowerRange(buf, 6, out));
+    TEST_ASSERT_EQUAL_INT16(20, out.minW);
+    TEST_ASSERT_EQUAL_INT16(400, out.maxW);
+    TEST_ASSERT_EQUAL_UINT16(1, out.stepW);
+}
+
+static void test_control_write_decode() {
+    ControlWrite w;
+    const uint8_t power[] = {0x05, 0x64, 0x00};
+    TEST_ASSERT_TRUE(decodeControlWrite(power, sizeof(power), w));
+    TEST_ASSERT_EQUAL_INT((int)Opcode::SetTargetPower, (int)w.op);
+    TEST_ASSERT_EQUAL_INT16(100, w.watt);
+
+    const uint8_t req[] = {0x00};
+    TEST_ASSERT_TRUE(decodeControlWrite(req, 1, w));
+    TEST_ASSERT_EQUAL_INT((int)Opcode::RequestControl, (int)w.op);
+
+    const uint8_t stop[] = {0x08, 0x01};
+    TEST_ASSERT_TRUE(decodeControlWrite(stop, 2, w));
+    TEST_ASSERT_EQUAL_UINT8(1, w.stopParam);
+
+    const uint8_t sim[] = {0x11, 0x00, 0x00, 0xFA, 0x00, 0x28, 0x33};
+    TEST_ASSERT_TRUE(decodeControlWrite(sim, sizeof(sim), w));
+    TEST_ASSERT_EQUAL_INT((int)Opcode::SetIndoorBikeSimulation, (int)w.op);
+    TEST_ASSERT_EQUAL_INT16(0, w.windMms);
+    TEST_ASSERT_EQUAL_INT16(250, w.gradeHundredth);
+    TEST_ASSERT_EQUAL_UINT8(40, w.crr10000);
+    TEST_ASSERT_EQUAL_UINT8(51, w.cw100);
+
+    uint8_t resp[3];
+    TEST_ASSERT_EQUAL_UINT32(
+        3u, (uint32_t)encodeControlResponse(Opcode::SetTargetPower, ControlResult::Success, resp,
+                                            sizeof(resp)));
+    const uint8_t want[] = {0x80, 0x05, 0x01};
+    TEST_ASSERT_EQUAL_HEX8_ARRAY(want, resp, 3);
+}
+
+static void test_cycling_encoders() {
+    uint8_t buf[8];
+    const uint8_t wantCps[] = {0x00, 0x00, 0x96, 0x00};  // 150 W
+    assertBytes(buf, cycling::encodeCyclingPower(150, buf, sizeof(buf)), wantCps, 4, "cps");
+
+    const uint8_t wantCsc[] = {0x02, 0x0A, 0x00, 0x00, 0x04};
+    assertBytes(buf, cycling::encodeCscCrank(10, 1024, buf, sizeof(buf)), wantCsc, 5, "csc");
+}
+
 /** Was erst am Datenstrom sichtbar wird. */
 static void test_caps_aus_datenstrom() {
     const FeatureSet f = featureOf(0x000046A6u, 0x00002004u);
@@ -414,5 +510,10 @@ int main(int, char**) {
     RUN_TEST(test_caps_grosse_skala);
     RUN_TEST(test_caps_ohne_stellweg);
     RUN_TEST(test_caps_aus_datenstrom);
+    RUN_TEST(test_ibd_roundtrip);
+    RUN_TEST(test_bridge_feature_claims_power_target);
+    RUN_TEST(test_power_range_roundtrip);
+    RUN_TEST(test_control_write_decode);
+    RUN_TEST(test_cycling_encoders);
     return UNITY_END();
 }

@@ -24,6 +24,7 @@ ids=[x["id"] for x in d.get("builtins",[])]
 print("builtins", ids)
 assert "physio" in ids and "reha_kurz" in ids
 assert "test_ramp" in ids and "test_20min" in ids and "test_recovery" in ids
+assert "ss_3x12" in ids and "over_under" in ids and "vo2_5x4" in ids
 '
 
 echo "== validate =="

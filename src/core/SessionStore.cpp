@@ -20,12 +20,40 @@ bool SessionStore::append(const SessionSummary& s) {
     return true;
 }
 
+bool SessionStore::replaceNewest(const SessionSummary& s) {
+    if (count_ == 0 || !s.valid) return false;
+    int idx = (int)head_ - 1;
+    while (idx < 0) idx += kMax;
+    ring_[(uint8_t)idx] = s;
+    return true;
+}
+
 bool SessionStore::at(uint8_t newestIndex, SessionSummary& out) const {
     if (newestIndex >= count_) return false;
     int idx = (int)head_ - 1 - (int)newestIndex;
     while (idx < 0) idx += kMax;
     out = ring_[(uint8_t)idx];
     return out.valid;
+}
+
+static void escapeJsonStr(const char* in, char* out, size_t outLen) {
+    if (!out || outLen == 0) return;
+    size_t o = 0;
+    if (!in) {
+        out[0] = 0;
+        return;
+    }
+    for (const char* p = in; *p && o + 1 < outLen; p++) {
+        if ((*p == '"' || *p == '\\') && o + 2 < outLen) {
+            out[o++] = '\\';
+            out[o++] = *p;
+        } else if ((unsigned char)*p < 0x20) {
+            continue;
+        } else {
+            out[o++] = *p;
+        }
+    }
+    out[o] = 0;
 }
 
 size_t SessionStore::writeJsonLine(const SessionSummary& s, char* buf, size_t bufLen) {
@@ -41,17 +69,19 @@ size_t SessionStore::writeJsonLine(const SessionSummary& s, char* buf, size_t bu
         zp += (size_t)w;
         if (zp >= sizeof(zones)) break;
     }
+    char noteEsc[96];
+    escapeJsonStr(s.note, noteEsc, sizeof(noteEsc));
     int m = snprintf(buf, bufLen,
-                     "{\"mode\":\"%s\",\"workoutName\":\"%s\",\"profileId\":\"%s\","
-                     "\"endReason\":\"%s\",\"durationS\":%u,\"pausedS\":%u,"
+                     "{\"mode\":\"%s\",\"workoutName\":\"%s\",\"workoutId\":\"%s\",\"profileId\":\"%s\","
+                     "\"endReason\":\"%s\",\"rpe\":%u,\"note\":\"%s\",\"durationS\":%u,\"pausedS\":%u,"
                      "\"steps\":%u,\"interventions\":%u,\"autoPauses\":%u,"
                      "\"avgPowerW\":%.1f,\"avgDesiredW\":%.1f,\"workKj\":%.1f,"
                      "\"hrAvg\":%u,\"hrMax\":%u,\"leadHr\":%s,\"zoneCount\":%u,"
                      "\"zoneTimeS\":[%s]}",
-                     s.mode, s.workoutName, s.profileId, s.endReason, (unsigned)s.durationS,
-                     (unsigned)s.pausedS, (unsigned)s.steps, (unsigned)s.interventions,
-                     (unsigned)s.autoPauses, s.avgPowerW, s.avgDesiredW, s.workKj,
-                     (unsigned)s.hrAvg, (unsigned)s.hrMax, s.leadHr ? "true" : "false",
+                     s.mode, s.workoutName, s.workoutId, s.profileId, s.endReason, (unsigned)s.rpe,
+                     noteEsc, (unsigned)s.durationS, (unsigned)s.pausedS, (unsigned)s.steps,
+                     (unsigned)s.interventions, (unsigned)s.autoPauses, s.avgPowerW, s.avgDesiredW,
+                     s.workKj, (unsigned)s.hrAvg, (unsigned)s.hrMax, s.leadHr ? "true" : "false",
                      (unsigned)n, zones);
     if (m < 0 || (size_t)m >= bufLen) return 0;
     return (size_t)m;
@@ -108,9 +138,12 @@ bool SessionStore::parseJsonLine(const char* line, SessionSummary& out) {
     if (!line || !line[0]) return false;
     extractStr(line, "mode", out.mode, sizeof(out.mode));
     extractStr(line, "workoutName", out.workoutName, sizeof(out.workoutName));
+    extractStr(line, "workoutId", out.workoutId, sizeof(out.workoutId));
     extractStr(line, "profileId", out.profileId, sizeof(out.profileId));
     extractStr(line, "endReason", out.endReason, sizeof(out.endReason));
+    extractStr(line, "note", out.note, sizeof(out.note));
     uint32_t u = 0;
+    if (extractU32(line, "rpe", u)) out.rpe = (uint8_t)((u > 10) ? 10 : u);
     if (extractU32(line, "durationS", u)) out.durationS = u;
     if (extractU32(line, "pausedS", u)) out.pausedS = u;
     if (extractU32(line, "steps", u)) out.steps = (uint8_t)u;

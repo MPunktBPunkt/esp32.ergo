@@ -1,4 +1,5 @@
 #include <unity.h>
+#include <string.h>
 
 #include "core/SessionTracker.h"
 #include "core/SessionStore.h"
@@ -84,6 +85,31 @@ static void test_json_roundtrip(void) {
     TEST_ASSERT_EQUAL_UINT32(80, b.zoneTimeS[3]);
 }
 
+static void test_rpe_note_roundtrip(void) {
+    SessionStore st;
+    SessionSummary a;
+    a.valid = true;
+    strncpy(a.mode, "WORKOUT", sizeof(a.mode) - 1);
+    strncpy(a.endReason, "done", sizeof(a.endReason) - 1);
+    a.durationS = 300;
+    a.rpe = 7;
+    strncpy(a.note, "gute Beine", sizeof(a.note) - 1);
+    char buf[560];
+    TEST_ASSERT_TRUE(st.writeJsonLine(a, buf, sizeof(buf)) > 0);
+    SessionSummary b;
+    TEST_ASSERT_TRUE(st.parseJsonLine(buf, b));
+    TEST_ASSERT_EQUAL_UINT8(7, b.rpe);
+    TEST_ASSERT_EQUAL_STRING("gute Beine", b.note);
+    TEST_ASSERT_TRUE(st.append(a));
+    a.rpe = 8;
+    strncpy(a.note, "noch ok", sizeof(a.note) - 1);
+    TEST_ASSERT_TRUE(st.replaceNewest(a));
+    SessionSummary c;
+    TEST_ASSERT_TRUE(st.at(0, c));
+    TEST_ASSERT_EQUAL_UINT8(8, c.rpe);
+    TEST_ASSERT_EQUAL_STRING("noch ok", c.note);
+}
+
 static void test_zone_accumulate(void) {
     SessionTracker s;
     s.begin({});
@@ -108,6 +134,7 @@ int main(int, char**) {
     RUN_TEST(test_freeze_timeout);
     RUN_TEST(test_store_ring);
     RUN_TEST(test_json_roundtrip);
+    RUN_TEST(test_rpe_note_roundtrip);
     RUN_TEST(test_zone_accumulate);
     return UNITY_END();
 }
