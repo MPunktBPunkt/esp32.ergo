@@ -354,11 +354,16 @@ ist, gilt:
 | **Tests** | §6, geführte Tests und Testhistorie |
 | **Verlauf** | Sessions je Profil, Kennzahlen, Zonenverteilung, Physio-Progression |
 | **Profile** | §4, anlegen, bearbeiten, Grenzen setzen |
-| **Geräte** | Bike und Pulsquelle verbinden, Feature-Bits, gemerkte MACs |
+| **Geräte** | Bike und Pulsquelle verbinden, Feature-Bits, gemerkte MACs; Bridge-Status (beobachtet / steuert) |
 | **Kalibrierung** | Sweep starten, Kennfläche als Heatmap, Stützstellen und Alter |
 | **Debug** | Rohbytes, Steuer-Journal, Regler-Innenleben, Export |
-| **Einstellungen** | Hub, Limiter, Regelparameter, Bridge |
+| **Einstellungen** | Hub, Limiter, Regelparameter, Bridge (Difficulty, HR-Deckel) |
 | **OTA** | Firmware-Upload wie die Schwesterprojekte |
+
+**Bridge in der UI (ab 0.3.14).** Connline und Geräte-Karte zeigen die Rolle:
+„App beobachtet“ (`observer`) vs. „App steuert“ (`controller` / Exklusiv).
+Bei Controller sind Coach-Last-Buttons gesperrt; STOP bleibt. Fachregeln:
+[BRIDGE.md](BRIDGE.md).
 
 Die Kennfläche als **Heatmap** über Stufe und Kadenz ist dabei mehr als Zierde:
 man sieht sofort, welche Bereiche gemessen und welche noch geraten sind. Das

@@ -77,7 +77,7 @@ LittleFS-UI falls Flash-Budget es erzwingt.
 
 ### v0.3 — Bridge
 
-FTMS-Peripheral mit aufgewertetem Feature-Satz: MyWhoosh verbindet sich mit dem ESP32 statt mit dem Bike und bekommt ein echtes Wattziel, das die Firmware in Stufen übersetzt.
+FTMS-Peripheral mit aufgewertetem Feature-Satz: MyWhoosh verbindet sich mit dem ESP32 statt mit dem Bike und bekommt ein echtes Wattziel, das die Firmware in Stufen übersetzt. Ab 0.3.14: **Observer vs. Controller** und Exklusiv-Lock, damit Coach und App nicht parallel regeln — siehe [`docs/ergometer/BRIDGE.md`](docs/ergometer/BRIDGE.md).
 
 ---
 

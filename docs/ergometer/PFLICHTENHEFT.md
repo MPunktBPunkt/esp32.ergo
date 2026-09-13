@@ -407,6 +407,10 @@ Weiteres:
   von 0,01 % Steigung das 16-Stufen-Raster umgeht.
 - Eingriffe über Passthrough hinaus: **Difficulty-Faktor** und **HR-Deckel**.
 - Loggen und Charts laufen im Bridge-Betrieb voll weiter.
+- **Exklusiv-Steuerung (0.3.14):** Sobald die App ein Lastkommando sendet
+  (Watt / Stufe / Sim), ist sie **Controller** — Coach-Last ist gesperrt
+  (STOP bleibt). Nur Lesen / Control ohne Last = **Observer**. Details und
+  MyWhoosh Power↔Resistance-Schutz: [BRIDGE.md](BRIDGE.md).
 
 **Verbindungsbudget.** Für den Ergo-Knoten sind es Bike (Central) + Puls
 (Central) + App (Peripheral) = drei Links, also `MAX_CONNECTIONS=3`. Das ist
@@ -705,7 +709,7 @@ gemessen, nicht geraten.
 | `/api/test/list` \| `/start` \| `/abort` \| `/result` | GET/POST | geführte Tests |
 | `/api/test/accept-ftp` | POST | FTP bewusst ins Profil übernehmen |
 | `/api/session/list` \| `/get` \| `/delete` \| `/export` | GET/POST | Archiv |
-| `/api/bridge` | GET/POST | Bridge an/aus, Difficulty, HR-Deckel (v0.2) |
+| `/api/bridge` | GET/POST | Bridge an/aus, Difficulty, HR-Deckel; Status inkl. `clientRole` / `controlling` / `exclusive` |
 | `/api/config` | GET/POST | Einstellungen |
 | OTA-Routen | | wie Schwesterprojekte |
 
@@ -958,6 +962,12 @@ Motivation ist, die erhalten bleiben soll.
 5. Der HR-Deckel greift, ohne die App-Verbindung zu stören.
 6. Alle drei BLE-Links bleiben eine 45-Minuten-Session stabil.
 7. Web-UI und SSE bleiben im Bridge-Betrieb bedienbar.
+8. **Observer vs. Controller:** Nach Connect ohne Last bleibt Coach steuerbar;
+   nach erstem App-Lastkommando sperrt die Coach-Last (STOP bleibt).
+9. Während Bridge-ERG erzeugen MyWhoosh-Resistance-Writes keinen Mode-Kampf
+   (Resistance wird ignoriert, ERG bleibt).
+
+Betriebsregeln und Checkliste: [BRIDGE.md](BRIDGE.md).
 
 ---
 

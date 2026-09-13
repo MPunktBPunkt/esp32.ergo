@@ -11,7 +11,8 @@ FTP-Karriere: [debug/UPDATE_FTP_CAREER.md](debug/UPDATE_FTP_CAREER.md).
 FTP-Builtins: [debug/UPDATE_FTP_BUILTINS.md](debug/UPDATE_FTP_BUILTINS.md).
 ZWO: [debug/UPDATE_ZWO_IMPORT.md](debug/UPDATE_ZWO_IMPORT.md).
 Bridge: [debug/UPDATE_BRIDGE.md](debug/UPDATE_BRIDGE.md),
-[debug/UPDATE_BRIDGE_EXCLUSIVE.md](debug/UPDATE_BRIDGE_EXCLUSIVE.md).
+[debug/UPDATE_BRIDGE_EXCLUSIVE.md](debug/UPDATE_BRIDGE_EXCLUSIVE.md),
+Kanondoc: [docs/ergometer/BRIDGE.md](docs/ergometer/BRIDGE.md).
 Tags/Pause: [debug/UPDATE_WORKOUT_TAGS.md](debug/UPDATE_WORKOUT_TAGS.md).
 Ghost: [debug/UPDATE_GHOST.md](debug/UPDATE_GHOST.md).
 Nachtests: [debug/UPDATE_NACHTEST_PROBE.md](debug/UPDATE_NACHTEST_PROBE.md),
