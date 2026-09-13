@@ -60,6 +60,11 @@ public:
     bool controlGranted() const { return controlGranted_; }
 
     const ftms::Capabilities& capabilities() const { return caps_; }
+    /**
+     * Geraeteprofil-Overrides nach attach (Format / Watt-Vertrauen).
+     * Ruft der App-Layer, sobald DeviceStore das aktive Bike kennt.
+     */
+    void applyDeviceOverrides(ftms::ResistanceFormat format, int8_t powerTrusted);
     const ftms::IndoorBikeData& live() const { return live_; }
     bool hasLive() const { return liveCount_ > 0; }
     uint32_t liveCount() const { return liveCount_; }

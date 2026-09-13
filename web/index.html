@@ -629,6 +629,27 @@ footer{color:var(--dim);font-size:12px;text-align:center;margin-top:26px}
       <label class="chk"><input type="checkbox" id="c-allowSimulation"> Simulation 0x11 freigeben (Nachtest 4)</label>
       <div class="hint">Nur einschalten für den Simulationstest. Steigung kann stark wirken —
         mit 1&nbsp;% beginnen, Not-Stop bereithalten. Speichern aktiviert den Limiter neu.</div>
+      <h3 style="margin-top:1.2rem">Aktives Bike (Geräteprofil)</h3>
+      <div class="hint" id="dev-sum">Kein Gerät — Bike verbinden (Kennfläche wird je MAC gehalten).</div>
+      <div class="fgrid">
+        <label class="f"><div class="k">Widerstandsformat</div>
+          <select id="d-format">
+            <option value="auto">auto (GATT)</option>
+            <option value="sint16">sint16 (Varon)</option>
+            <option value="uint8">uint8</option>
+          </select></label>
+        <label class="f"><div class="k">Wattziel 0x05</div>
+          <select id="d-powerTrusted">
+            <option value="auto">auto (GATT)</option>
+            <option value="0">nicht vertrauen</option>
+            <option value="1">vertrauen</option>
+          </select></label>
+        <label class="f"><div class="k">Decke (W, 0 = aus Map)</div>
+          <input type="number" id="d-ceilingW" min="0" max="2000" value="0"></label>
+      </div>
+      <label class="chk"><input type="checkbox" id="d-reqControl" checked> Request Control nach Reconnect</label>
+      <div class="row flat"><button type="button" class="ghost" id="dev-save">Geräteprofil speichern</button></div>
+      <div class="msg" id="devmsg"></div>
       <div class="row flat"><button id="save">Speichern</button></div>
       <div class="msg" id="gmsg"></div>
     </div>
@@ -3111,7 +3132,42 @@ function loadCfg(){
       if(f[1]==='b') e.checked=!!c[f[0]]; else e.value=(c[f[0]]!=null?c[f[0]]:'');});
     $('gmsg').className='msg'; $('gmsg').textContent='';
   }).catch(()=>{});
+  loadDevice();
 }
+function loadDevice(){
+  fetch('/api/device').then(r=>r.json()).then(j=>{
+    const d=j.device, sum=$('dev-sum');
+    if(!d||!d.mac){
+      if(sum) sum.textContent='Kein Gerät — Bike verbinden (Kennfläche wird je MAC gehalten).';
+      return;
+    }
+    if(sum) sum.textContent=(d.name||'Bike')+' · '+d.mac+' · Slot '+(d.slot!=null?d.slot:'-')
+      +' · Decke '+(d.ceilingW||'—')+' W';
+    const fmt=$('d-format');
+    if(fmt){
+      if(d.formatCode===2) fmt.value='sint16';
+      else if(d.formatCode===1) fmt.value='uint8';
+      else fmt.value='auto';
+    }
+    const pt=$('d-powerTrusted');
+    if(pt) pt.value=(d.powerTrusted==null||d.powerTrusted<0)?'auto':String(d.powerTrusted);
+    const cw=$('d-ceilingW'); if(cw) cw.value=d.ceilingW||0;
+    const rc=$('d-reqControl'); if(rc) rc.checked=!!d.reqControl;
+  }).catch(()=>{});
+}
+if($('dev-save')) $('dev-save').onclick=()=>{
+  const q=new URLSearchParams();
+  q.set('format',$('d-format').value);
+  q.set('powerTrusted',$('d-powerTrusted').value);
+  q.set('ceilingW',$('d-ceilingW').value||'0');
+  q.set('reqControl',$('d-reqControl').checked?'1':'0');
+  const m=$('devmsg'); m.className='msg'; m.textContent='speichere...';
+  fetch('/api/device?'+q.toString(),{method:'POST'}).then(r=>r.json().then(j=>({ok:r.ok,j})))
+    .then(o=>{m.className='msg '+(o.ok?'ok':'err');
+      m.textContent=o.ok?'Geräteprofil gespeichert':('Fehler: '+(o.j.error||'?'));
+      if(o.ok) loadDevice();})
+    .catch(e=>{m.className='msg err';m.textContent=''+e;});
+};
 $('save').onclick=()=>{
   const body={};
   CFGF.forEach(f=>{const e=$('c-'+f[0]); if(!e) return;

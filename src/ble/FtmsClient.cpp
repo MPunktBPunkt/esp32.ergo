@@ -118,6 +118,15 @@ bool FtmsClient::attach(NimBLEClient* client) {
     return true;
 }
 
+void FtmsClient::applyDeviceOverrides(ftms::ResistanceFormat format, int8_t powerTrusted) {
+    if (format != ftms::ResistanceFormat::Unknown) caps_.resistanceFormat = format;
+    if (powerTrusted >= 0) caps_.powerTargetTrusted = (powerTrusted != 0);
+    if (limiter_) limiter_->setCapabilities(&caps_);
+    Serial.printf("[FTMS] DeviceOverride format=%s wattTrusted=%s\n",
+                  ftms::resistanceFormatName(caps_.resistanceFormat),
+                  caps_.powerTargetTrusted ? "ja" : "nein");
+}
+
 void FtmsClient::detach() {
     // Die Characteristic-Zeiger gehoeren dem Client; nach dessen Freigabe
     // sind sie ungueltig. Nur verwerfen, nichts abmelden.

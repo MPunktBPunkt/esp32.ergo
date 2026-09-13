@@ -58,6 +58,8 @@ void App::begin() {
         ensureKnownProfiles();
     }
     applyLimiterConfig();
+    loadDevices();
+    syncDeviceFromConfig_();
     loadPowerMap();
     powerCtl.begin({});
     hrCtl.begin({});
@@ -257,12 +259,20 @@ void App::onLink(ergo::Role role, bool up) {
         if (up) {
             if (ftms.attach(ble.client(ergo::Role::Bike))) {
                 ble.markReady(ergo::Role::Bike);
-                // Steuerhoheit sofort anfragen: ohne sie lehnt ein
-                // spec-treues Geraet jedes Lastkommando mit 0x05
-                // ControlNotPermitted ab.
-                const ergo::FtmsClient::Result r = ftms.requestControl(millis());
-                Serial.printf("[FTMS] RequestControl: %s\n",
-                              ergo::FtmsClient::resultName(r));
+                syncDeviceFromConfig_();
+                mapDirty_ = false;
+                loadPowerMap();
+                applyActiveDeviceOverrides_();
+
+                // Steuerhoheit: Default an; Geraeteprofil kann abschalten.
+                const ergo::DeviceProfile* dev = devices.active();
+                if (!dev || dev->requestControlOnReconnect) {
+                    const ergo::FtmsClient::Result r = ftms.requestControl(millis());
+                    Serial.printf("[FTMS] RequestControl: %s\n",
+                                  ergo::FtmsClient::resultName(r));
+                } else {
+                    Serial.println("[FTMS] RequestControl uebersprungen (Geraeteprofil)");
+                }
 
                 // Den Stellweg erst jetzt in die Kennflaeche geben: vorher ist
                 // er nicht bekannt. Passt er nicht zum Gespeicherten, verwirft
@@ -627,6 +637,22 @@ void App::buildStatusJson(JsonDocument& doc) {
     // ein Bike haengt. Ein Neustart unter Last laesst das Ergometer gebremst
     // stehen — siehe Nachtest 6.
     doc["bikeLink"] = ble.ready(ergo::Role::Bike);
+    {
+        JsonObject dev = doc["device"].to<JsonObject>();
+        dev["count"] = devices.count();
+        if (const ergo::DeviceProfile* d = devices.active()) {
+            dev["mac"] = d->mac;
+            dev["name"] = d->name;
+            dev["addrType"] = d->addrType;
+            dev["format"] = ftms::resistanceFormatName(d->resistanceFormat);
+            dev["powerTrusted"] = d->powerTrusted;
+            dev["reqControl"] = d->requestControlOnReconnect;
+            dev["ceilingW"] = d->measuredCeilingW;
+            dev["slot"] = devices.mapSlot();
+        } else {
+            dev["mac"] = nullptr;
+        }
+    }
 
     ble.appendStatusJson(doc["ble"].to<JsonObject>());
     ftms.appendStatusJson(doc["ftms"].to<JsonObject>());
@@ -879,6 +905,7 @@ void App::registerRoutes() {
     registerBridgeRoutes();
     registerProfileRoutes();
     registerCalibRoutes();
+    registerDeviceRoutes();
     registerDebugRoutes();
     registerTestRoutes();
 }
@@ -3378,20 +3405,99 @@ void App::loadSessionArchive_() {
     Serial.printf("[SESS] Archiv: %u Eintraege\n", (unsigned)sessionStore_.count());
 }
 
-void App::loadPowerMap() {
+void App::loadDevices() {
     Preferences p;
-    if (!p.begin("ergomap", true)) return;
-    const size_t len = p.getBytesLength("pmap");
-    if (len == 0 || len > ergo::PowerMap::kMaxBytes) {
+    if (!p.begin("ergodev", true)) return;
+    const size_t len = p.getBytesLength("meta");
+    if (len == 0 || len > ergo::DeviceStore::kMaxBytes) {
         p.end();
         return;
     }
-    static uint8_t buf[ergo::PowerMap::kMaxBytes];
-    const size_t got = p.getBytes("pmap", buf, len);
+    uint8_t buf[ergo::DeviceStore::kMaxBytes];
+    const size_t got = p.getBytes("meta", buf, len);
     p.end();
     if (got != len) return;
+    if (devices.load(buf, got)) {
+        Serial.printf("[DEV] %u Geraete, aktiv=%d\n", (unsigned)devices.count(),
+                      (int)devices.activeIndex());
+    } else {
+        Serial.println("[DEV] Meta unlesbar — verworfen");
+    }
+}
+
+void App::saveDevices() {
+    uint8_t buf[ergo::DeviceStore::kMaxBytes];
+    const size_t n = devices.save(buf, sizeof(buf));
+    if (n == 0) return;
+    Preferences p;
+    if (!p.begin("ergodev", false)) return;
+    const bool ok = p.putBytes("meta", buf, n) == n;
+    p.end();
+    Serial.printf("[DEV] Meta %s (%u Byte)\n", ok ? "gesichert" : "fehlgeschlagen", (unsigned)n);
+}
+
+void App::syncDeviceFromConfig_() {
+    if (!config.bikeMac.length()) return;
+    const uint32_t nowUnix = (uint32_t)time(nullptr);
+    const uint32_t stamp = (nowUnix > 1700000000UL) ? nowUnix : 0;
+    if (devices.remember(config.bikeMac.c_str(), config.bikeName.c_str(),
+                         (uint8_t)config.bikeAddrType, stamp)) {
+        saveDevices();
+    }
+}
+
+void App::applyActiveDeviceOverrides_() {
+    const ergo::DeviceProfile* d = devices.active();
+    if (!d) return;
+    ftms.applyDeviceOverrides(d->resistanceFormat, d->powerTrusted);
+}
+
+void App::loadPowerMap() {
+    Preferences p;
+    static uint8_t buf[ergo::PowerMap::kMaxBytes];
+    size_t got = 0;
+
+    // Per-Geraet-Slot (m0…m3) zuerst.
+    const int slot = devices.mapSlot();
+    if (slot >= 0) {
+        char key[4];
+        snprintf(key, sizeof(key), "m%d", slot);
+        if (p.begin("ergodev", true)) {
+            const size_t len = p.getBytesLength(key);
+            if (len > 0 && len <= ergo::PowerMap::kMaxBytes) {
+                got = p.getBytes(key, buf, len);
+                if (got != len) got = 0;
+            }
+            p.end();
+        }
+    }
+
+    // Migration: altes globales ergomap/pmap → aktiver Slot.
+    if (got == 0) {
+        if (p.begin("ergomap", true)) {
+            const size_t len = p.getBytesLength("pmap");
+            if (len > 0 && len <= ergo::PowerMap::kMaxBytes) {
+                got = p.getBytes("pmap", buf, len);
+                if (got != len) got = 0;
+            }
+            p.end();
+        }
+        if (got > 0 && powerMap.load(buf, got)) {
+            Serial.printf("[MAP] Legacy ergomap → Slot %d (%u Punkte)\n", slot,
+                          (unsigned)powerMap.pointCount());
+            mapDirty_ = true;
+            savePowerMap();
+            return;
+        }
+        if (got > 0) {
+            Serial.println("[MAP] Legacy unlesbar — verworfen");
+            return;
+        }
+        return;
+    }
+
     if (powerMap.load(buf, got)) {
-        Serial.printf("[MAP] geladen: %u Stufen, %u Stuetzstellen, %u aus Sweeps\n",
+        Serial.printf("[MAP] Slot %d: %u Stufen, %u Stuetzstellen, %u aus Sweeps\n", slot,
                       (unsigned)powerMap.levelCount(), (unsigned)powerMap.pointCount(),
                       (unsigned)powerMap.sweepCells());
     } else {
@@ -3403,16 +3509,52 @@ void App::savePowerMap() {
     if (!mapDirty_) return;
     mapSaved_ = millis();
     if (!powerMap.ready()) return;
+    const int slot = devices.mapSlot();
+    if (slot < 0) {
+        // Kein Geraet — weiter ins Legacy-NS schreiben, damit nichts verloren geht.
+        static uint8_t buf[ergo::PowerMap::kMaxBytes];
+        const size_t n = powerMap.save(buf, sizeof(buf));
+        if (n == 0) return;
+        Preferences p;
+        if (!p.begin("ergomap", false)) return;
+        const bool ok = p.putBytes("pmap", buf, n) == n;
+        p.end();
+        if (ok) mapDirty_ = false;
+        Serial.printf("[MAP] legacy %s (%u Byte)\n", ok ? "gesichert" : "fehlgeschlagen",
+                      (unsigned)n);
+        return;
+    }
+
     static uint8_t buf[ergo::PowerMap::kMaxBytes];
     const size_t n = powerMap.save(buf, sizeof(buf));
     if (n == 0) return;
+    char key[4];
+    snprintf(key, sizeof(key), "m%d", slot);
     Preferences p;
-    if (!p.begin("ergomap", false)) return;
-    const bool ok = p.putBytes("pmap", buf, n) == n;
+    if (!p.begin("ergodev", false)) return;
+    const bool ok = p.putBytes(key, buf, n) == n;
     p.end();
     if (ok) mapDirty_ = false;
-    Serial.printf("[MAP] %s (%u Byte, %u Stuetzstellen)\n", ok ? "gesichert" : "Sicherung fehlgeschlagen",
-                  (unsigned)n, (unsigned)powerMap.pointCount());
+
+    // Leistungsdecke grob aus Map (hoechste Schaetzung @ 80 rpm).
+    if (ok) {
+        ergo::DeviceProfile* d = devices.activeMutable();
+        if (d) {
+            float peak = 0.0f;
+            for (uint8_t li = 0; li < powerMap.levelCount(); ++li) {
+                float w = 0.0f;
+                if (powerMap.estimate(powerMap.tenthsOf(li), 80.0f, w) && w > peak) peak = w;
+            }
+            const uint16_t ceilW = (uint16_t)(peak + 0.5f);
+            if (ceilW > 0 && ceilW != d->measuredCeilingW) {
+                d->measuredCeilingW = ceilW;
+                saveDevices();
+            }
+        }
+    }
+    Serial.printf("[MAP] Slot %d %s (%u Byte, %u Stuetzstellen)\n", slot,
+                  ok ? "gesichert" : "Sicherung fehlgeschlagen", (unsigned)n,
+                  (unsigned)powerMap.pointCount());
 }
 
 void App::appendCalibJson(JsonObject obj) const {
@@ -3426,6 +3568,11 @@ void App::appendCalibJson(JsonObject obj) const {
     m["levelsCovered"] = powerMap.levelsCovered();
     m["bandsCovered"] = powerMap.bandsCovered();
     m["truncated"] = powerMap.truncated();
+    m["deviceSlot"] = devices.mapSlot();
+    if (const ergo::DeviceProfile* d = devices.active()) {
+        m["deviceMac"] = d->mac;
+        m["ceilingW"] = d->measuredCeilingW;
+    }
 
     JsonObject s = obj["sweep"].to<JsonObject>();
     s["state"] = ergo::sweepStateName(sweep.state());
@@ -3454,6 +3601,93 @@ void App::appendCalibJson(JsonObject obj) const {
         o["valid"] = p.valid;
         if (!p.valid) o["reason"] = p.reason;
     }
+}
+
+void App::registerDeviceRoutes() {
+    auto fillDevice = [](JsonObject o, const ergo::DeviceProfile& d, int slot) {
+        o["mac"] = d.mac;
+        o["name"] = d.name;
+        o["addrType"] = d.addrType;
+        o["format"] = ftms::resistanceFormatName(d.resistanceFormat);
+        o["formatCode"] = (int)d.resistanceFormat;
+        o["powerTrusted"] = d.powerTrusted;
+        o["reqControl"] = d.requestControlOnReconnect;
+        o["ceilingW"] = d.measuredCeilingW;
+        o["lastSeenUnix"] = d.lastSeenUnix;
+        o["slot"] = slot;
+    };
+
+    server.on("/api/devices", HTTP_GET, [this, fillDevice]() {
+        JsonDocument doc;
+        doc["ok"] = true;
+        doc["active"] = devices.activeIndex();
+        JsonArray a = doc["devices"].to<JsonArray>();
+        for (uint8_t i = 0; i < devices.count(); ++i) {
+            const ergo::DeviceProfile* d = devices.at(i);
+            if (!d) continue;
+            fillDevice(a.add<JsonObject>(), *d, i);
+        }
+        NetUtil::sendJson(server, 200, doc);
+    });
+
+    server.on("/api/device", HTTP_GET, [this, fillDevice]() {
+        JsonDocument doc;
+        const ergo::DeviceProfile* d = devices.active();
+        doc["ok"] = (d != nullptr);
+        if (d) fillDevice(doc["device"].to<JsonObject>(), *d, devices.mapSlot());
+        else doc["device"] = nullptr;
+        NetUtil::sendJson(server, 200, doc);
+    });
+
+    server.on("/api/device", HTTP_POST, [this, fillDevice]() {
+        ergo::DeviceProfile* d = devices.activeMutable();
+        if (!d) {
+            NetUtil::sendError(server, 409, "kein aktives Geraet — zuerst Bike verbinden");
+            return;
+        }
+        if (server.hasArg("format")) {
+            const String f = server.arg("format");
+            if (f == "sint16" || f == "Sint16")
+                d->resistanceFormat = ftms::ResistanceFormat::Sint16;
+            else if (f == "uint8" || f == "Uint8")
+                d->resistanceFormat = ftms::ResistanceFormat::Uint8;
+            else if (f == "unknown" || f == "auto")
+                d->resistanceFormat = ftms::ResistanceFormat::Unknown;
+            else {
+                NetUtil::sendError(server, 400, "format: sint16|uint8|auto");
+                return;
+            }
+        }
+        if (server.hasArg("powerTrusted")) {
+            const String t = server.arg("powerTrusted");
+            if (t == "auto" || t == "-1") d->powerTrusted = -1;
+            else if (t == "0" || t == "false" || t == "no") d->powerTrusted = 0;
+            else if (t == "1" || t == "true" || t == "yes") d->powerTrusted = 1;
+            else {
+                NetUtil::sendError(server, 400, "powerTrusted: auto|0|1");
+                return;
+            }
+        }
+        if (server.hasArg("reqControl")) {
+            const String r = server.arg("reqControl");
+            d->requestControlOnReconnect = !(r == "0" || r == "false" || r == "no");
+        }
+        if (server.hasArg("ceilingW")) {
+            const int c = server.arg("ceilingW").toInt();
+            if (c < 0 || c > 2000) {
+                NetUtil::sendError(server, 400, "ceilingW 0..2000");
+                return;
+            }
+            d->measuredCeilingW = (uint16_t)c;
+        }
+        saveDevices();
+        if (ftms.attached()) applyActiveDeviceOverrides_();
+
+        JsonDocument doc;
+        doc["ok"] = true;
+        fillDevice(doc["device"].to<JsonObject>(), *d, devices.mapSlot());
+        NetUtil::sendJson(server, 200, doc);
+    });
 }
 
 /**

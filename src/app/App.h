@@ -22,6 +22,7 @@
 #include "control/WorkoutJson.h"
 #include "control/TestRunner.h"
 #include "core/ConfigStore.h"
+#include "core/DeviceStore.h"
 #include "core/HubClient.h"
 #include "core/FtpCareer.h"
 #include "core/Progression.h"
@@ -57,6 +58,7 @@ public:
     ergo::DebugRing ring;
     ergo::ControlJournal journal;
     ergo::ProfileStore profiles;
+    ergo::DeviceStore devices;
     ergo::ControlState control;
 
     void begin();
@@ -80,6 +82,7 @@ private:
     void registerControlRoutes();
     void registerProfileRoutes();
     void registerCalibRoutes();
+    void registerDeviceRoutes();
     void registerDebugRoutes();
     void registerTestRoutes();
     void registerBridgeRoutes();
@@ -94,6 +97,10 @@ private:
     void ensureKnownProfiles();
     void loadProfiles();
     void saveProfiles();
+    void loadDevices();
+    void saveDevices();
+    void syncDeviceFromConfig_();
+    void applyActiveDeviceOverrides_();
     bool beginFs();
     void recordSessionEnd(const char* reason);
     void beginSession(const char* workoutName = "", const char* workoutId = "");
