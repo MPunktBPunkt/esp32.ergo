@@ -356,7 +356,10 @@ ist, gilt:
 
 Einstellung: Checkbox **„Entwickler-UI anzeigen“** (NVS). Darunter erscheinen
 Simulation/`0x11`, ERG-Assist und Gerätequirks. Hash auf versteckte Reiter
-fällt auf Ride zurück.
+fällt auf Ride zurück. Ab **0.3.21**: Ride-Modi mit Alltags-Labels, Ziel-Panel
+zum aktiven Modus, Start-Freigabe nach STOP sichtbar; Sim-Modus-Button nur mit
+Entwickler-UI. Nachtests in Kalibrierung gruppiert (`force` als Gefahr).
+Details: [UPDATE_UI_RIDE.md](../../debug/UPDATE_UI_RIDE.md).
 
 | Tab | Inhalt |
 |-----|--------|

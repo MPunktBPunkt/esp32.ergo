@@ -4,6 +4,9 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>ERGO</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;700&family=Syne:wght@700;800&display=swap" rel="stylesheet">
 <style>
 :root{
   --bg:#0E1116; --card:#161A21; --edge:#232936;
@@ -93,7 +96,21 @@ body.js section.on{display:block}
 .connline{display:flex;flex-wrap:wrap;gap:14px 22px;align-items:center;font-size:13px}
 .connline .v{font-size:14px}
 .modes{display:flex;flex-wrap:wrap;gap:8px;margin:0 0 12px}
-.modes button{min-height:48px}
+.modes button{min-height:48px;flex:1 1 auto}
+.modes button:not(.ghost){box-shadow:0 0 0 1px rgba(226,128,47,.35)}
+body:not(.devui) .mode-lab{display:none!important}
+.modepanel{margin:0 0 12px;padding:12px;background:#0E1116;border:1px solid var(--edge);
+  border-radius:10px}
+.modepanel[hidden]{display:none!important}
+.modepanel .row{margin-top:8px}
+#poststop{margin:0 0 12px;padding:12px;border-radius:10px;
+  background:rgba(226,128,47,.12);border:1px solid rgba(226,128,47,.45)}
+#poststop[hidden]{display:none!important}
+#worow[hidden]{display:none!important}
+.ntblock{margin:0 0 14px;padding-bottom:12px;border-bottom:1px solid var(--edge)}
+.ntblock:last-of-type{border-bottom:0;padding-bottom:0;margin-bottom:8px}
+.ntblock .k{margin-bottom:8px}
+.ntblock .row{margin-top:0}
 .advbox{margin-top:12px;padding-top:12px;border-top:1px solid var(--edge)}
 .advbox summary{cursor:pointer;color:var(--dim);font-size:12px;letter-spacing:.08em;
   text-transform:uppercase;list-style:none}
@@ -272,8 +289,8 @@ footer{color:var(--dim);font-size:12px;text-align:center;margin-top:26px}
       <h2>Fahrt</h2>
       <div class="msg warn" id="bridgeHint" hidden>Bridge-App steuert exklusiv —
         Coach-Last gesperrt. STOP bleibt als Not-Aus.</div>
-      <div class="msg warn" id="startHint" hidden>Nach STOP: ggf. <b>Start</b> drücken und
-        erneut treten — die Freigabe am Bike kann sonst fehlen.</div>
+      <div class="msg warn" id="startHint" hidden>Nach STOP: unten <b>Start · Freigabe</b>
+    tippen und erneut treten — sonst fehlt oft die Freigabe am Bike.</div>
       <div class="msg warn" id="pauseHint" hidden>Auto-Pause: keine Trittfrequenz —
         Last gehalten. Weiter treten setzt die Session fort.</div>
       <div class="msg warn" id="freezeHint" hidden>Pulsverlust — Stufe eingefroren.
@@ -341,56 +358,72 @@ footer{color:var(--dim);font-size:12px;text-align:center;margin-top:26px}
       <div class="k" id="rmodesub"></div>
       <div class="k" id="rghost" hidden></div>
       <div class="modes">
-        <button id="moff" class="ghost">OFF</button>
-        <button id="mlvl" class="ghost">LEVEL</button>
-        <button id="merg" class="ghost">ERG</button>
-        <button id="msim" class="ghost">SIM</button>
-        <button id="mhr" class="ghost">HR</button>
-        <button id="mreha" class="ghost">REHA</button>
-        <button id="mwo" class="ghost">PHYSIO</button>
+        <button id="moff" class="ghost" type="button">Aus</button>
+        <button id="mlvl" class="ghost" type="button">Handstufe</button>
+        <button id="merg" class="ghost" type="button">Wattziel</button>
+        <button id="mhr" class="ghost" type="button">Puls halten</button>
+        <button id="mreha" class="ghost" type="button">Reha</button>
+        <button id="mwo" class="ghost" type="button">Programm</button>
+        <button id="msim" class="ghost mode-lab" type="button">Sim (Labor)</button>
       </div>
-      <div class="row flat" id="worow">
-        <button id="wopause" class="ghost">Pause</button>
-        <button id="woresume" class="ghost">Weiter</button>
-        <button id="woskip" class="ghost">Schritt überspringen</button>
+      <div class="row flat" id="worow" hidden>
+        <button id="wopause" class="ghost" type="button">Pause</button>
+        <button id="woresume" class="ghost" type="button">Weiter</button>
+        <button id="woskip" class="ghost sm" type="button">Schritt überspringen</button>
       </div>
-      <details class="advbox" id="rideadv">
-        <summary>Ziele · Freigabe · Reset</summary>
+      <div id="mp-erg" class="modepanel" hidden>
+        <div class="k">Wattziel (über Stufen)</div>
         <div class="row flat">
-          <label class="f" style="flex:1;margin:0"><div class="k">Zielwatt (ERG)</div>
+          <label class="f" style="flex:1;margin:0"><div class="k">Ziel (W)</div>
             <input type="number" id="ergw" min="20" max="300" step="5" value="80"></label>
-          <button id="erggo" class="ghost">Ziel setzen</button>
+          <button id="erggo" class="ghost" type="button">Ziel setzen</button>
         </div>
+        <div class="k" id="ergsub"></div>
+      </div>
+      <div id="mp-sim" class="modepanel" hidden>
+        <div class="k">Simulation 0x11 (Labor)</div>
         <div class="row flat">
-          <label class="f" style="flex:1;margin:0"><div class="k">Steigung % (SIM)</div>
+          <label class="f" style="flex:1;margin:0"><div class="k">Steigung %</div>
             <input type="number" id="simg" min="-10" max="20" step="0.5" value="3"></label>
-          <button id="simgo" class="ghost">Steigung setzen</button>
+          <button id="simgo" class="ghost" type="button">Steigung setzen</button>
         </div>
+      </div>
+      <div id="mp-hr" class="modepanel" hidden>
+        <div class="k">Zielpuls</div>
         <div class="row flat">
-          <label class="f" style="flex:1;margin:0"><div class="k">Zielpuls (HR)</div>
+          <label class="f" style="flex:1;margin:0"><div class="k">bpm</div>
             <input type="number" id="hrbpm" min="40" max="220" step="1" value="130"></label>
-          <button id="hrgo" class="ghost">Puls setzen</button>
+          <button id="hrgo" class="ghost" type="button">Puls setzen</button>
         </div>
+        <div class="k" id="hrsub" style="color:#b45309"></div>
+      </div>
+      <div id="mp-reha" class="modepanel" hidden>
+        <div class="k">Reha-Vorgabe</div>
         <div class="row flat">
-          <label class="f" style="flex:1;margin:0"><div class="k">Reha-Watt</div>
+          <label class="f" style="flex:1;margin:0"><div class="k">Watt</div>
             <input type="number" id="rehaw" min="20" max="150" step="5" value="60"></label>
           <label class="f" style="flex:1;margin:0"><div class="k">Pulsdeckel</div>
             <input type="number" id="rehahr" min="80" max="180" step="1" value="120"></label>
           <label class="f" style="flex:1;margin:0"><div class="k">Dauer (min)</div>
             <input type="number" id="rehamin" min="0" max="60" step="1" value="10"></label>
         </div>
-        <div class="k" id="ergsub"></div>
-        <div class="k" id="hrsub" style="color:#b45309"></div>
+        <div class="hint flat">Modus „Reha“ erneut tippen übernimmt die Werte.</div>
         <div class="k" id="rehasub" style="color:#b45309"></div>
+      </div>
+      <div id="poststop" hidden>
+        <div class="k" style="margin-bottom:8px">Nach STOP: Freigabe am Bike</div>
+        <button id="cstart" type="button">Start · Freigabe</button>
+      </div>
+      <details class="advbox" id="rideadv">
+        <summary>Freigabe · Reset</summary>
         <div class="row flat">
-          <button id="req" class="ghost">Steuerhoheit</button>
-          <button id="cstart" class="ghost">Start</button>
-          <button id="creset" class="ghost">Reset</button>
+          <button id="req" class="ghost" type="button">Steuerhoheit</button>
+          <button id="creset" class="ghost" type="button">Reset</button>
         </div>
       </details>
       <div class="msg" id="cmsg"></div>
-      <div class="hint flat">Stufe und STOP bleiben oben kleben. Ohne Profil keine Last.
-        ERG/HR/REHA brauchen Kennfläche. Nach STOP ggf. Start + Tritt.</div>
+      <div class="hint flat">Stufe ± und STOP bleiben oben. Ohne Profil keine Last.
+        Watt/Puls/Reha brauchen Kennfläche.</div>
     </div>
   </section>
 
@@ -668,10 +701,10 @@ footer{color:var(--dim);font-size:12px;text-align:center;margin-top:26px}
           <input type="number" id="d-ceilingW" min="0" max="2000" value="0"></label>
       </div>
       <label class="chk"><input type="checkbox" id="d-reqControl" checked> Request Control nach Reconnect</label>
-      <div class="row flat"><button type="button" class="ghost" id="dev-save">Geräteprofil speichern</button></div>
+      <div class="row flat"><button type="button" class="ghost" id="dev-save">Bike-Profil speichern</button></div>
       <div class="msg" id="devmsg"></div>
       </div>
-      <div class="row flat"><button id="save">Speichern</button></div>
+      <div class="row flat"><button id="save" type="button">Einstellungen speichern</button></div>
       <div class="msg" id="gmsg"></div>
     </div>
   </section>
@@ -728,18 +761,30 @@ footer{color:var(--dim);font-size:12px;text-align:center;margin-top:26px}
     </div>
 
     <div class="card">
-      <h2>Nachtests 3–6</h2>
-      <div class="hint flat">Probe-Modus: Mitschnitt + Snapshots für paralleles Auswerten.
-        Test&nbsp;4 braucht <b>allowSimulation</b> (Einstellungen). Steigung vorsichtig
-        1→3→6&nbsp;%, Not-Stop bereit. Immer treten und Kadenz halten.</div>
-      <div class="row flat">
-        <button id="prarm" class="ghost">Probe schärfen</button>
-        <button id="prmark" class="ghost">Mark setzen</button>
-        <button id="prt3" class="ghost">Test 3 · raw 100 W</button>
-        <button id="prt3f" class="ghost">Test 3 · force 0x05</button>
-        <button id="prt4a" class="ghost">Sim 1&nbsp;%</button>
-        <button id="prt4b" class="ghost">Sim 3&nbsp;%</button>
-        <button id="prt4c" class="ghost">Sim 6&nbsp;%</button>
+      <h2>Nachtests 3–4</h2>
+      <div class="hint flat">Probe-Modus für paralleles Auswerten. Test&nbsp;4 braucht
+        <b>allowSimulation</b>. Steigung vorsichtig, Not-Stop bereit, Kadenz halten.</div>
+      <div class="ntblock">
+        <div class="k">Probe</div>
+        <div class="row flat">
+          <button id="prarm" class="ghost" type="button">Probe schärfen</button>
+          <button id="prmark" class="ghost" type="button">Mark setzen</button>
+        </div>
+      </div>
+      <div class="ntblock">
+        <div class="k">Test 3 · Wattziel 0x05</div>
+        <div class="row flat">
+          <button id="prt3" class="ghost" type="button">raw 100 W (Deny erwartet)</button>
+          <button id="prt3f" class="danger" type="button">force 0x05 · Draht</button>
+        </div>
+      </div>
+      <div class="ntblock">
+        <div class="k">Test 4 · Simulation 0x11</div>
+        <div class="row flat">
+          <button id="prt4a" class="ghost" type="button">Sim 1&nbsp;%</button>
+          <button id="prt4b" class="ghost" type="button">Sim 3&nbsp;%</button>
+          <button id="prt4c" class="ghost" type="button">Sim 6&nbsp;%</button>
+        </div>
       </div>
       <div class="k" id="prlive">Probe: —</div>
       <div class="msg" id="prmsg"></div>
@@ -1235,10 +1280,11 @@ function renderBle(s){
   if(mode!=='OFF') afterStop=false;
   prevMode=mode;
   const sh=$('startHint');
+  const showPost=afterStop && !!s.bikeLink && mode==='OFF';
   if(sh){
-    const show=afterStop && !!s.bikeLink && mode==='OFF';
-    sh.hidden=!show;
+    sh.hidden=!showPost;
   }
+  if($('poststop')) $('poststop').hidden=!showPost;
   const sess=s.session||{};
   const ph=$('pauseHint');
   if(ph) ph.hidden=!(sess.active && sess.paused && mode!=='OFF');
@@ -1477,8 +1523,13 @@ function renderBle(s){
   const bridgeLock=!!((s.bridge||{}).controlling);
   $('lvlup').disabled=!hasP||ergLike||bridgeLock;
   $('lvldn').disabled=!hasP||ergLike||bridgeLock;
-  const adv=$('rideadv');
-  if(adv && (mode==='MANUAL_ERG'||mode==='HR_HOLD'||mode==='REHA'||mode==='SIM')) adv.open=true;
+  const panel=(mode==='MANUAL_ERG')?'mp-erg'
+    :(mode==='SIM')?'mp-sim'
+    :(mode==='HR_HOLD')?'mp-hr'
+    :(mode==='REHA')?'mp-reha':null;
+  ['mp-erg','mp-sim','mp-hr','mp-reha'].forEach(id=>{
+    const el=$(id); if(el) el.hidden=(!panel||id!==panel);
+  });
   $('mlvl').disabled=!hasP||bridgeLock;
   $('merg').disabled=!hasP||!(erg.mapReady)||bridgeLock;
   const allowSim=!!(s.allowSimulation);
@@ -1487,6 +1538,7 @@ function renderBle(s){
   $('mreha').disabled=!hasP||!(erg.mapReady)||bridgeLock;
   $('mwo').disabled=!hasP||!(erg.mapReady)||bridgeLock;
   const woOn=mode==='WORKOUT';
+  if($('worow')) $('worow').hidden=!woOn;
   $('wopause').disabled=!woOn||wo.state==='PAUSED';
   $('woresume').disabled=!woOn||wo.state!=='PAUSED';
   $('woskip').disabled=!woOn;
