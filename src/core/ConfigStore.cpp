@@ -27,6 +27,7 @@ void ConfigStore::applyDefaults() {
     bridgeDifficultyPct = 100;
     bridgeHrSoft = 0;
     bridgeHrMax = 0;
+    allowSimulation = false;
 }
 
 void ConfigStore::begin() {
@@ -68,6 +69,7 @@ void ConfigStore::load() {
     bridgeDifficultyPct = prefs.getUShort("br_diff", 100);
     bridgeHrSoft = prefs.getUChar("br_hrs", 0);
     bridgeHrMax = prefs.getUChar("br_hrm", 0);
+    allowSimulation = prefs.getBool("allow_sim", false);
     prefs.end();
 
     if (heartbeatIntervalS < 5) heartbeatIntervalS = 5;
@@ -105,6 +107,7 @@ void ConfigStore::save() {
     prefs.putUShort("br_diff", bridgeDifficultyPct);
     prefs.putUChar("br_hrs", bridgeHrSoft);
     prefs.putUChar("br_hrm", bridgeHrMax);
+    prefs.putBool("allow_sim", allowSimulation);
     prefs.end();
 }
 
@@ -141,6 +144,7 @@ void ConfigStore::toJson(JsonObject obj) const {
     obj["bridgeDifficultyPct"] = bridgeDifficultyPct;
     obj["bridgeHrSoft"] = bridgeHrSoft;
     obj["bridgeHrMax"] = bridgeHrMax;
+    obj["allowSimulation"] = allowSimulation;
     obj["board"] = ERGO_BOARD_ID;
     obj["boardLabel"] = ERGO_BOARD_LABEL;
 }
@@ -176,6 +180,7 @@ bool ConfigStore::fromJson(JsonVariantConst obj) {
         bridgeDifficultyPct = obj["bridgeDifficultyPct"].as<uint16_t>();
     if (!obj["bridgeHrSoft"].isNull()) bridgeHrSoft = obj["bridgeHrSoft"].as<uint8_t>();
     if (!obj["bridgeHrMax"].isNull()) bridgeHrMax = obj["bridgeHrMax"].as<uint8_t>();
+    if (!obj["allowSimulation"].isNull()) allowSimulation = obj["allowSimulation"].as<bool>();
 
     if (heartbeatIntervalS < 5) heartbeatIntervalS = 5;
     if (hubPort < 1 || hubPort > 65535) hubPort = HUB_PORT_DEFAULT;

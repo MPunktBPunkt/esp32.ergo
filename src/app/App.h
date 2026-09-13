@@ -116,6 +116,8 @@ private:
     void restoreDefaultAutoPause_();
     void refreshGhost_(const char* workoutId, const char* profileId, const char* mode);
     void clearGhost_();
+    void appendProbeJson_(JsonObject obj) const;
+    void captureProbeMark_(const char* label);
     uint32_t readProgressionMainS(const char* id) const;
     bool writeProgressionMainS(const char* id, uint32_t mainS);
     void maybeOfferProgression(const ergo::SessionSummary& s);
@@ -222,4 +224,19 @@ private:
     uint16_t pendingAutoPauseS_ = 0;
     ergo::SessionSummary ghost_{};
     bool ghostOk_ = false;
+
+    struct ProbeMark {
+        char label[24] = {};
+        uint32_t atMs = 0;
+        float watt = 0.0f;
+        float rpm = 0.0f;
+        uint8_t hrBike = 0;
+        uint8_t hrStrap = 0;
+        uint8_t hrEff = 0;
+        int16_t levelTenths = 0;
+        bool valid = false;
+    };
+    static constexpr uint8_t kProbeMarks = 8;
+    ProbeMark probeMarks_[kProbeMarks] = {};
+    uint8_t probeMarkCount_ = 0;
 };

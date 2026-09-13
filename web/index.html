@@ -626,6 +626,9 @@ footer{color:var(--dim);font-size:12px;text-align:center;margin-top:26px}
         Wattziele der App werden über die Kennfläche in Stufen übersetzt — nicht als
         <code>0x05</code> ans Bike. Difficulty skaliert App-Watt (100 % = 1:1).
         HR-Deckel senkt die Last bei hohem Puls, ohne die App-Verbindung zu stören.</div>
+      <label class="chk"><input type="checkbox" id="c-allowSimulation"> Simulation 0x11 freigeben (Nachtest 4)</label>
+      <div class="hint">Nur einschalten für den Simulationstest. Steigung kann stark wirken —
+        mit 1&nbsp;% beginnen, Not-Stop bereithalten. Speichern aktiviert den Limiter neu.</div>
       <div class="row flat"><button id="save">Speichern</button></div>
       <div class="msg" id="gmsg"></div>
     </div>
@@ -680,6 +683,23 @@ footer{color:var(--dim);font-size:12px;text-align:center;margin-top:26px}
         bei 80 rpm (~2 min), reicht für die Kadenzfrage. Je Stufe 20 s einschwingen,
         40 s messen. Wer aufhört zu treten, bricht den Sweep ab.</div>
       <div class="msg" id="swmsg"></div>
+    </div>
+
+    <div class="card">
+      <h2>Nachtests 3–6</h2>
+      <div class="hint flat">Probe-Modus: Mitschnitt + Snapshots für paralleles Auswerten.
+        Test&nbsp;4 braucht <b>allowSimulation</b> (Einstellungen). Steigung vorsichtig
+        1→3→6&nbsp;%, Not-Stop bereit. Immer treten und Kadenz halten.</div>
+      <div class="row flat">
+        <button id="prarm" class="ghost">Probe schärfen</button>
+        <button id="prmark" class="ghost">Mark setzen</button>
+        <button id="prt3" class="ghost">Test 3 · raw 100 W</button>
+        <button id="prt4a" class="ghost">Sim 1&nbsp;%</button>
+        <button id="prt4b" class="ghost">Sim 3&nbsp;%</button>
+        <button id="prt4c" class="ghost">Sim 6&nbsp;%</button>
+      </div>
+      <div class="k" id="prlive">Probe: —</div>
+      <div class="msg" id="prmsg"></div>
     </div>
 
     <div class="card">
@@ -1468,6 +1488,17 @@ function renderCalib(s){
   const c=s.calib||{}, sw=c.sweep||{}, m=c.map||{};
   const run=!!sw.running, step=m.stepTenths||10, min=(m.minTenths!=null)?m.minTenths:10;
   const lvOf=t=>Math.round((t-min)/step)+1;
+  const pr=s.probe||{};
+  if($('prlive')){
+    const marks=(pr.marks||[]).map(x=>x.label).join(',')||'—';
+    $('prlive').textContent='Probe: '
+      +(pr.watt!=null?Math.round(pr.watt)+' W':'—')
+      +' · '+(pr.rpm!=null?Math.round(pr.rpm)+' rpm':'—')
+      +' · HR bike '+(pr.hrBike||'-')+' / strap '+(pr.hrStrap||'-')
+      +' · sim '+(pr.allowSimulation?'AN':'aus')
+      +' · ring '+(pr.ringOn?'an':'aus')
+      +' · marks '+marks;
+  }
 
   $('swst').textContent=SWST[sw.state]||'-';
   $('swsub').textContent=run?(Math.round((sw.remainingMs||0)/1000)+' s in dieser Phase')
@@ -3021,6 +3052,31 @@ $('sw1').onclick=()=>sweepStart('full');
 $('sw2').onclick=()=>sweepStart('coarse');
 $('sw2l').onclick=()=>sweepStart('light');
 $('swx').onclick=()=>post('/api/calib/sweep/stop','swmsg');
+function probePost(url, msg){
+  const m=$(msg||'prmsg'); if(m){m.className='msg'; m.textContent='…';}
+  return fetch(url,{method:'POST'}).then(r=>r.json().then(j=>({ok:r.ok,j,status:r.status})))
+    .then(o=>{
+      if(m){
+        m.className='msg '+(o.ok?'ok':'err');
+        const j=o.j||{};
+        m.textContent=o.ok
+          ?('ok'+(j.gradePct!=null?(' · grade '+j.gradePct+'%'):'')
+            +(j.reason?(' · '+j.reason):'')
+            +(j.probe&&j.probe.watt!=null?(' · '+Math.round(j.probe.watt)+' W'):''))
+          :(j.error||j.reason||('HTTP '+o.status));
+      }
+      return o;
+    }).catch(e=>{if(m){m.className='msg err';m.textContent=''+e;}});
+}
+if($('prarm')) $('prarm').onclick=()=>probePost('/api/probe/arm');
+if($('prmark')) $('prmark').onclick=()=>{
+  const lab='m'+Math.floor(Date.now()/1000)%100000;
+  probePost('/api/probe/mark?label='+encodeURIComponent(lab));
+};
+if($('prt3')) $('prt3').onclick=()=>probePost('/api/control/power?watt=100&raw=1');
+if($('prt4a')) $('prt4a').onclick=()=>probePost('/api/control/sim?grade=1');
+if($('prt4b')) $('prt4b').onclick=()=>probePost('/api/control/sim?grade=3');
+if($('prt4c')) $('prt4c').onclick=()=>probePost('/api/control/sim?grade=6');
 $('rgon').onclick=()=>{
   const on=$('rgst').textContent!=='aus';
   post('/api/debug/ring?on='+(on?0:1),'rgmsg');
@@ -3041,7 +3097,8 @@ $('reboot').onclick=()=>post('/api/system/restart','smsg').then(()=>{
 const CFGF=[['deviceName','t'],['hubHost','t'],['hubPort','n'],['heartbeatIntervalS','n'],
   ['watchdogS','n'],['ntpServer','t'],['tz','t'],['enableHub','b'],['enableMdns','b'],
   ['enableNtp','b'],['autoConnect','b'],['bridgeEnabled','b'],['bridgeName','t'],
-  ['bridgeDifficultyPct','n'],['bridgeHrSoft','n'],['bridgeHrMax','n']];
+  ['bridgeDifficultyPct','n'],['bridgeHrSoft','n'],['bridgeHrMax','n'],
+  ['allowSimulation','b']];
 function loadCfg(){
   fetch('/api/config/get').then(r=>r.json()).then(c=>{
     CFGF.forEach(f=>{const e=$('c-'+f[0]); if(!e) return;

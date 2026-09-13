@@ -74,6 +74,12 @@ public:
     uint8_t bridgeHrSoft = 0;
     uint8_t bridgeHrMax = 0;
 
+    /**
+     * FTMS 0x11 Simulation freigeben (Nachtest 4).
+     * Default aus — nur bewusst einschalten, Steigung kann stark wirken.
+     */
+    bool allowSimulation = false;
+
     void begin();
     void load();
     void save();
@@ -83,5 +89,5 @@ public:
     bool fromJson(JsonVariantConst obj);
 
 private:
-    static constexpr uint8_t kConfigVersion = 4;  // 4: Bridge Difficulty/HR
+    static constexpr uint8_t kConfigVersion = 5;  // 5: allowSimulation
 };

@@ -114,7 +114,7 @@ void App::applyLimiterConfig() {
     // Deadman bleibt aus, solange keine Regelschleife laeuft. Ein Wachhund,
     // der nichts zu bewachen hat, wuerde nur Stop-Kommandos erzeugen.
     lc.deadmanMs = 0;
-    lc.allowSimulation = false;  // bis Nachtest 4
+    lc.allowSimulation = config.allowSimulation;
     profiles.applyTo(lc);
     limiter.begin(lc);
 }
@@ -646,9 +646,11 @@ void App::buildStatusJson(JsonDocument& doc) {
     lim["armed"] = limiter.armed();
     lim["profileMaxLevelTenths"] = limiter.config().profileMaxLevelTenths;
     lim["profileMaxPowerW"] = limiter.config().profileMaxPowerW;
+    lim["allowSimulation"] = limiter.config().allowSimulation;
 
     appendCalibJson(doc["calib"].to<JsonObject>());
     appendDebugJson(doc["debug"].to<JsonObject>());
+    appendProbeJson_(doc["probe"].to<JsonObject>());
 }
 
 void App::buildHeartbeat(JsonDocument& doc) {
@@ -841,6 +843,7 @@ void App::registerRoutes() {
             return;
         }
         config.save();
+        applyLimiterConfig();
         if (config.bridgeEnabled != bridgeWas || config.bridgeName != bridgeNameWas) {
             if (config.bridgeEnabled && config.bridgeName != bridgeNameWas && bridge.enabled()) {
                 bridge.setEnabled(false);
@@ -1253,7 +1256,25 @@ void App::registerControlRoutes() {
         }
         // Emuliertes ERG-Ziel (nicht Opcode 0x05 — der ist am Varon tot).
         if (server.arg("raw") == "1") {
-            reply(ftms.setPowerW((int16_t)wattIn, millis()));
+            captureProbeMark_("pre_raw05");
+            const auto r = ftms.setPowerW((int16_t)wattIn, millis());
+            JsonDocument doc;
+            doc["ok"] = (r == ergo::FtmsClient::Result::Ok);
+            doc["raw"] = true;
+            doc["opcode"] = "05";
+            doc["watt"] = wattIn;
+            doc["result"] = (int)r;
+            if (r == ergo::FtmsClient::Result::Denied ||
+                r == ergo::FtmsClient::Result::Deferred) {
+                doc["reason"] = ftms.lastDenyReason();
+            }
+            appendProbeJson_(doc["probe"].to<JsonObject>());
+            appendDebugJson(doc["debug"].to<JsonObject>());
+            const int code = (r == ergo::FtmsClient::Result::Ok)                 ? 200
+                             : (r == ergo::FtmsClient::Result::Denied)           ? 409
+                             : (r == ergo::FtmsClient::Result::Deferred)         ? 202
+                                                                                : 500;
+            NetUtil::sendJson(server, code, doc);
             return;
         }
         if (control.allowsReha()) {
@@ -1286,6 +1307,86 @@ void App::registerControlRoutes() {
         doc["mode"] = "MANUAL_ERG";
         doc["powerTargetW"] = watt;
         doc["ceiling"] = powerCtl.ceiling();
+        NetUtil::sendJson(server, 200, doc);
+    });
+
+    server.on("/api/control/sim", HTTP_POST, [this, requireProfile]() {
+        if (!requireProfile()) return;
+        if (!config.allowSimulation) {
+            NetUtil::sendError(server, 409,
+                               "Simulation gesperrt — Einstellungen: allowSimulation an");
+            return;
+        }
+        // grade in Prozent (1 = 1 %), Drahtformat 0,01 % → *100.
+        float gradePct = server.hasArg("grade") ? server.arg("grade").toFloat() : 1.0f;
+        if (gradePct < -45.0f) gradePct = -45.0f;
+        if (gradePct > 45.0f) gradePct = 45.0f;
+        const int16_t gradeHundredth = (int16_t)lroundf(gradePct * 100.0f);
+        const int16_t windMms =
+            server.hasArg("wind") ? (int16_t)server.arg("wind").toInt() : (int16_t)0;
+        const uint8_t crr =
+            server.hasArg("crr") ? (uint8_t)server.arg("crr").toInt() : (uint8_t)40;
+        const uint8_t cw =
+            server.hasArg("cw") ? (uint8_t)server.arg("cw").toInt() : (uint8_t)51;
+        char lab[24];
+        snprintf(lab, sizeof(lab), "pre_sim_g%.0f", (double)gradePct);
+        captureProbeMark_(lab);
+        const auto r = ftms.setSimulation(windMms, gradeHundredth, crr, cw, millis());
+        JsonDocument doc;
+        doc["ok"] = (r == ergo::FtmsClient::Result::Ok);
+        doc["opcode"] = "11";
+        doc["gradePct"] = gradePct;
+        doc["gradeHundredth"] = gradeHundredth;
+        doc["windMms"] = windMms;
+        doc["crr"] = crr;
+        doc["cw"] = cw;
+        doc["result"] = (int)r;
+        if (r == ergo::FtmsClient::Result::Denied || r == ergo::FtmsClient::Result::Deferred) {
+            doc["reason"] = ftms.lastDenyReason();
+        }
+        appendProbeJson_(doc["probe"].to<JsonObject>());
+        appendDebugJson(doc["debug"].to<JsonObject>());
+        const int code = (r == ergo::FtmsClient::Result::Ok)         ? 200
+                         : (r == ergo::FtmsClient::Result::Denied)   ? 409
+                         : (r == ergo::FtmsClient::Result::Deferred) ? 202
+                                                                    : 500;
+        NetUtil::sendJson(server, code, doc);
+    });
+
+    server.on("/api/probe/arm", HTTP_POST, [this]() {
+        ring.setEnabled(true);
+        ring.setIbdEvery(1);  // dichter Mitschnitt während Nachtests
+        journal.reset();
+        probeMarkCount_ = 0;
+        for (uint8_t i = 0; i < kProbeMarks; i++) probeMarks_[i] = ProbeMark{};
+        captureProbeMark_("arm");
+        JsonDocument doc;
+        doc["ok"] = true;
+        doc["ringOn"] = true;
+        doc["allowSimulation"] = config.allowSimulation;
+        appendProbeJson_(doc["probe"].to<JsonObject>());
+        appendDebugJson(doc["debug"].to<JsonObject>());
+        NetUtil::sendJson(server, 200, doc);
+    });
+
+    server.on("/api/probe/mark", HTTP_POST, [this]() {
+        const char* lab =
+            server.hasArg("label") ? server.arg("label").c_str() : "mark";
+        captureProbeMark_(lab);
+        JsonDocument doc;
+        doc["ok"] = true;
+        doc["label"] = lab;
+        appendProbeJson_(doc["probe"].to<JsonObject>());
+        NetUtil::sendJson(server, 200, doc);
+    });
+
+    server.on("/api/probe/clear", HTTP_POST, [this]() {
+        probeMarkCount_ = 0;
+        for (uint8_t i = 0; i < kProbeMarks; i++) probeMarks_[i] = ProbeMark{};
+        journal.reset();
+        JsonDocument doc;
+        doc["ok"] = true;
+        appendProbeJson_(doc["probe"].to<JsonObject>());
         NetUtil::sendJson(server, 200, doc);
     });
 
@@ -2819,6 +2920,72 @@ void App::clearGhost_() {
     ghost_.clear();
 }
 
+void App::appendProbeJson_(JsonObject obj) const {
+    const bool liveOk = ftms.hasLive() && !ftms.stale(millis());
+    const float watt = liveOk ? (float)ftms.live().powerW : 0.0f;
+    const float rpm = liveOk ? ftms.live().cadenceRpm() : 0.0f;
+    const uint8_t hrBike = liveOk ? ftms.live().heartRateBpm : 0;
+    const uint8_t hrStrap = (hrc.hasSample() && !hrc.stale(millis())) ? hrc.sample().bpm : 0;
+
+    obj["allowSimulation"] = config.allowSimulation;
+    obj["bikeLink"] = ble.ready(ergo::Role::Bike);
+    obj["hrLink"] = ble.ready(ergo::Role::Hr);
+    obj["ringOn"] = ring.enabled();
+    obj["watt"] = roundf(watt * 10.0f) / 10.0f;
+    obj["rpm"] = roundf(rpm * 10.0f) / 10.0f;
+    obj["levelTenths"] = limiter.currentLevelTenths();
+    obj["hrBike"] = hrBike;
+    obj["hrStrap"] = hrStrap;
+    obj["hrEff"] = effectiveHr();
+    obj["hrSource"] = ergo::hrSourceName(resolveHrSource());
+    obj["liveStale"] = !liveOk;
+    obj["controlGranted"] = ftms.controlGranted();
+    if (liveOk) {
+        obj["speedKmh"] = roundf(ftms.live().speedKmh() * 100.0f) / 100.0f;
+        obj["distanceM"] = ftms.live().distanceM;
+    }
+    JsonArray marks = obj["marks"].to<JsonArray>();
+    for (uint8_t i = 0; i < probeMarkCount_; i++) {
+        const ProbeMark& m = probeMarks_[i];
+        if (!m.valid) continue;
+        JsonObject o = marks.add<JsonObject>();
+        o["label"] = m.label;
+        o["atMs"] = m.atMs;
+        o["watt"] = m.watt;
+        o["rpm"] = m.rpm;
+        o["hrBike"] = m.hrBike;
+        o["hrStrap"] = m.hrStrap;
+        o["hrEff"] = m.hrEff;
+        o["levelTenths"] = m.levelTenths;
+        o["ageS"] = (millis() - m.atMs) / 1000UL;
+    }
+}
+
+void App::captureProbeMark_(const char* label) {
+    ProbeMark m;
+    m.valid = true;
+    m.atMs = millis();
+    if (label && label[0]) {
+        strncpy(m.label, label, sizeof(m.label) - 1);
+        m.label[sizeof(m.label) - 1] = 0;
+    } else {
+        snprintf(m.label, sizeof(m.label), "m%u", (unsigned)probeMarkCount_);
+    }
+    const bool liveOk = ftms.hasLive() && !ftms.stale(millis());
+    m.watt = liveOk ? (float)ftms.live().powerW : 0.0f;
+    m.rpm = liveOk ? ftms.live().cadenceRpm() : 0.0f;
+    m.hrBike = liveOk ? ftms.live().heartRateBpm : 0;
+    m.hrStrap = (hrc.hasSample() && !hrc.stale(millis())) ? hrc.sample().bpm : 0;
+    m.hrEff = effectiveHr();
+    m.levelTenths = limiter.currentLevelTenths();
+    if (probeMarkCount_ < kProbeMarks) {
+        probeMarks_[probeMarkCount_++] = m;
+    } else {
+        for (uint8_t i = 1; i < kProbeMarks; i++) probeMarks_[i - 1] = probeMarks_[i];
+        probeMarks_[kProbeMarks - 1] = m;
+    }
+}
+
 bool App::loadWorkoutDoc(const ergo::WorkoutDoc& doc, float scale) {
     if (doc.stepCount == 0) return false;
     if (scale < 0.05f) scale = 0.05f;
@@ -3504,7 +3671,6 @@ void App::appendDebugJson(JsonObject obj) const {
 
 void App::syncBridgeHrLimits() {
     bridgeHrCap.setLimits(config.bridgeHrSoft, config.bridgeHrMax);
-    // allowSimulation bleibt false bis Nachtest 4; Flag nur verdrahtet.
     bridge.setAllowSimulation(limiter.config().allowSimulation);
 }
 
