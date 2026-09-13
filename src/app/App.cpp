@@ -544,6 +544,19 @@ void App::buildStatusJson(JsonDocument& doc) {
         for (uint8_t i = 0; i < session_.peek().zoneCount && i < ergo::kPowerZones; i++)
             zta.add(session_.peek().zoneTimeS[i]);
     }
+    {
+        JsonObject g = doc["ghost"].to<JsonObject>();
+        g["exists"] = ghostOk_ && ghost_.valid;
+        if (ghostOk_ && ghost_.valid) {
+            g["workKj"] = ghost_.workKj;
+            g["avgPowerW"] = ghost_.avgPowerW;
+            g["durationS"] = ghost_.durationS;
+            g["workoutId"] = ghost_.workoutId;
+            g["workoutName"] = ghost_.workoutName;
+            g["profileId"] = ghost_.profileId;
+            g["mode"] = ghost_.mode;
+        }
+    }
     doc["fsReady"] = fsReady_;
     doc["sessionCount"] = sessionStore_.count();
 
@@ -2796,6 +2809,16 @@ void App::restoreDefaultAutoPause_() {
     session_.setAutoPauseAfterMs(10000);
 }
 
+void App::refreshGhost_(const char* workoutId, const char* profileId, const char* mode) {
+    ghostOk_ = sessionStore_.bestFor(workoutId, profileId, mode, ghost_);
+    if (!ghostOk_) ghost_.clear();
+}
+
+void App::clearGhost_() {
+    ghostOk_ = false;
+    ghost_.clear();
+}
+
 bool App::loadWorkoutDoc(const ergo::WorkoutDoc& doc, float scale) {
     if (doc.stepCount == 0) return false;
     if (scale < 0.05f) scale = 0.05f;
@@ -2987,6 +3010,7 @@ void App::recordSessionEnd(const char* reason) {
     maybeOfferProgression(s);
     maybeOfferFtpCareer_(s);
     restoreDefaultAutoPause_();
+    clearGhost_();
     Serial.printf("[SESS] %s %s %u s (Pause %u), Ø %.0f W, %.1f kJ, Deckel %u×\n", s.mode,
                   s.endReason, (unsigned)s.durationS, (unsigned)s.pausedS, s.avgPowerW, s.workKj,
                   (unsigned)s.interventions);
@@ -3020,8 +3044,10 @@ void App::beginSession(const char* workoutName, const char* workoutId) {
     session_.setZoneBasis(leadHr, ftp, hrMax);
     interventionsSeen_ = rehaCtl.interventions();
     sessWasPaused_ = false;
-    Serial.printf("[SESS] start %s profile=%s zones=%s wo=%s\n", mode, pid, leadHr ? "HR" : "PWR",
-                  activeWorkoutId_[0] ? activeWorkoutId_ : "-");
+    refreshGhost_(activeWorkoutId_[0] ? activeWorkoutId_ : nullptr, pid, mode);
+    Serial.printf("[SESS] start %s profile=%s zones=%s wo=%s ghost=%s\n", mode, pid,
+                  leadHr ? "HR" : "PWR", activeWorkoutId_[0] ? activeWorkoutId_ : "-",
+                  ghostOk_ ? "yes" : "no");
 }
 
 void App::loopSession(unsigned long now) {

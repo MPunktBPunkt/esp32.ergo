@@ -23,6 +23,14 @@ public:
     /** 0 = neueste. */
     bool at(uint8_t newestIndex, SessionSummary& out) const;
 
+    /**
+     * Beste abgeschlossene Session: zuerst gleiche workoutId+profileId,
+     * sonst gleiche workoutId, sonst gleicher mode (wenn workoutId leer).
+     * Score: workKj, bei Gleichstand avgPowerW.
+     */
+    bool bestFor(const char* workoutId, const char* profileId, const char* mode,
+                 SessionSummary& out) const;
+
     size_t writeJsonLine(const SessionSummary& s, char* buf, size_t bufLen);
     bool parseJsonLine(const char* line, SessionSummary& out);
 

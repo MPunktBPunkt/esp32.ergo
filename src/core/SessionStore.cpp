@@ -36,6 +36,50 @@ bool SessionStore::at(uint8_t newestIndex, SessionSummary& out) const {
     return out.valid;
 }
 
+bool SessionStore::bestFor(const char* workoutId, const char* profileId, const char* mode,
+                           SessionSummary& out) const {
+    out.clear();
+    if (count_ == 0) return false;
+    const bool wantWo = workoutId && workoutId[0];
+    const bool wantProf = profileId && profileId[0];
+    const bool wantMode = mode && mode[0];
+
+    int bestRank = -1;  // 2 = wo+profile, 1 = wo only, 0 = mode only
+    float bestWork = -1.0f;
+    float bestAvg = -1.0f;
+    bool found = false;
+    SessionSummary cand;
+
+    for (uint8_t i = 0; i < count_; i++) {
+        if (!at(i, cand)) continue;
+        int rank = -1;
+        if (wantWo && cand.workoutId[0] && strcmp(cand.workoutId, workoutId) == 0) {
+            if (wantProf && cand.profileId[0] && strcmp(cand.profileId, profileId) == 0)
+                rank = 2;
+            else
+                rank = 1;
+        } else if (!wantWo && wantMode && cand.mode[0] && strcmp(cand.mode, mode) == 0) {
+            if (wantProf && cand.profileId[0] && strcmp(cand.profileId, profileId) == 0)
+                rank = 2;
+            else
+                rank = 0;
+        }
+        if (rank < 0) continue;
+        const bool better =
+            !found || rank > bestRank ||
+            (rank == bestRank &&
+             (cand.workKj > bestWork + 0.05f ||
+              (cand.workKj + 0.05f >= bestWork && cand.avgPowerW > bestAvg)));
+        if (!better) continue;
+        found = true;
+        bestRank = rank;
+        bestWork = cand.workKj;
+        bestAvg = cand.avgPowerW;
+        out = cand;
+    }
+    return found;
+}
+
 static void escapeJsonStr(const char* in, char* out, size_t outLen) {
     if (!out || outLen == 0) return;
     size_t o = 0;

@@ -114,6 +114,8 @@ private:
                          const ergo::WorkoutDoc* fsDoc = nullptr) const;
     void applyAutoPauseForDoc_(const ergo::WorkoutDoc& doc);
     void restoreDefaultAutoPause_();
+    void refreshGhost_(const char* workoutId, const char* profileId, const char* mode);
+    void clearGhost_();
     uint32_t readProgressionMainS(const char* id) const;
     bool writeProgressionMainS(const char* id, uint32_t mainS);
     void maybeOfferProgression(const ergo::SessionSummary& s);
@@ -218,4 +220,6 @@ private:
     WoTagRow woTagRows_[24] = {};
     uint8_t woTagRowCount_ = 0;
     uint16_t pendingAutoPauseS_ = 0;
+    ergo::SessionSummary ghost_{};
+    bool ghostOk_ = false;
 };

@@ -332,6 +332,7 @@ footer{color:var(--dim);font-size:12px;text-align:center;margin-top:26px}
       <h2>Steuerung</h2>
       <div class="k" id="rprofsub"></div>
       <div class="k" id="rmodesub"></div>
+      <div class="k" id="rghost" hidden></div>
       <div class="modes">
         <button id="moff" class="ghost">OFF</button>
         <button id="mlvl" class="ghost">LEVEL</button>
@@ -1341,6 +1342,20 @@ function renderBle(s){
       +(sess.workKj!=null?(' · '+sess.workKj.toFixed(1)+' kJ'):'')
       +(sess.autoPauses?(' · AutoPause '+sess.autoPauses+'×'):'');
     $('rmodesub').textContent=(msub?msub+' · ':'')+'Session '+hms(ds)+extra;
+  }
+  const gh=s.ghost||{};
+  const gEl=$('rghost');
+  if(gEl){
+    const show=!!(sess.active && gh.exists);
+    gEl.hidden=!show;
+    if(show){
+      const mins=gh.durationS!=null?Math.round(gh.durationS/60):0;
+      gEl.textContent='Ghost: Ø '+(gh.avgPowerW!=null?Math.round(gh.avgPowerW):'-')
+        +' W · '+(gh.workKj!=null?gh.workKj.toFixed(1):'-')+' kJ · '+mins+' min'
+        +(gh.workoutName?(' · '+gh.workoutName):'');
+    } else {
+      gEl.textContent='';
+    }
   }
   $('moff').classList.toggle('ghost', mode!=='OFF');
   $('mlvl').classList.toggle('ghost', mode!=='MANUAL_LEVEL');

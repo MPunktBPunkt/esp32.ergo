@@ -141,6 +141,44 @@ static void test_set_auto_pause_override(void) {
     TEST_ASSERT_TRUE(s.paused());
 }
 
+static SessionSummary makeSess(const char* mode, const char* wo, const char* prof, float work,
+                               float avg) {
+    SessionSummary s;
+    s.valid = true;
+    strncpy(s.mode, mode, sizeof(s.mode) - 1);
+    strncpy(s.workoutId, wo, sizeof(s.workoutId) - 1);
+    strncpy(s.workoutName, wo, sizeof(s.workoutName) - 1);
+    strncpy(s.profileId, prof, sizeof(s.profileId) - 1);
+    strncpy(s.endReason, "done", sizeof(s.endReason) - 1);
+    s.durationS = 600;
+    s.workKj = work;
+    s.avgPowerW = avg;
+    return s;
+}
+
+static void test_best_for_ghost(void) {
+    SessionStore st;
+    st.clear();
+    TEST_ASSERT_TRUE(st.append(makeSess("WORKOUT", "physio", "martin", 40.0f, 70.0f)));
+    TEST_ASSERT_TRUE(st.append(makeSess("WORKOUT", "physio", "martin", 55.0f, 90.0f)));
+    TEST_ASSERT_TRUE(st.append(makeSess("WORKOUT", "physio", "manu", 80.0f, 100.0f)));
+    TEST_ASSERT_TRUE(st.append(makeSess("WORKOUT", "ss_3x12", "martin", 120.0f, 200.0f)));
+    TEST_ASSERT_TRUE(st.append(makeSess("MANUAL_ERG", "", "martin", 30.0f, 80.0f)));
+
+    SessionSummary out;
+    TEST_ASSERT_TRUE(st.bestFor("physio", "martin", "WORKOUT", out));
+    TEST_ASSERT_FLOAT_WITHIN(0.1f, 55.0f, out.workKj);
+    TEST_ASSERT_EQUAL_STRING("martin", out.profileId);
+
+    TEST_ASSERT_TRUE(st.bestFor("physio", "manu", "WORKOUT", out));
+    TEST_ASSERT_FLOAT_WITHIN(0.1f, 80.0f, out.workKj);
+
+    TEST_ASSERT_TRUE(st.bestFor(nullptr, "martin", "MANUAL_ERG", out));
+    TEST_ASSERT_FLOAT_WITHIN(0.1f, 30.0f, out.workKj);
+
+    TEST_ASSERT_FALSE(st.bestFor("missing", "martin", "WORKOUT", out));
+}
+
 void setUp(void) {}
 void tearDown(void) {}
 
@@ -153,5 +191,6 @@ int main(int, char**) {
     RUN_TEST(test_rpe_note_roundtrip);
     RUN_TEST(test_zone_accumulate);
     RUN_TEST(test_set_auto_pause_override);
+    RUN_TEST(test_best_for_ghost);
     return UNITY_END();
 }

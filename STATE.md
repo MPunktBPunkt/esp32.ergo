@@ -5,13 +5,14 @@ zuerst diese Datei und danach gezielt weiter. Alle anderen Notizen in `debug/`
 sind Protokolle einzelner Arbeitsschritte und beschreiben den Stand *zu ihrem
 Zeitpunkt* — sie werden nicht nachgeführt.
 
-Stand dieser Datei: **2026-09-13** Arbeit an **0.3.7-dev**
-(Workout-Tags, Auto-Pause pro Programm).
+Stand dieser Datei: **2026-09-13** Arbeit an **0.3.8-dev**
+(Ghost-Vergleich gegen Bestleistung).
 FTP-Karriere: [debug/UPDATE_FTP_CAREER.md](debug/UPDATE_FTP_CAREER.md).
 FTP-Builtins: [debug/UPDATE_FTP_BUILTINS.md](debug/UPDATE_FTP_BUILTINS.md).
 ZWO: [debug/UPDATE_ZWO_IMPORT.md](debug/UPDATE_ZWO_IMPORT.md).
 Bridge: [debug/UPDATE_BRIDGE.md](debug/UPDATE_BRIDGE.md).
 Tags/Pause: [debug/UPDATE_WORKOUT_TAGS.md](debug/UPDATE_WORKOUT_TAGS.md).
+Ghost: [debug/UPDATE_GHOST.md](debug/UPDATE_GHOST.md).
 
 ---
 
@@ -24,7 +25,7 @@ Tags/Pause: [debug/UPDATE_WORKOUT_TAGS.md](debug/UPDATE_WORKOUT_TAGS.md).
 | Hub | `192.168.178.113:8093`, `fwType: ergo` |
 | Rollback-Bin | `nodes/esp32.ftmsprobe/dist/ftmsprobe.0.1.4.esp32s3.bin` |
 | Build-Host | Debian, `/home/martin/projects/esphub/esp32.ergo`, `pio` unter `/home/martin/.venvs/pio/bin/pio` |
-| Aktuelle Bin | `dist/ergo.0.3.7-dev.esp32s3.bin` |
+| Aktuelle Bin | `dist/ergo.0.3.8-dev.esp32s3.bin` |
 
 Die Entwurfs-Instanz auf Windows hat **nur git** — kein PlatformIO, keinen
 Compiler, kein Python. Sie kann nicht bauen und nicht testen. Bauen und Flashen
