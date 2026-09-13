@@ -157,9 +157,10 @@ Limiter::Verdict Limiter::checkResistance(const uint8_t* cmd, size_t len, uint32
         if (stepT == 0) stepT = caps_->levelStepTenths();
         if (stepT == 0) stepT = 1;
 
-        if (cfg_.rampMs > 0) {
+        const uint32_t period = effectiveRampMs();
+        if (period > 0) {
             const uint32_t elapsed = nowMs - lastLevelWriteMs_;
-            const uint32_t allowedSteps = elapsed / cfg_.rampMs;
+            const uint32_t allowedSteps = elapsed / period;
             if (allowedSteps == 0) {
                 Verdict v;
                 v.decision = Decision::Defer;
@@ -297,6 +298,7 @@ void Limiter::reset() {
     level_ = 0;
     haveLevel_ = false;
     lastLevelWriteMs_ = 0;
+    rampOverrideMs_ = 0;
     armed_ = false;
 }
 

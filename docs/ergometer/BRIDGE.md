@@ -1,8 +1,9 @@
 # Bridge — Rollen, Exklusiv-Steuerung, MyWhoosh
 
-Stand: **2026-09-13**, Firmware **0.3.16-dev**.
+Stand: **2026-09-13**, Firmware **0.3.17-dev**.
 Arbeitsnotiz Exclusive: [`debug/UPDATE_BRIDGE_EXCLUSIVE.md`](../../debug/UPDATE_BRIDGE_EXCLUSIVE.md).
 Resistance-Takeover: [`debug/UPDATE_BRIDGE_RESIST.md`](../../debug/UPDATE_BRIDGE_RESIST.md).
+Fast-Ramp: [`debug/UPDATE_BRIDGE_FAST_RAMP.md`](../../debug/UPDATE_BRIDGE_FAST_RAMP.md).
 Einstieg / Was läuft: [`STATE.md`](../../STATE.md).
 
 Die Bridge macht aus dem Varon (nur Widerstandsstufen) einen FTMS-Trainer mit
@@ -100,7 +101,9 @@ Wattziele laufen weiter über Difficulty → optional HR-Deckel → PowerControl
 → Stufen am Bike (nie Opcode `0x05` ans Varon, der ist tot).
 
 Limiter rampt Stufen nach oben max. 1 / ~2 s — große Gangsprünge fühlen sich
-träge an, bis die Rampe durch ist.
+träge an. **Ab 0.3.17:** Bridge-LEVEL nutzt temporär **500 ms**/Stufe und
+retry’t bis zum Ziel (`levelWantTenths` im Status). Coach/ERG bleiben bei 2 s.
+
 
 ---
 

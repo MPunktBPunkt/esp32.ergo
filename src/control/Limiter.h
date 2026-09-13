@@ -106,6 +106,16 @@ public:
     /** Nach Verbindungsverlust: Schattenwert und Deadman sind ungueltig. */
     void reset();
 
+    /**
+     * Temporaere Aufwaerts-Rampe (z. B. Bridge-Gang). 0 = Config-Default.
+     * Gilt bis clearRampOverride() oder reset().
+     */
+    void setRampOverrideMs(uint32_t rampMs) { rampOverrideMs_ = rampMs; }
+    void clearRampOverride() { rampOverrideMs_ = 0; }
+    uint32_t effectiveRampMs() const {
+        return rampOverrideMs_ > 0 ? rampOverrideMs_ : cfg_.rampMs;
+    }
+
     /** Wirksame Obergrenze fuer Stufen, in Zehnteln. */
     int16_t effectiveMaxLevelTenths() const;
     int16_t effectiveMinLevelTenths() const;
@@ -126,6 +136,7 @@ private:
     int16_t level_ = 0;
     bool haveLevel_ = false;
     uint32_t lastLevelWriteMs_ = 0;
+    uint32_t rampOverrideMs_ = 0;
     bool armed_ = false;
     uint32_t lastAlive_ = 0;
     uint16_t writes_ = 0;

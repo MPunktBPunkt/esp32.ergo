@@ -206,6 +206,21 @@ static void test_rampe_nach_oben() {
     assertVerdict(l.check(auf16, 3, 30000), Decision::Allow, "30 s -> ganzes Ziel");
 }
 
+static void test_ramp_override_faster(void) {
+    Limiter l = makeLimiter(varonCaps());
+    const uint8_t auf10[] = {0x04, 0x64, 0x00};
+    l.noteWritten(auf10, 3, 0);
+    l.setRampOverrideMs(500);  // Bridge: 0,5 s statt 2 s
+    const uint8_t auf16[] = {0x04, 0xA0, 0x00};
+    assertVerdict(l.check(auf16, 3, 400), Decision::Defer, "0,4 s noch defer");
+    Limiter::Verdict v = l.check(auf16, 3, 500);
+    const uint8_t erwartet11[] = {0x04, 0x6E, 0x00};
+    assertVerdict(v, Decision::Clamp, "0,5 s -> eine Stufe");
+    assertBytes(v, erwartet11, 3, "0,5 s -> eine Stufe");
+    l.clearRampOverride();
+    assertVerdict(l.check(auf16, 3, 1000), Decision::Defer, "ohne Override wieder 2 s");
+}
+
 /**
  * Der wichtigste Fall: nach unten gibt es keine Rampe. Ein Pulsdeckel, der
  * erst in zwei Sekunden greifen darf, waere kein Pulsdeckel.
@@ -400,6 +415,7 @@ int main(int, char**) {
     RUN_TEST(test_profilgrenze_sticht);
     RUN_TEST(test_uint8_form_bleibt_uint8);
     RUN_TEST(test_rampe_nach_oben);
+    RUN_TEST(test_ramp_override_faster);
     RUN_TEST(test_runter_geht_sofort);
     RUN_TEST(test_wattziel_am_varon_abgelehnt);
     RUN_TEST(test_wattziel_untrusted_force);

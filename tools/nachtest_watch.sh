@@ -62,6 +62,7 @@ row={
     "appWatt": br.get("appWatt"), "desiredW": br.get("desiredW"),
     "lastOp": br.get("lastOp"), "lastResistTenths": br.get("lastResistTenths"),
     "resistIgnored": br.get("resistIgnored"), "cpWrites": br.get("cpWrites"),
+    "levelWantTenths": br.get("levelWantTenths"),
   },
   "limiter": {"levelTenths": lim.get("levelTenths")},
   "journal": {

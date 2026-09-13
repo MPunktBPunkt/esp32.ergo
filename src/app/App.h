@@ -93,6 +93,9 @@ private:
     /** Bridge-App hat Lastkommandos gesendet — Coach darf nicht mitregeln. */
     bool bridgeExclusiveControl() const;
     void appendBridgeAppJson_(JsonObject obj) const;
+    void requestBridgeLevel_(int16_t tenths, unsigned long now);
+    void clearBridgeLevelWant_();
+    void loopBridgeLevel_(unsigned long now);
     void runCodecSelfTest();
     void applyLimiterConfig();
     void seedDefaultProfiles();
@@ -213,6 +216,9 @@ private:
     uint32_t bridgeResistIgnored_ = 0;
     int16_t lastBridgeResistTenths_ = -1;
     const char* lastBridgeOp_ = "none";
+    /** Pending Bridge-Stufe (Zehntel); Retry mit schneller Rampe. */
+    int16_t bridgeLevelWant_ = -1;
+    unsigned long lastBridgeLevelTryMs_ = 0;
     uint16_t crankRevs_ = 0;
     uint16_t crankEvent_ = 0;
     unsigned long crankLastMs_ = 0;

@@ -1053,6 +1053,7 @@ void App::registerControlRoutes() {
         bridgeDesiredW_ = 0;
         bridgeHrCap.reset();
         bridge.releaseController();
+        clearBridgeLevelWant_();
         control.setMode(ergo::ControlMode::Off);
         powerCtl.reset();
         hrCtl.reset();
@@ -4098,7 +4099,58 @@ void App::appendBridgeAppJson_(JsonObject obj) const {
     obj["lastOp"] = lastBridgeOp_;
     obj["lastResistTenths"] = lastBridgeResistTenths_;
     obj["resistIgnored"] = bridgeResistIgnored_;
+    obj["levelWantTenths"] = bridgeLevelWant_;
     if (lastBridgePowerMs_) obj["lastPowerMs"] = lastBridgePowerMs_;
+}
+
+void App::clearBridgeLevelWant_() {
+    bridgeLevelWant_ = -1;
+    lastBridgeLevelTryMs_ = 0;
+    limiter.clearRampOverride();
+}
+
+void App::requestBridgeLevel_(int16_t tenths, unsigned long now) {
+    bridgeLevelWant_ = tenths;
+    // Manuelle App-Gänge: 500 ms statt 2 s pro Stufe (noch Ramp, kein Sprung).
+    limiter.setRampOverrideMs(500);
+    lastBridgeLevelTryMs_ = 0;
+    loopBridgeLevel_(now);
+}
+
+void App::loopBridgeLevel_(unsigned long now) {
+    if (bridgeLevelWant_ < 0) return;
+    if (!ble.ready(ergo::Role::Bike) || !ftms.attached()) return;
+    if (bridgeDriving_) {
+        clearBridgeLevelWant_();
+        return;
+    }
+    if (control.mode() != ergo::ControlMode::ManualLevel) {
+        clearBridgeLevelWant_();
+        return;
+    }
+    const int16_t cur = limiter.currentLevelTenths();
+    if (cur >= 0 && cur == bridgeLevelWant_) {
+        clearBridgeLevelWant_();
+        return;
+    }
+    // Nicht jedes Loop-Tick — BLE/Journal schonen.
+    if (lastBridgeLevelTryMs_ != 0 && (now - lastBridgeLevelTryMs_) < 200UL) return;
+    lastBridgeLevelTryMs_ = now;
+    limiter.setRampOverrideMs(500);
+    const auto r = ftms.setLevelTenths(bridgeLevelWant_, now);
+    if (r == ergo::FtmsClient::Result::Ok) {
+        const int16_t after = limiter.currentLevelTenths();
+        if (after == bridgeLevelWant_) {
+            Serial.printf("[BRIDGE] Stufe %.1f erreicht\n", bridgeLevelWant_ / 10.0f);
+            clearBridgeLevelWant_();
+        }
+    } else if (r == ergo::FtmsClient::Result::Deferred) {
+        // naechster Tick nach Ramp-Fenster
+    } else {
+        Serial.printf("[BRIDGE] Stufe-Write %s (%s)\n", ergo::FtmsClient::resultName(r),
+                      ftms.lastDenyReason());
+        if (r == ergo::FtmsClient::Result::Denied) clearBridgeLevelWant_();
+    }
 }
 
 void App::registerBridgeRoutes() {
@@ -4141,6 +4193,7 @@ void App::registerBridgeRoutes() {
             bridgeAppWatt_ = 0;
             bridgeDesiredW_ = 0;
             bridgeHrCap.reset();
+            clearBridgeLevelWant_();
         }
         JsonDocument doc;
         doc["ok"] = true;
@@ -4171,6 +4224,7 @@ void App::applyBridgePending(const FtmsServer::Pending& p, unsigned long now) {
             bridgeHrCap.reset();
             lastBridgePowerMs_ = 0;
             lastBridgeOp_ = "reset";
+            clearBridgeLevelWant_();
             if (ble.ready(ergo::Role::Bike)) ftms.reset(now);
             break;
 
@@ -4190,6 +4244,7 @@ void App::applyBridgePending(const FtmsServer::Pending& p, unsigned long now) {
             bridgeHrCap.reset();
             lastBridgePowerMs_ = 0;
             lastBridgeOp_ = "stop";
+            clearBridgeLevelWant_();
             if (ble.ready(ergo::Role::Bike)) ftms.stop(now);
             break;
 
@@ -4221,6 +4276,7 @@ void App::applyBridgePending(const FtmsServer::Pending& p, unsigned long now) {
                 beginSession("");
             }
             bridgeDriving_ = true;
+            clearBridgeLevelWant_();
             const uint8_t hr = effectiveHr();
             const bool hrFresh = resolveHrSource() != ergo::HrSource::None && hr > 0;
             const float eff = bridgeHrCap.tick(now, bridgeDesiredW_, hr, hrFresh);
@@ -4270,8 +4326,8 @@ void App::applyBridgePending(const FtmsServer::Pending& p, unsigned long now) {
                 beginSession("");
             }
             control.setLevelTargetTenths(tenths);
-            if (ble.ready(ergo::Role::Bike)) ftms.setLevelTenths(tenths, now);
-            Serial.printf("[BRIDGE] Stufe %.1f\n", tenths / 10.0f);
+            requestBridgeLevel_(tenths, now);
+            Serial.printf("[BRIDGE] Stufe-Ziel %.1f (schnelle Rampe)\n", tenths / 10.0f);
             break;
         }
 
@@ -4296,6 +4352,8 @@ void App::loopBridge(unsigned long now) {
 
     FtmsServer::Pending p;
     while (bridge.takePending(p)) applyBridgePending(p, now);
+
+    loopBridgeLevel_(now);
 
     if (bridgeDriving_ && control.allowsErg() && bridgeDesiredW_ > 0.0f) {
         const uint8_t hr = effectiveHr();
