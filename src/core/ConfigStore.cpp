@@ -29,6 +29,7 @@ void ConfigStore::applyDefaults() {
     bridgeHrMax = 0;
     allowSimulation = false;
     ergSimAssist = false;
+    showDevUi = false;
 }
 
 void ConfigStore::begin() {
@@ -72,6 +73,7 @@ void ConfigStore::load() {
     bridgeHrMax = prefs.getUChar("br_hrm", 0);
     allowSimulation = prefs.getBool("allow_sim", false);
     ergSimAssist = prefs.getBool("erg_sim", false);
+    showDevUi = prefs.getBool("show_dev", false);
     prefs.end();
 
     if (heartbeatIntervalS < 5) heartbeatIntervalS = 5;
@@ -111,6 +113,7 @@ void ConfigStore::save() {
     prefs.putUChar("br_hrm", bridgeHrMax);
     prefs.putBool("allow_sim", allowSimulation);
     prefs.putBool("erg_sim", ergSimAssist);
+    prefs.putBool("show_dev", showDevUi);
     prefs.end();
 }
 
@@ -149,6 +152,7 @@ void ConfigStore::toJson(JsonObject obj) const {
     obj["bridgeHrMax"] = bridgeHrMax;
     obj["allowSimulation"] = allowSimulation;
     obj["ergSimAssist"] = ergSimAssist;
+    obj["showDevUi"] = showDevUi;
     obj["board"] = ERGO_BOARD_ID;
     obj["boardLabel"] = ERGO_BOARD_LABEL;
 }
@@ -186,6 +190,7 @@ bool ConfigStore::fromJson(JsonVariantConst obj) {
     if (!obj["bridgeHrMax"].isNull()) bridgeHrMax = obj["bridgeHrMax"].as<uint8_t>();
     if (!obj["allowSimulation"].isNull()) allowSimulation = obj["allowSimulation"].as<bool>();
     if (!obj["ergSimAssist"].isNull()) ergSimAssist = obj["ergSimAssist"].as<bool>();
+    if (!obj["showDevUi"].isNull()) showDevUi = obj["showDevUi"].as<bool>();
 
     if (heartbeatIntervalS < 5) heartbeatIntervalS = 5;
     if (hubPort < 1 || hubPort > 65535) hubPort = HUB_PORT_DEFAULT;

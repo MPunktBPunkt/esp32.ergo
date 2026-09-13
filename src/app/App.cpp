@@ -643,6 +643,7 @@ void App::buildStatusJson(JsonDocument& doc) {
     // stehen — siehe Nachtest 6.
     doc["bikeLink"] = ble.ready(ergo::Role::Bike);
     doc["allowSimulation"] = config.allowSimulation;
+    doc["showDevUi"] = config.showDevUi;
     {
         JsonObject dev = doc["device"].to<JsonObject>();
         dev["count"] = devices.count();

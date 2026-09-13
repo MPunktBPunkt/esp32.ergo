@@ -347,6 +347,17 @@ ist, gilt:
 
 ## 7. Die übrigen Seiten
 
+### Betrieb vs. Entwickler (ab 0.3.18)
+
+| Rolle | Tabs | Default |
+|-------|------|---------|
+| **Betrieb** | Ride, Workouts, Tests, Verlauf, Profile, Geräte, Einstellungen, OTA | immer sichtbar |
+| **Entwickler** | Kalibrierung, Debug | nur mit `showDevUi` |
+
+Einstellung: Checkbox **„Entwickler-UI anzeigen“** (NVS). Darunter erscheinen
+Simulation/`0x11`, ERG-Assist und Gerätequirks. Hash auf versteckte Reiter
+fällt auf Ride zurück.
+
 | Tab | Inhalt |
 |-----|--------|
 | **Ride** | §3, die Trainingsansicht |
@@ -355,9 +366,9 @@ ist, gilt:
 | **Verlauf** | Sessions je Profil, Kennzahlen, Zonenverteilung, Physio-Progression |
 | **Profile** | §4, anlegen, bearbeiten, Grenzen setzen |
 | **Geräte** | Bike und Pulsquelle verbinden, Feature-Bits, gemerkte MACs; Bridge-Status (beobachtet / steuert) |
-| **Kalibrierung** | Sweep starten, Kennfläche als Heatmap, Stützstellen und Alter |
-| **Debug** | Rohbytes, Steuer-Journal, Regler-Innenleben, Export |
-| **Einstellungen** | Hub, Limiter, Regelparameter, Bridge (Difficulty, HR-Deckel) |
+| **Kalibrierung** | Sweep / Heatmap — *Entwickler* |
+| **Debug** | Rohbytes, Steuer-Journal — *Entwickler* |
+| **Einstellungen** | Hub, Bridge; optional Entwickler-Blöcke |
 | **OTA** | Firmware-Upload wie die Schwesterprojekte |
 
 **Bridge in der UI (ab 0.3.14).** Connline und Geräte-Karte zeigen die Rolle:

@@ -86,6 +86,12 @@ public:
      */
     bool ergSimAssist = false;
 
+    /**
+     * Entwickler-UI: Kalibrierung/Debug-Reiter und erweiterte Einstellungen.
+     * Default aus — taeglicher Betrieb bleibt schlank.
+     */
+    bool showDevUi = false;
+
     void begin();
     void load();
     void save();
@@ -95,5 +101,5 @@ public:
     bool fromJson(JsonVariantConst obj);
 
 private:
-    static constexpr uint8_t kConfigVersion = 6;  // 6: ergSimAssist
+    static constexpr uint8_t kConfigVersion = 7;  // 7: showDevUi
 };
