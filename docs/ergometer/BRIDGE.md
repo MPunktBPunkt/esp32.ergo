@@ -1,7 +1,8 @@
 # Bridge — Rollen, Exklusiv-Steuerung, MyWhoosh
 
-Stand: **2026-09-13**, Firmware **0.3.14-dev**.
-Arbeitsnotiz zum gleichen Stand: [`debug/UPDATE_BRIDGE_EXCLUSIVE.md`](../../debug/UPDATE_BRIDGE_EXCLUSIVE.md).
+Stand: **2026-09-13**, Firmware **0.3.16-dev**.
+Arbeitsnotiz Exclusive: [`debug/UPDATE_BRIDGE_EXCLUSIVE.md`](../../debug/UPDATE_BRIDGE_EXCLUSIVE.md).
+Resistance-Takeover: [`debug/UPDATE_BRIDGE_RESIST.md`](../../debug/UPDATE_BRIDGE_RESIST.md).
 Einstieg / Was läuft: [`STATE.md`](../../STATE.md).
 
 Die Bridge macht aus dem Varon (nur Widerstandsstufen) einen FTMS-Trainer mit
@@ -53,6 +54,12 @@ Felder in `/api/status` → `bridge` und `/api/bridge`:
 | `loadCommands` | Zähler der Lastkommandos seit Grant/Connect |
 | `exclusive` | nur `/api/bridge`: Coach-Last ist gesperrt |
 | `driving` | Bridge-ERG aktiv (Wattziel läuft über PowerController) |
+| `lastOp` | `power` / `resistance` / `sim` / … (letzte Bridge-Last) |
+| `lastResistTenths` | letzter Resistance-Rohwert (Zehntel, 10 = Stufe 1,0) |
+| `resistIgnored` | wie oft Resistance wegen ERG-Spam verworfen wurde |
+
+Bridge-Range für Resistance: **1,0–16,0**. MyWhoosh-UI „Gang 1–30“ mappt
+darauf — Gang 15 ≈ Stufe ~8, nicht 15.
 
 ---
 
@@ -80,14 +87,20 @@ Motivation: Live-Session zeigte „Apps kämpfen“ — Coach-LEVEL und MyWhoosh
 
 Beobachtung: MyWhoosh wechselt im ERG oft zwischen **Set Power** und
 **Set Resistance**. Ohne Schutz schaltet die Bridge dann zwischen
-`MANUAL_ERG` und `MANUAL_LEVEL` hin und her → Stufenjagd, `UNJUDGED` im Journal.
+`MANUAL_ERG` und `MANUAL_LEVEL` hin und her → Stufenjagd.
 
-**Schutz (0.3.14):** Solange Bridge-ERG aktiv (`driving`), werden eingehende
-Resistance-Kommandos **nicht angewendet** (BLE bereits mit Success quittiert).
-Log: `Stufe … ignoriert — ERG aktiv (Exklusiv)`.
+**Schutz (0.3.14 / geschärft 0.3.16):**
+
+- Resistance **innerhalb von 3 s nach SetPower** → ignorieren (ERG-Spam),
+  Zähler `resistIgnored`
+- Resistance **danach** (kein frisches Power) → **Takeover**: ERG aus,
+  `MANUAL_LEVEL`, Stufe schreiben — manueller Gang greift
 
 Wattziele laufen weiter über Difficulty → optional HR-Deckel → PowerController
 → Stufen am Bike (nie Opcode `0x05` ans Varon, der ist tot).
+
+Limiter rampt Stufen nach oben max. 1 / ~2 s — große Gangsprünge fühlen sich
+träge an, bis die Rampe durch ist.
 
 ---
 

@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Paralleles Mitlesen der Nachtests — Status + Probe + Journal alle 2 s.
+# Paralleles Mitlesen der Nachtests — Status + Probe + Journal + Bridge alle 2 s.
 #
 #   bash tools/nachtest_watch.sh [IP] [out.jsonl]
 #
@@ -32,6 +32,8 @@ dbg=(d.get("debug") or {}).get("journal") or {}
 entries=dbg.get("entries") or []
 head=entries[0] if entries else None
 ft=(d.get("ftms") or {}).get("data") or {}
+br=d.get("bridge") or {}
+lim=d.get("limiter") or {}
 row={
   "ts": ts,
   "version": d.get("version"),
@@ -40,6 +42,8 @@ row={
   "bikeLink": d.get("bikeLink"),
   "hrSource": d.get("hrSource"),
   "heartRate": d.get("heartRate"),
+  "powerTargetW": d.get("powerTargetW"),
+  "levelTargetTenths": d.get("levelTargetTenths"),
   "probe": {
     "watt": pr.get("watt"), "rpm": pr.get("rpm"),
     "hrBike": pr.get("hrBike"), "hrStrap": pr.get("hrStrap"),
@@ -51,6 +55,15 @@ row={
               for m in (pr.get("marks") or [])],
   },
   "live": {"watt": ft.get("powerW"), "rpm": ft.get("cadenceRpm"), "hr": ft.get("heartRate")},
+  "bridge": {
+    "clients": br.get("clients"), "clientRole": br.get("clientRole"),
+    "controlling": br.get("controlling"), "exclusive": br.get("exclusive"),
+    "driving": br.get("driving"), "loadCommands": br.get("loadCommands"),
+    "appWatt": br.get("appWatt"), "desiredW": br.get("desiredW"),
+    "lastOp": br.get("lastOp"), "lastResistTenths": br.get("lastResistTenths"),
+    "resistIgnored": br.get("resistIgnored"), "cpWrites": br.get("cpWrites"),
+  },
+  "limiter": {"levelTenths": lim.get("levelTenths")},
   "journal": {
     "judged": dbg.get("judged"), "worked": dbg.get("worked"),
     "noEffect": dbg.get("noEffect"), "contradictions": dbg.get("contradictions"),

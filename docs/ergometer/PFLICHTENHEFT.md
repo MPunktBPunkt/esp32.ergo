@@ -968,7 +968,7 @@ Motivation ist, die erhalten bleiben soll.
 8. **Observer vs. Controller:** Nach Connect ohne Last bleibt Coach steuerbar;
    nach erstem App-Lastkommando sperrt die Coach-Last (STOP bleibt).
 9. Während Bridge-ERG erzeugen MyWhoosh-Resistance-Writes keinen Mode-Kampf
-   (Resistance wird ignoriert, ERG bleibt).
+   (Resistance &lt; 3 s nach Power wird ignoriert; danach Takeover auf LEVEL).
 
 Betriebsregeln und Checkliste: [BRIDGE.md](BRIDGE.md).
 

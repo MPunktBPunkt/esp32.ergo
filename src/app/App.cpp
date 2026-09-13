@@ -663,7 +663,11 @@ void App::buildStatusJson(JsonDocument& doc) {
     ble.appendStatusJson(doc["ble"].to<JsonObject>());
     ftms.appendStatusJson(doc["ftms"].to<JsonObject>());
     hrc.appendStatusJson(doc["hr"].to<JsonObject>());
-    bridge.appendStatusJson(doc["bridge"].to<JsonObject>());
+    {
+        JsonObject br = doc["bridge"].to<JsonObject>();
+        bridge.appendStatusJson(br);
+        appendBridgeAppJson_(br);
+    }
 
     doc["hrSource"] = ergo::hrSourceName(resolveHrSource());
     doc["heartRate"] = effectiveHr();
@@ -4084,21 +4088,29 @@ bool App::bridgeExclusiveControl() const {
     return bridge.enabled() && bridge.isControlling();
 }
 
+void App::appendBridgeAppJson_(JsonObject obj) const {
+    obj["driving"] = bridgeDriving_;
+    obj["exclusive"] = bridgeExclusiveControl();
+    obj["appWatt"] = bridgeAppWatt_;
+    obj["desiredW"] = bridgeDesiredW_;
+    obj["effectiveW"] = bridgeHrCap.effectiveW();
+    obj["hrCapActive"] = bridgeHrCap.capActive();
+    obj["lastOp"] = lastBridgeOp_;
+    obj["lastResistTenths"] = lastBridgeResistTenths_;
+    obj["resistIgnored"] = bridgeResistIgnored_;
+    if (lastBridgePowerMs_) obj["lastPowerMs"] = lastBridgePowerMs_;
+}
+
 void App::registerBridgeRoutes() {
     server.on("/api/bridge", HTTP_GET, [this]() {
         JsonDocument doc;
         bridge.appendStatusJson(doc.to<JsonObject>());
+        appendBridgeAppJson_(doc.to<JsonObject>());
         doc["configEnabled"] = config.bridgeEnabled;
         doc["configName"] = config.bridgeName;
         doc["difficultyPct"] = config.bridgeDifficultyPct;
         doc["hrSoft"] = config.bridgeHrSoft;
         doc["hrMax"] = config.bridgeHrMax;
-        doc["appWatt"] = bridgeAppWatt_;
-        doc["desiredW"] = bridgeDesiredW_;
-        doc["effectiveW"] = bridgeHrCap.effectiveW();
-        doc["hrCapActive"] = bridgeHrCap.capActive();
-        doc["driving"] = bridgeDriving_;
-        doc["exclusive"] = bridgeExclusiveControl();
         NetUtil::sendJson(server, 200, doc);
     });
 
@@ -4157,10 +4169,13 @@ void App::applyBridgePending(const FtmsServer::Pending& p, unsigned long now) {
             bridgeAppWatt_ = 0;
             bridgeDesiredW_ = 0;
             bridgeHrCap.reset();
+            lastBridgePowerMs_ = 0;
+            lastBridgeOp_ = "reset";
             if (ble.ready(ergo::Role::Bike)) ftms.reset(now);
             break;
 
         case FtmsServer::PendingOp::Start:
+            lastBridgeOp_ = "start";
             if (ble.ready(ergo::Role::Bike)) ftms.start(now);
             break;
 
@@ -4173,6 +4188,8 @@ void App::applyBridgePending(const FtmsServer::Pending& p, unsigned long now) {
             bridgeAppWatt_ = 0;
             bridgeDesiredW_ = 0;
             bridgeHrCap.reset();
+            lastBridgePowerMs_ = 0;
+            lastBridgeOp_ = "stop";
             if (ble.ready(ergo::Role::Bike)) ftms.stop(now);
             break;
 
@@ -4181,6 +4198,8 @@ void App::applyBridgePending(const FtmsServer::Pending& p, unsigned long now) {
             break;
 
         case FtmsServer::PendingOp::SetPower: {
+            lastBridgeOp_ = "power";
+            lastBridgePowerMs_ = now;
             bridgeAppWatt_ = (float)p.watt;
             float watt = bridgeScaleAppWatt(bridgeAppWatt_);
             bridgeDesiredW_ = watt;
@@ -4214,16 +4233,29 @@ void App::applyBridgePending(const FtmsServer::Pending& p, unsigned long now) {
         }
 
         case FtmsServer::PendingOp::SetResistance: {
-            // MyWhoosh wechselt oft Power↔Resistance; während Bridge-ERG
-            // Stufe ignorieren (BLE schon mit Success quittiert) — sonst
-            // Mode-Kampf und Stufen-Jagd.
-            if (bridgeDriving_) {
-                Serial.printf("[BRIDGE] Stufe %d ignoriert — ERG aktiv (Exklusiv)\n",
-                              (int)p.resistanceTenths);
+            lastBridgeOp_ = "resistance";
+            lastBridgeResistTenths_ = p.resistanceTenths;
+            // MyWhoosh mischt im ERG oft Power+Resistance. Resistance nur
+            // kurz nach SetPower ignorieren; danach = manueller Gang-Takeover.
+            constexpr unsigned long kResistIgnoreAfterPowerMs = 3000UL;
+            if (bridgeDriving_ && lastBridgePowerMs_ != 0 &&
+                (now - lastBridgePowerMs_) < kResistIgnoreAfterPowerMs) {
+                bridgeResistIgnored_++;
+                Serial.printf("[BRIDGE] Stufe %d ignoriert — ERG-Spam (%lu ms nach Power)\n",
+                              (int)p.resistanceTenths, (unsigned long)(now - lastBridgePowerMs_));
                 break;
             }
             const int16_t tenths = p.resistanceTenths;
+            if (bridgeDriving_) {
+                Serial.printf("[BRIDGE] Stufe %d — Takeover aus ERG (kein Power seit %lu ms)\n",
+                              (int)tenths,
+                              lastBridgePowerMs_ ? (unsigned long)(now - lastBridgePowerMs_)
+                                                 : 0UL);
+            }
             bridgeDriving_ = false;
+            bridgeAppWatt_ = 0;
+            bridgeDesiredW_ = 0;
+            powerCtl.reset();
             if (control.mode() == ergo::ControlMode::Workout && workout.running()) {
                 workout.stop();
                 if (session_.active()) recordSessionEnd("bridge_takeover");
@@ -4239,11 +4271,12 @@ void App::applyBridgePending(const FtmsServer::Pending& p, unsigned long now) {
             }
             control.setLevelTargetTenths(tenths);
             if (ble.ready(ergo::Role::Bike)) ftms.setLevelTenths(tenths, now);
-            Serial.printf("[BRIDGE] Stufe %d\n", (int)tenths);
+            Serial.printf("[BRIDGE] Stufe %.1f\n", tenths / 10.0f);
             break;
         }
 
         case FtmsServer::PendingOp::SetSimulation:
+            lastBridgeOp_ = "sim";
             if (ble.ready(ergo::Role::Bike)) {
                 const auto r =
                     ftms.setSimulation(p.windMms, p.gradeHundredth, p.crr10000, p.cw100, now);

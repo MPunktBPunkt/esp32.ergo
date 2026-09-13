@@ -92,6 +92,7 @@ private:
     float bridgeScaleAppWatt(float appWatt) const;
     /** Bridge-App hat Lastkommandos gesendet — Coach darf nicht mitregeln. */
     bool bridgeExclusiveControl() const;
+    void appendBridgeAppJson_(JsonObject obj) const;
     void runCodecSelfTest();
     void applyLimiterConfig();
     void seedDefaultProfiles();
@@ -207,6 +208,11 @@ private:
     float bridgeAppWatt_ = 0.0f;   // vor Difficulty
     float bridgeDesiredW_ = 0.0f;  // nach Difficulty, vor HR-Deckel
     bool bridgeDriving_ = false;
+    /** Letztes Bridge-SetPower — Resistance kurz danach ignorieren (ERG-Spam). */
+    unsigned long lastBridgePowerMs_ = 0;
+    uint32_t bridgeResistIgnored_ = 0;
+    int16_t lastBridgeResistTenths_ = -1;
+    const char* lastBridgeOp_ = "none";
     uint16_t crankRevs_ = 0;
     uint16_t crankEvent_ = 0;
     unsigned long crankLastMs_ = 0;
