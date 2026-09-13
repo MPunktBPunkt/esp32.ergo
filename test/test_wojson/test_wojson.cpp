@@ -197,6 +197,27 @@ static void test_goal_favorite(void) {
     TEST_ASSERT_EQUAL_STRING("reha", workoutBuiltinGoal(0));
 }
 
+static void test_tags_and_autopause(void) {
+    WorkoutDoc d;
+    char err[64];
+    const char* j =
+        "{\"name\":\"T\",\"id\":\"t1\",\"tags\":[\"easy\",\"zone2\"],\"autoPauseS\":15,"
+        "\"steps\":[{\"duration_s\":30,\"target\":{\"power\":40}}]}";
+    TEST_ASSERT_TRUE(workoutParseJson(j, d, err, sizeof(err)));
+    TEST_ASSERT_EQUAL_UINT8(2, d.tagCount);
+    TEST_ASSERT_EQUAL_STRING("easy", d.tags[0]);
+    TEST_ASSERT_EQUAL_STRING("zone2", d.tags[1]);
+    TEST_ASSERT_EQUAL_UINT16(15, d.autoPauseS);
+    char buf[512];
+    TEST_ASSERT_TRUE(workoutWriteJson(d, buf, sizeof(buf)) > 0);
+    TEST_ASSERT_TRUE(strstr(buf, "\"easy\"") != nullptr);
+    TEST_ASSERT_TRUE(strstr(buf, "autoPauseS") != nullptr);
+    WorkoutDoc b;
+    TEST_ASSERT_TRUE(workoutParseJson(buf, b, err, sizeof(err)));
+    TEST_ASSERT_EQUAL_UINT8(2, b.tagCount);
+    TEST_ASSERT_EQUAL_UINT16(15, b.autoPauseS);
+}
+
 void setUp(void) {}
 void tearDown(void) {}
 
@@ -214,5 +235,6 @@ int main(int, char**) {
     RUN_TEST(test_interval_overflow);
     RUN_TEST(test_ramp_expand);
     RUN_TEST(test_goal_favorite);
+    RUN_TEST(test_tags_and_autopause);
     return UNITY_END();
 }

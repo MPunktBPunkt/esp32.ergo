@@ -25,6 +25,10 @@ public:
     void begin(const SessionTrackerConfig& cfg = {});
     void reset();
 
+    /** Laufzeit-Override; klemmte wie begin() auf ≥ 2000 ms. */
+    void setAutoPauseAfterMs(uint32_t ms);
+    uint32_t autoPauseAfterMs() const { return cfg_.autoPauseAfterMs; }
+
     void start(uint32_t nowMs, const char* mode, const char* workoutName, const char* profileId,
                const char* workoutId = nullptr);
     /** Beendet; Summary bleibt bis zum nächsten start lesbar. */

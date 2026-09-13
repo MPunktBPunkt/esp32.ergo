@@ -1482,6 +1482,7 @@ void App::registerControlRoutes() {
             o["goal"] = ergo::workoutBuiltinGoal(i);
             o["favorite"] = isWorkoutFavorite_(id);
             o["source"] = "builtin";
+            appendTagsJson_(o["tags"].to<JsonArray>(), id);
             const uint8_t ci = ergo::ftpCareerIndexOf(id);
             if (ci != 255) {
                 o["careerIndex"] = ci;
@@ -1517,8 +1518,11 @@ void App::registerControlRoutes() {
                             o["name"] = wd.name[0] ? wd.name : base;
                             o["goal"] = wd.goal;
                             if (wd.favorite) o["favorite"] = true;
+                            if (wd.autoPauseS > 0) o["autoPauseS"] = wd.autoPauseS;
+                            appendTagsJson_(o["tags"].to<JsonArray>(), base.c_str(), &wd);
                         } else {
                             o["goal"] = "";
+                            appendTagsJson_(o["tags"].to<JsonArray>(), base.c_str());
                         }
                     }
                     f = root.openNextFile();
@@ -1593,6 +1597,66 @@ void App::registerControlRoutes() {
         doc["ok"] = true;
         doc["id"] = id;
         doc["favorite"] = isWorkoutFavorite_(id.c_str());
+        NetUtil::sendJson(server, 200, doc);
+    });
+
+    server.on("/api/workout/tags", HTTP_POST, [this]() {
+        if (!server.hasArg("id")) {
+            NetUtil::sendError(server, 400, "id fehlt");
+            return;
+        }
+        const String id = server.arg("id");
+        char tags[ergo::WorkoutDoc::kMaxTags][ergo::WorkoutDoc::kTagLen] = {};
+        uint8_t n = 0;
+        if (server.hasArg("tags")) {
+            String raw = server.arg("tags");
+            int start = 0;
+            while (start < (int)raw.length() && n < ergo::WorkoutDoc::kMaxTags) {
+                int comma = raw.indexOf(',', start);
+                String part = comma < 0 ? raw.substring(start) : raw.substring(start, comma);
+                part.trim();
+                part.toLowerCase();
+                if (part.length() > 0) {
+                    strncpy(tags[n], part.c_str(), ergo::WorkoutDoc::kTagLen - 1);
+                    tags[n][ergo::WorkoutDoc::kTagLen - 1] = 0;
+                    n++;
+                }
+                if (comma < 0) break;
+                start = comma + 1;
+            }
+        }
+        setWorkoutTags_(id.c_str(), tags, n);
+        if (fsReady_) {
+            String path = String("/workouts/") + id + ".json";
+            File f = LittleFS.open(path, "r");
+            if (f) {
+                String body = f.readString();
+                f.close();
+                ergo::WorkoutDoc d;
+                char err[64];
+                if (ergo::workoutParseJson(body.c_str(), d, err, sizeof(err))) {
+                    d.tagCount = n;
+                    for (uint8_t i = 0; i < n; i++) {
+                        strncpy(d.tags[i], tags[i], ergo::WorkoutDoc::kTagLen - 1);
+                        d.tags[i][ergo::WorkoutDoc::kTagLen - 1] = 0;
+                    }
+                    for (uint8_t i = n; i < ergo::WorkoutDoc::kMaxTags; i++) d.tags[i][0] = 0;
+                    char buf[ergo::kWorkoutJsonBuf];
+                    if (ergo::workoutWriteJson(d, buf, sizeof(buf))) {
+                        File w = LittleFS.open(path, "w");
+                        if (w) {
+                            w.print(buf);
+                            w.close();
+                        }
+                    }
+                }
+            }
+        }
+        JsonDocument doc;
+        doc["ok"] = true;
+        doc["id"] = id;
+        JsonArray arr = doc["tags"].to<JsonArray>();
+        appendTagsJson_(arr, id.c_str());
         NetUtil::sendJson(server, 200, doc);
     });
 
@@ -2568,6 +2632,7 @@ bool App::beginFs() {
 
 void App::loadWorkoutMeta_() {
     woFavCount_ = 0;
+    woTagRowCount_ = 0;
     if (!fsReady_) return;
     File f = LittleFS.open("/workouts/meta.json", "r");
     if (!f) return;
@@ -2576,14 +2641,38 @@ void App::loadWorkoutMeta_() {
     JsonDocument doc;
     if (deserializeJson(doc, body)) return;
     JsonArray arr = doc["fav"].as<JsonArray>();
-    if (arr.isNull()) return;
-    for (JsonVariant v : arr) {
-        if (woFavCount_ >= 12) break;
-        const char* id = v.as<const char*>();
-        if (!id || !id[0]) continue;
-        strncpy(woFavIds_[woFavCount_], id, sizeof(woFavIds_[0]) - 1);
-        woFavIds_[woFavCount_][sizeof(woFavIds_[0]) - 1] = 0;
-        woFavCount_++;
+    if (!arr.isNull()) {
+        for (JsonVariant v : arr) {
+            if (woFavCount_ >= 12) break;
+            const char* id = v.as<const char*>();
+            if (!id || !id[0]) continue;
+            strncpy(woFavIds_[woFavCount_], id, sizeof(woFavIds_[0]) - 1);
+            woFavIds_[woFavCount_][sizeof(woFavIds_[0]) - 1] = 0;
+            woFavCount_++;
+        }
+    }
+    JsonObject tags = doc["tags"].as<JsonObject>();
+    if (!tags.isNull()) {
+        for (JsonPair kv : tags) {
+            if (woTagRowCount_ >= 24) break;
+            const char* id = kv.key().c_str();
+            if (!id || !id[0]) continue;
+            WoTagRow& row = woTagRows_[woTagRowCount_];
+            row = WoTagRow{};
+            strncpy(row.id, id, sizeof(row.id) - 1);
+            JsonArray ta = kv.value().as<JsonArray>();
+            if (!ta.isNull()) {
+                for (JsonVariant tv : ta) {
+                    if (row.n >= ergo::WorkoutDoc::kMaxTags) break;
+                    const char* t = tv.as<const char*>();
+                    if (!t || !t[0]) continue;
+                    strncpy(row.tags[row.n], t, ergo::WorkoutDoc::kTagLen - 1);
+                    row.tags[row.n][ergo::WorkoutDoc::kTagLen - 1] = 0;
+                    row.n++;
+                }
+            }
+            if (row.n > 0) woTagRowCount_++;
+        }
     }
 }
 
@@ -2593,6 +2682,11 @@ void App::saveWorkoutMeta_() {
     JsonDocument doc;
     JsonArray arr = doc["fav"].to<JsonArray>();
     for (uint8_t i = 0; i < woFavCount_; i++) arr.add(woFavIds_[i]);
+    JsonObject tags = doc["tags"].to<JsonObject>();
+    for (uint8_t i = 0; i < woTagRowCount_; i++) {
+        JsonArray ta = tags[woTagRows_[i].id].to<JsonArray>();
+        for (uint8_t j = 0; j < woTagRows_[i].n; j++) ta.add(woTagRows_[i].tags[j]);
+    }
     File f = LittleFS.open("/workouts/meta.json", "w");
     if (!f) return;
     serializeJson(doc, f);
@@ -2629,6 +2723,79 @@ void App::setWorkoutFavorite_(const char* id, bool on) {
     saveWorkoutMeta_();
 }
 
+uint8_t App::workoutTagsOf_(const char* id, char out[][ergo::WorkoutDoc::kTagLen],
+                            uint8_t maxOut) const {
+    if (!id || !id[0] || !out || maxOut == 0) return 0;
+    for (uint8_t i = 0; i < woTagRowCount_; i++) {
+        if (strcmp(woTagRows_[i].id, id) != 0) continue;
+        uint8_t n = woTagRows_[i].n;
+        if (n > maxOut) n = maxOut;
+        for (uint8_t j = 0; j < n; j++) {
+            strncpy(out[j], woTagRows_[i].tags[j], ergo::WorkoutDoc::kTagLen - 1);
+            out[j][ergo::WorkoutDoc::kTagLen - 1] = 0;
+        }
+        return n;
+    }
+    return 0;
+}
+
+void App::setWorkoutTags_(const char* id, const char tags[][ergo::WorkoutDoc::kTagLen],
+                          uint8_t n) {
+    if (!id || !id[0]) return;
+    if (n > ergo::WorkoutDoc::kMaxTags) n = ergo::WorkoutDoc::kMaxTags;
+    int found = -1;
+    for (uint8_t i = 0; i < woTagRowCount_; i++) {
+        if (strcmp(woTagRows_[i].id, id) == 0) {
+            found = (int)i;
+            break;
+        }
+    }
+    if (n == 0) {
+        if (found < 0) return;
+        for (uint8_t j = (uint8_t)found + 1; j < woTagRowCount_; j++) {
+            woTagRows_[j - 1] = woTagRows_[j];
+        }
+        woTagRowCount_--;
+        woTagRows_[woTagRowCount_] = WoTagRow{};
+        saveWorkoutMeta_();
+        return;
+    }
+    WoTagRow row;
+    strncpy(row.id, id, sizeof(row.id) - 1);
+    row.n = n;
+    for (uint8_t i = 0; i < n; i++) {
+        strncpy(row.tags[i], tags[i], ergo::WorkoutDoc::kTagLen - 1);
+        row.tags[i][ergo::WorkoutDoc::kTagLen - 1] = 0;
+    }
+    if (found >= 0) {
+        woTagRows_[found] = row;
+    } else if (woTagRowCount_ < 24) {
+        woTagRows_[woTagRowCount_++] = row;
+    } else {
+        return;
+    }
+    saveWorkoutMeta_();
+}
+
+void App::appendTagsJson_(JsonArray arr, const char* id, const ergo::WorkoutDoc* fsDoc) const {
+    if (fsDoc && fsDoc->tagCount > 0) {
+        for (uint8_t i = 0; i < fsDoc->tagCount; i++) arr.add(fsDoc->tags[i]);
+        return;
+    }
+    char tags[ergo::WorkoutDoc::kMaxTags][ergo::WorkoutDoc::kTagLen] = {};
+    const uint8_t n = workoutTagsOf_(id, tags, ergo::WorkoutDoc::kMaxTags);
+    for (uint8_t i = 0; i < n; i++) arr.add(tags[i]);
+}
+
+void App::applyAutoPauseForDoc_(const ergo::WorkoutDoc& doc) {
+    pendingAutoPauseS_ = doc.autoPauseS;
+}
+
+void App::restoreDefaultAutoPause_() {
+    pendingAutoPauseS_ = 0;
+    session_.setAutoPauseAfterMs(10000);
+}
+
 bool App::loadWorkoutDoc(const ergo::WorkoutDoc& doc, float scale) {
     if (doc.stepCount == 0) return false;
     if (scale < 0.05f) scale = 0.05f;
@@ -2646,6 +2813,7 @@ bool App::loadWorkoutDoc(const ergo::WorkoutDoc& doc, float scale) {
     strncpy(activeWorkoutId_, prepared.id, sizeof(activeWorkoutId_) - 1);
     activeWorkoutId_[sizeof(activeWorkoutId_) - 1] = 0;
     activeProg_ = prepared.progression;
+    applyAutoPauseForDoc_(prepared);
     rehaCtl.setDurationS(0);
     if (!workout.start(millis())) return false;
     woSnap_ = workout.tick(millis());
@@ -2818,6 +2986,7 @@ void App::recordSessionEnd(const char* reason) {
     persistSession_(s);
     maybeOfferProgression(s);
     maybeOfferFtpCareer_(s);
+    restoreDefaultAutoPause_();
     Serial.printf("[SESS] %s %s %u s (Pause %u), Ø %.0f W, %.1f kJ, Deckel %u×\n", s.mode,
                   s.endReason, (unsigned)s.durationS, (unsigned)s.pausedS, s.avgPowerW, s.workKj,
                   (unsigned)s.interventions);
@@ -2826,6 +2995,12 @@ void App::recordSessionEnd(const char* reason) {
 void App::beginSession(const char* workoutName, const char* workoutId) {
     const char* mode = ergo::controlModeName(control.mode());
     const char* pid = profiles.activeId() ? profiles.activeId() : "";
+    if (workoutId && workoutId[0] && pendingAutoPauseS_ > 0) {
+        session_.setAutoPauseAfterMs((uint32_t)pendingAutoPauseS_ * 1000u);
+    } else {
+        session_.setAutoPauseAfterMs(10000);
+    }
+    pendingAutoPauseS_ = 0;
     session_.start(millis(), mode, workoutName ? workoutName : "", pid,
                    workoutId && workoutId[0] ? workoutId : nullptr);
     if (workoutId && workoutId[0]) {

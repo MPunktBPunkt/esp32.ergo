@@ -508,6 +508,34 @@ bool workoutParseJson(const char* json, WorkoutDoc& out, char* err, size_t errLe
         p = skipWs(p);
         out.favorite = (strncmp(p, "true", 4) == 0 || *p == '1');
     }
+    p = root;
+    if (skipToKey(p, "autoPauseS")) {
+        double v = 0;
+        if (parseNumber(p, v) && v > 0) {
+            if (v > 600) v = 600;
+            out.autoPauseS = (uint16_t)v;
+        }
+    }
+    p = root;
+    if (skipToKey(p, "tags")) {
+        p = skipWs(p);
+        if (*p == '[') {
+            const char* end = findMatching(p, '[', ']');
+            if (end) {
+                p++;
+                while (p < end && out.tagCount < WorkoutDoc::kMaxTags) {
+                    p = skipWs(p);
+                    if (*p == ']') break;
+                    if (*p == ',') {
+                        p++;
+                        continue;
+                    }
+                    if (!parseString(p, out.tags[out.tagCount], WorkoutDoc::kTagLen)) break;
+                    if (out.tags[out.tagCount][0]) out.tagCount++;
+                }
+            }
+        }
+    }
     if (!out.id[0]) {
         // id aus name ableiten
         size_t j = 0;
@@ -622,17 +650,37 @@ size_t workoutWriteJson(const WorkoutDoc& doc, char* buf, size_t bufLen) {
     if (!buf || bufLen < 32) return 0;
     int w;
     const char* fav = doc.favorite ? "true" : "false";
+    char tagsPart[128] = {};
+    if (doc.tagCount > 0) {
+        size_t tn = 0;
+        tagsPart[tn++] = ',';
+        tn += (size_t)snprintf(tagsPart + tn, sizeof(tagsPart) - tn, "\"tags\":[");
+        for (uint8_t i = 0; i < doc.tagCount && tn + 24 < sizeof(tagsPart); i++) {
+            tn += (size_t)snprintf(tagsPart + tn, sizeof(tagsPart) - tn, "%s\"%s\"", i ? "," : "",
+                                   doc.tags[i]);
+        }
+        if (tn + 2 < sizeof(tagsPart)) {
+            tagsPart[tn++] = ']';
+            tagsPart[tn] = 0;
+        } else {
+            tagsPart[0] = 0;
+        }
+    }
+    char pausePart[32] = {};
+    if (doc.autoPauseS > 0) {
+        snprintf(pausePart, sizeof(pausePart), ",\"autoPauseS\":%u", (unsigned)doc.autoPauseS);
+    }
     if (doc.progression.enabled) {
         w = snprintf(buf, bufLen,
-                     "{\"id\":\"%s\",\"name\":\"%s\",\"goal\":\"%s\",\"favorite\":%s,"
+                     "{\"id\":\"%s\",\"name\":\"%s\",\"goal\":\"%s\",\"favorite\":%s%s%s,"
                      "\"progression\":{\"field\":\"duration_s\",\"step\":%u,\"max\":%u},"
                      "\"steps\":[",
-                     doc.id, doc.name, doc.goal, fav, (unsigned)doc.progression.stepS,
-                     (unsigned)doc.progression.maxS);
+                     doc.id, doc.name, doc.goal, fav, tagsPart, pausePart,
+                     (unsigned)doc.progression.stepS, (unsigned)doc.progression.maxS);
     } else {
         w = snprintf(buf, bufLen,
-                     "{\"id\":\"%s\",\"name\":\"%s\",\"goal\":\"%s\",\"favorite\":%s,\"steps\":[",
-                     doc.id, doc.name, doc.goal, fav);
+                     "{\"id\":\"%s\",\"name\":\"%s\",\"goal\":\"%s\",\"favorite\":%s%s%s,\"steps\":[",
+                     doc.id, doc.name, doc.goal, fav, tagsPart, pausePart);
     }
     if (w < 0 || (size_t)w >= bufLen) return 0;
     size_t n = (size_t)w;

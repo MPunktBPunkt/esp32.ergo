@@ -106,6 +106,14 @@ private:
     void saveWorkoutMeta_();
     bool isWorkoutFavorite_(const char* id) const;
     void setWorkoutFavorite_(const char* id, bool on);
+    uint8_t workoutTagsOf_(const char* id, char out[][ergo::WorkoutDoc::kTagLen],
+                           uint8_t maxOut) const;
+    void setWorkoutTags_(const char* id, const char tags[][ergo::WorkoutDoc::kTagLen],
+                         uint8_t n);
+    void appendTagsJson_(JsonArray arr, const char* id,
+                         const ergo::WorkoutDoc* fsDoc = nullptr) const;
+    void applyAutoPauseForDoc_(const ergo::WorkoutDoc& doc);
+    void restoreDefaultAutoPause_();
     uint32_t readProgressionMainS(const char* id) const;
     bool writeProgressionMainS(const char* id, uint32_t mainS);
     void maybeOfferProgression(const ergo::SessionSummary& s);
@@ -201,4 +209,13 @@ private:
     /** Favoriten-IDs (Builtins + Dateien), persistiert in /workouts/meta.json. */
     char woFavIds_[12][24] = {};
     uint8_t woFavCount_ = 0;
+    /** Tags für Builtins (FS-Dateien speichern Tags im JSON). */
+    struct WoTagRow {
+        char id[24] = {};
+        char tags[ergo::WorkoutDoc::kMaxTags][ergo::WorkoutDoc::kTagLen] = {};
+        uint8_t n = 0;
+    };
+    WoTagRow woTagRows_[24] = {};
+    uint8_t woTagRowCount_ = 0;
+    uint16_t pendingAutoPauseS_ = 0;
 };

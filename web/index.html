@@ -711,7 +711,8 @@ footer{color:var(--dim);font-size:12px;text-align:center;margin-top:26px}
       <h2>Programme</h2>
       <div class="hint flat">Eingebaute Programme und Dateien auf LittleFS.
         Ziele als Watt <b>oder % FTP</b> (Button „Ziel“ im Editor) — dann skalieren
-        Workouts mit dem Profil-FTP. Filter: Favoriten, Ziel, zuletzt genutzt.</div>
+        Workouts mit dem Profil-FTP. Filter: Favoriten, Ziel, zuletzt genutzt.
+        Freie Tags (Editor) und Auto-Pause pro Programm (0 = 10 s Default).</div>
       <div class="ftabs" id="woftabs">
         <button type="button" class="ghost on" data-f="all">Alle</button>
         <button type="button" class="ghost" data-f="fav">★</button>
@@ -761,6 +762,12 @@ footer{color:var(--dim);font-size:12px;text-align:center;margin-top:26px}
             <option value="fitness">Training</option>
             <option value="performance">Leistung</option>
           </select></label>
+        <label class="f" style="flex:1;margin:0"><div class="k">Tags</div>
+          <input type="text" id="woedtags" maxlength="71" autocomplete="off"
+            placeholder="z. B. easy, zone2"></label>
+        <label class="f" style="flex:0 0 88px;margin:0"><div class="k">Auto-Pause s</div>
+          <input type="number" id="woedpause" min="0" max="600" step="1" value="0"
+            title="0 = Default 10 s"></label>
       </div>
       <div class="row flat">
         <button id="woedunit" class="ghost">Ziel: Watt</button>
@@ -1899,7 +1906,11 @@ function renderWoCards(){
     rows.forEach(x=>{if(x.id) byId[x.id]=x;});
     rows=order.map(id=>byId[id]).filter(Boolean);
   } else if(f!=='all'){
-    rows=rows.filter(x=>(x.goal||'')===f);
+    rows=rows.filter(x=>{
+      if((x.goal||'')===f) return true;
+      const tags=Array.isArray(x.tags)?x.tags:[];
+      return tags.some(t=>(t||'').toLowerCase()===f);
+    });
   }
   $('wonone').hidden=rows.length>0;
   $('wonone').textContent=rows.length?'':(f==='all'?'keine Programme':'keine Treffer');
@@ -1911,13 +1922,17 @@ function renderWoCards(){
     card.dataset.id=id;
     const gl=woGoalShort(x.goal);
     const locked=(x.careerIndex!=null && x.careerUnlocked===false);
+    const tags=Array.isArray(x.tags)?x.tags:[];
+    const tagHtml=tags.map(t=>'<span class="tag">'+t+'</span>').join(' ');
     card.innerHTML='<button type="button" class="fav'+(x.favorite?' on':'')+'" aria-label="Favorit">'
       +(x.favorite?'★':'☆')+'</button>'
       +'<div class="pn">'+(x.name||id)+(locked?' 🔒':'')+(x.careerCurrent?' ←':'')+'</div>'
       +'<div class="pm">'+(x.source||'')
       +(gl?(' · '+gl):'')
       +(x.careerIndex!=null?(' · Stufe '+(x.careerIndex+1)):'')
+      +(x.autoPauseS?(' · AP '+x.autoPauseS+'s'):'')
       +(x.bytes?(' · '+x.bytes+' B'):'')+'</div>'
+      +(tagHtml?('<div class="prow" style="gap:6px;flex-wrap:wrap">'+tagHtml+'</div>'):'')
       +'<div class="prow"></div>';
     const favBtn=card.querySelector('.fav');
     favBtn.onclick=ev=>{
@@ -1932,11 +1947,12 @@ function renderWoCards(){
           renderWoCards();
         }).catch(()=>{});
     };
-    const prow=card.querySelector('.prow');
+    const prow=card.querySelectorAll('.prow');
+    const actionRow=prow[prow.length-1];
     const bPrev=document.createElement('button');
     bPrev.className='ghost sm'; bPrev.textContent='Vorschau';
     bPrev.onclick=ev=>{ev.stopPropagation(); previewWorkoutId(id);};
-    prow.appendChild(bPrev);
+    actionRow.appendChild(bPrev);
     const bGo=document.createElement('button');
     bGo.className='ghost sm'; bGo.textContent=locked?'Force':'Start';
     bGo.onclick=ev=>{
@@ -1949,7 +1965,7 @@ function renderWoCards(){
       }
       startWorkout(url,'womsg');
     };
-    prow.appendChild(bGo);
+    actionRow.appendChild(bGo);
     card.onclick=()=>previewWorkoutId(id);
     box.appendChild(card);
   });
@@ -2196,7 +2212,7 @@ function hmsShort(s){
   return m+':'+(r<10?'0':'')+r;
 }
 
-let _woEd={name:'',id:'',goal:'',unit:'w',steps:[]};
+let _woEd={name:'',id:'',goal:'',tags:'',autoPauseS:0,unit:'w',steps:[]};
 let _woEdQuiet=false;
 let _woDeb=0;
 function woSlug(s){
@@ -2287,7 +2303,9 @@ function editorFromJson(txt){
       steps.push(editorParseSteady(s,i,unitRef));
     }
   });
-  _woEd={name:d.name||'',id:d.id||woSlug(d.name),goal:d.goal||'',unit:unitRef.u,steps:steps};
+  _woEd={name:d.name||'',id:d.id||woSlug(d.name),goal:d.goal||'',
+    tags:Array.isArray(d.tags)?d.tags.join(', '):(d.tags||''),
+    autoPauseS:+(d.autoPauseS||0),unit:unitRef.u,steps:steps};
   renderEditor();
   return true;
 }
@@ -2295,7 +2313,10 @@ function editorToJson(){
   const name=($('woedname').value||_woEd.name||'Workout').trim();
   let id=($('woedid').value||_woEd.id||'').trim()||woSlug(name);
   const goal=($('woedgoal')&&$('woedgoal').value)||_woEd.goal||'';
-  _woEd.name=name; _woEd.id=id; _woEd.goal=goal;
+  const tagsRaw=($('woedtags')&&$('woedtags').value)||_woEd.tags||'';
+  const tags=tagsRaw.split(',').map(s=>s.trim().toLowerCase()).filter(Boolean).slice(0,4);
+  const autoPauseS=Math.max(0,Math.min(600,+(($('woedpause')&&$('woedpause').value)||_woEd.autoPauseS||0)|0));
+  _woEd.name=name; _woEd.id=id; _woEd.goal=goal; _woEd.tags=tags.join(', '); _woEd.autoPauseS=autoPauseS;
   const steps=_woEd.steps.map(st=>{
     if(st.kind==='interval'){
       const mk=side=>{
@@ -2324,6 +2345,8 @@ function editorToJson(){
   });
   const doc={name:name,id:id,steps:steps};
   if(goal) doc.goal=goal;
+  if(tags.length) doc.tags=tags;
+  if(autoPauseS>0) doc.autoPauseS=autoPauseS;
   return JSON.stringify(doc,null,2);
 }
 function pushEditor(validate){
@@ -2340,6 +2363,8 @@ function renderEditor(){
   if($('woedname')&&document.activeElement!==$('woedname')) $('woedname').value=_woEd.name||'';
   if($('woedid')&&document.activeElement!==$('woedid')) $('woedid').value=_woEd.id||'';
   if($('woedgoal')&&document.activeElement!==$('woedgoal')) $('woedgoal').value=_woEd.goal||'';
+  if($('woedtags')&&document.activeElement!==$('woedtags')) $('woedtags').value=_woEd.tags||'';
+  if($('woedpause')&&document.activeElement!==$('woedpause')) $('woedpause').value=_woEd.autoPauseS||0;
   $('woedunit').textContent=_woEd.unit==='ftp'?'Ziel: % FTP':'Ziel: Watt';
   const box=$('woedsteps'); box.innerHTML='';
   const tgtLabel=_woEd.unit==='ftp'?'% FTP':'Watt';
@@ -2552,7 +2577,7 @@ $('woedramp').onclick=()=>{
   _woEd.steps.push(rp); renderEditor(); pushEditor(true);
 };
 $('woedblank').onclick=()=>{
-  _woEd={name:'Neu',id:'neu',goal:'',unit:'w',steps:[editorDefaultStep()]};
+  _woEd={name:'Neu',id:'neu',goal:'',tags:'',autoPauseS:0,unit:'w',steps:[editorDefaultStep()]};
   renderEditor(); pushEditor(true);
 };
 $('woedsync').onclick=()=>{
@@ -2574,8 +2599,10 @@ $('woedname').oninput=()=>{
 };
 $('woedid').oninput=()=>{ $('woedid').dataset.touch='1'; _woEd.id=$('woedid').value; pushEditor(true); };
 if($('woedgoal')) $('woedgoal').onchange=()=>{ _woEd.goal=$('woedgoal').value||''; pushEditor(true); };
+if($('woedtags')) $('woedtags').oninput=()=>{ _woEd.tags=$('woedtags').value||''; pushEditor(true); };
+if($('woedpause')) $('woedpause').oninput=()=>{ _woEd.autoPauseS=+($('woedpause').value||0); pushEditor(true); };
 if(!_woEd.steps.length){
-  _woEd={name:'Physio Grundlage',id:'physio',goal:'reha',unit:'w',steps:[
+  _woEd={name:'Physio Grundlage',id:'physio',goal:'reha',tags:'',autoPauseS:0,unit:'w',steps:[
     {kind:'steady',label:'Einfahren',durationS:120,powerW:40,ftpPct:0,hrMax:120,hrSoft:115},
     {kind:'steady',label:'Hauptteil',durationS:600,powerW:60,ftpPct:0,hrMax:120,hrSoft:115},
     {kind:'steady',label:'Ausfahren',durationS:120,powerW:35,ftpPct:0,hrMax:120,hrSoft:0}

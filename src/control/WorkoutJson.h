@@ -13,6 +13,9 @@
 namespace ergo {
 
 struct WorkoutDoc {
+    static constexpr uint8_t kMaxTags = 4;
+    static constexpr uint8_t kTagLen = 17;
+
     char id[24] = {};
     char name[40] = {};
     /**
@@ -22,6 +25,14 @@ struct WorkoutDoc {
     char goal[16] = {};
     /** Favorit — bei Builtins ueber Meta-Datei, bei FS-Dateien im JSON. */
     bool favorite = false;
+    /** Freie Tags (max. 4 × 16 Zeichen). Builtins: meta.json, FS: JSON. */
+    char tags[kMaxTags][kTagLen] = {};
+    uint8_t tagCount = 0;
+    /**
+     * Auto-Pause nach N Sekunden ohne Kadenz.
+     * 0 = Session-Default (10 s).
+     */
+    uint16_t autoPauseS = 0;
     WorkoutStep steps[WorkoutEngine::kMaxSteps];
     uint8_t stepCount = 0;
     struct Progression {

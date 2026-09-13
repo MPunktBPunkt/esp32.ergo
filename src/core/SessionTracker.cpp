@@ -11,6 +11,10 @@ void SessionTracker::begin(const SessionTrackerConfig& cfg) {
     reset();
 }
 
+void SessionTracker::setAutoPauseAfterMs(uint32_t ms) {
+    cfg_.autoPauseAfterMs = ms < 2000 ? 2000 : ms;
+}
+
 void SessionTracker::reset() {
     active_ = false;
     paused_ = false;

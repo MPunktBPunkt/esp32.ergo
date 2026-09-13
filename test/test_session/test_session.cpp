@@ -125,6 +125,22 @@ static void test_zone_accumulate(void) {
     TEST_ASSERT_EQUAL_UINT8(4, s.currentZone());
 }
 
+static void test_set_auto_pause_override(void) {
+    SessionTracker s;
+    s.begin({});
+    TEST_ASSERT_EQUAL_UINT32(10000, s.autoPauseAfterMs());
+    s.setAutoPauseAfterMs(4000);
+    TEST_ASSERT_EQUAL_UINT32(4000, s.autoPauseAfterMs());
+    s.setAutoPauseAfterMs(500);  // clamp ≥ 2000
+    TEST_ASSERT_EQUAL_UINT32(2000, s.autoPauseAfterMs());
+    s.start(0, "WORKOUT", "T", "standard", "t1");
+    s.tick(0, 60.0f, 80.0f, 120, true);
+    s.tick(1000, 0.0f, 0.0f, 120, true);
+    TEST_ASSERT_FALSE(s.paused());
+    s.tick(3500, 0.0f, 0.0f, 120, true);
+    TEST_ASSERT_TRUE(s.paused());
+}
+
 void setUp(void) {}
 void tearDown(void) {}
 
@@ -136,5 +152,6 @@ int main(int, char**) {
     RUN_TEST(test_json_roundtrip);
     RUN_TEST(test_rpe_note_roundtrip);
     RUN_TEST(test_zone_accumulate);
+    RUN_TEST(test_set_auto_pause_override);
     return UNITY_END();
 }
