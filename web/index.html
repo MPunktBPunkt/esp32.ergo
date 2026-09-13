@@ -1248,10 +1248,13 @@ function renderBle(s){
     fh.hidden=!freeze;
   }
 
-  // Zone-Optik (führende Zone aus Profil)
+  // Zone-Optik (führende Zone aus Profil).
+  // className komplett setzen — js/devui mitführen, sonst verschwinden Dev-Tabs
+  // (CSS: body:not(.devui) .tab.dev).
   const zi=s.zone||{};
   const zIdx=zi.index|0;
   const zClasses=['js'];
+  if(showDevUi) zClasses.push('devui');
   if(zIdx>=1&&zIdx<=7) zClasses.push('z'+zIdx);
   document.body.className=zClasses.join(' ');
   const zc=$('zcode'), zn=$('zname'), zsub=$('zrailsub');

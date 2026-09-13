@@ -5,8 +5,8 @@ zuerst diese Datei und danach gezielt weiter. Alle anderen Notizen in `debug/`
 sind Protokolle einzelner Arbeitsschritte und beschreiben den Stand *zu ihrem
 Zeitpunkt* — sie werden nicht nachgeführt.
 
-Stand dieser Datei: **2026-09-13** Arbeit an **0.3.18-dev**
-(Betrieb vs. Entwickler-UI).
+Stand dieser Datei: **2026-09-13** **0.3.19-dev**
+(Dev-UI Tabs: `body.devui` bleibt bei Zone-Render erhalten).
 FTP-Karriere: [debug/UPDATE_FTP_CAREER.md](debug/UPDATE_FTP_CAREER.md).
 FTP-Builtins: [debug/UPDATE_FTP_BUILTINS.md](debug/UPDATE_FTP_BUILTINS.md).
 ZWO: [debug/UPDATE_ZWO_IMPORT.md](debug/UPDATE_ZWO_IMPORT.md).
@@ -36,7 +36,7 @@ ERG-Assist: [debug/UPDATE_ERG_SIM_ASSIST.md](debug/UPDATE_ERG_SIM_ASSIST.md).
 | Hub | `192.168.178.113:8093`, `fwType: ergo` |
 | Rollback-Bin | `nodes/esp32.ftmsprobe/dist/ftmsprobe.0.1.4.esp32s3.bin` |
 | Build-Host | Debian, `/home/martin/projects/esphub/esp32.ergo`, `pio` unter `/home/martin/.venvs/pio/bin/pio` |
-| Aktuelle Bin | `dist/ergo.0.3.18-dev.esp32s3.bin` |
+| Aktuelle Bin | `dist/ergo.0.3.19-dev.esp32s3.bin` |
 
 Die Entwurfs-Instanz auf Windows hat **nur git** — kein PlatformIO, keinen
 Compiler, kein Python. Sie kann nicht bauen und nicht testen. Bauen und Flashen
@@ -90,7 +90,8 @@ Nachtests 2026-09-13: [debug/HW_NACHTEST_20260913.md](debug/HW_NACHTEST_20260913
 5. `allowSimulation` wieder aus, wenn nicht dauerhaft nötig
 
 Erledigt bis v0.1.1: Caps-Fix … Progression, UI-JS-Fix.
-Erledigt 2026-09-13: … Bridge Fast-Ramp 0.3.17; Betrieb/Entwickler-UI 0.3.18.
+Erledigt 2026-09-13: … Bridge Fast-Ramp 0.3.17; Betrieb/Entwickler-UI 0.3.18;
+Dev-Tabs-Fix (`body.devui`) 0.3.19.
 
 ## 6. Harte Regeln
 
