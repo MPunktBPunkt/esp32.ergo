@@ -1,7 +1,8 @@
 # Stand
 
 **Dies ist der Einstiegspunkt.** Wer an diesem Projekt weiterarbeitet, liest
-zuerst diese Datei und danach gezielt weiter. Alle anderen Notizen in `debug/`
+zuerst diese Datei und danach gezielt weiter. Technische Gesamtschau:
+[docs/ergometer/ENTWICKLERDOKU.md](docs/ergometer/ENTWICKLERDOKU.md). Alle anderen Notizen in `debug/`
 sind Protokolle einzelner Arbeitsschritte und beschreiben den Stand *zu ihrem
 Zeitpunkt* — sie werden nicht nachgeführt.
 
