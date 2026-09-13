@@ -1,6 +1,15 @@
 # Kennfläche — Snapshot 2026-09-13 (Abend)
 
 Stand nach passivem Lernen (u. a. ~40 rpm und Versuche ~100 rpm).
+
+## UI (ab 0.3.23)
+
+Die Heatmap markiert live die **aktuelle Stufe als Zeile** und das **Kadenzband
+als Spalte**. Die Schnittzelle ist die Zielzelle fürs nächste Lernen
+(grüner Rand = `calib.passive.accept`). Stufe ± bleibt im Fahren-Dock — unter
+der Matrix keine eigenen Buttons. Die Tabelle selbst ist Diagnose/Füllhilfe;
+das Datenmodell läuft unabhängig davon im Hintergrund (ERG/HR/Reha).
+
 Rohdaten: [`kalibrierung-map-20260913.json`](kalibrierung-map-20260913.json).
 Gerät: TC174 `c2:32:a5:1e:bf:b5`, Slot 0, ceilingW ≈ 224,
 62 Zellen belegt, 7 von 8 Kadenzbändern

@@ -234,7 +234,7 @@ deshalb Sweep mit festem Fenster und Verwerfung.
 | `POST /api/probe/mark` | Snapshot Watt/rpm/HR/Stufe |
 | `tools/nachtest_watch.sh` | JSONL-Ticks für Offline-Auswertung |
 | `GET /api/debug/export` | Ring als JSONL |
-| Heatmap Kalibrierung | Sweep-Zellen (Rand) vs. passiv gelernt |
+| Heatmap Kalibrierung | Sweep-Zellen (Rand) vs. passiv; Live-Cursor Stufe×Kadenz (0.3.23) |
 
 ---
 

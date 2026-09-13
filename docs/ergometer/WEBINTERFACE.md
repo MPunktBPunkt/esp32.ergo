@@ -380,9 +380,11 @@ Bei Controller sind Coach-Last-Buttons gesperrt; STOP bleibt. Fachregeln:
 [BRIDGE.md](BRIDGE.md).
 
 Die Kennfläche als **Heatmap** über Stufe und Kadenz ist dabei mehr als Zierde:
-man sieht sofort, welche Bereiche gemessen und welche noch geraten sind. Das
-passive Lernen füllt sie mit jeder Fahrt weiter, und das zuzusehen ist
-erstaunlich befriedigend.
+man sieht sofort, welche Bereiche gemessen und welche noch geraten sind. Ab
+**0.3.23** markiert die Matrix live Zeile (Stufe) und Spalte (Kadenzband); die
+Schnittzelle zeigt, wohin der nächste Lernpunkt geht. Das passive Lernen füllt
+sie mit jeder Fahrt weiter. Stufe ± bleibt im Fahren-Dock — unter der Matrix
+keine eigenen Buttons.
 
 ---
 

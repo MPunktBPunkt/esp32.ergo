@@ -3731,6 +3731,7 @@ void App::appendCalibJson(JsonObject obj) {
         pas["rpm"] = rpm;
         pas["watt"] = watt;
         pas["levelTenths"] = lvl;
+        pas["bandIdx"] = (int)bi;
         if (bi >= 0) {
             pas["bandLo"] = (int)(ergo::kCadMin + (float)bi * ergo::kCadStep);
             pas["bandHi"] =

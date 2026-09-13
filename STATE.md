@@ -6,8 +6,8 @@ zuerst diese Datei und danach gezielt weiter. Technische Gesamtschau:
 sind Protokolle einzelner Arbeitsschritte und beschreiben den Stand *zu ihrem
 Zeitpunkt* — sie werden nicht nachgeführt.
 
-Stand dieser Datei: **2026-09-13** **0.3.22-dev**
-(Kennfläche-UI + Kalibrier-Doku; Handoff für zweite Cursor-Instanz).
+Stand dieser Datei: **2026-09-13** **0.3.23-dev**
+(Kennfläche Live-Cursor Stufe×Kadenz; Handoff für zweite Cursor-Instanz).
 FTP-Karriere: [debug/UPDATE_FTP_CAREER.md](debug/UPDATE_FTP_CAREER.md).
 FTP-Builtins: [debug/UPDATE_FTP_BUILTINS.md](debug/UPDATE_FTP_BUILTINS.md).
 ZWO: [debug/UPDATE_ZWO_IMPORT.md](debug/UPDATE_ZWO_IMPORT.md).
@@ -39,7 +39,7 @@ ERG-Assist: [debug/UPDATE_ERG_SIM_ASSIST.md](debug/UPDATE_ERG_SIM_ASSIST.md).
 | [`docs/ergometer/KALIBRIERUNG.md`](docs/ergometer/KALIBRIERUNG.md) | **Aktuelle** Kennflächen-Tabelle + JSON |
 | [`docs/ergometer/README.md`](docs/ergometer/README.md) | Index der Kanondocs |
 | diese Datei §4–§5 | Offen / nächste Schritte |
-| `debug/RELEASE_v0.3.22.md` | Was in 0.3.22 steckt |
+| `debug/RELEASE_v0.3.23.md` | Was in 0.3.23 steckt |
 
 ### Erledigt (Auswahl 2026-09-13)
 - Bridge Exclusive / Resistance-Takeover / Fast-Ramp (0.3.14–17)
@@ -47,6 +47,7 @@ ERG-Assist: [debug/UPDATE_ERG_SIM_ASSIST.md](debug/UPDATE_ERG_SIM_ASSIST.md).
 - Nachtest 2 @ 80 rpm, Nachtest 3 `0x05` NO_EFFECT dokumentiert (0.3.20)
 - Ride-Steuerung Alltags-Labels (0.3.21)
 - Kennfläche Band-Labels + Live-Lernen-Status; Map-Doku (0.3.22)
+- Kennfläche Live-Cursor Stufe×Kadenz (0.3.23)
 - Entwicklerdoku konsolidiert
 
 ### Offen
@@ -70,7 +71,7 @@ ERG-Assist: [debug/UPDATE_ERG_SIM_ASSIST.md](debug/UPDATE_ERG_SIM_ASSIST.md).
 | Hub | `192.168.178.113:8093`, `fwType: ergo` |
 | Rollback-Bin | `nodes/esp32.ftmsprobe/dist/ftmsprobe.0.1.4.esp32s3.bin` |
 | Build-Host | Debian, `/home/martin/projects/esphub/esp32.ergo`, `pio` unter `/home/martin/.venvs/pio/bin/pio` |
-| Aktuelle Bin | `dist/ergo.0.3.22-dev.esp32s3.bin` |
+| Aktuelle Bin | `dist/ergo.0.3.23-dev.esp32s3.bin` |
 
 Die Entwurfs-Instanz auf Windows hat **nur git** — kein PlatformIO, keinen
 Compiler, kein Python. Sie kann nicht bauen und nicht testen. Bauen und Flashen
@@ -129,7 +130,8 @@ Kalibrierung 80 rpm: [debug/HW_TEST2_80RPM.md](debug/HW_TEST2_80RPM.md).
 
 Erledigt bis v0.1.1: Caps-Fix … Progression, UI-JS-Fix.
 Erledigt 2026-09-13: … Nachtest-Doku + Varon-Reseed 0.3.20;
-Ride-/Nachtest-UI 0.3.21; Kennfläche-UI + Kalibrier-Doku 0.3.22.
+Ride-/Nachtest-UI 0.3.21; Kennfläche-UI + Kalibrier-Doku 0.3.22;
+Live-Cursor Stufe×Kadenz 0.3.23.
 
 ## 6. Harte Regeln
 

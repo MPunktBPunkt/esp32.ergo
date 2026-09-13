@@ -202,6 +202,12 @@ tr.pick:hover td{color:var(--accent)}
   line-height:1.15;white-space:nowrap}
 .hm .e{background:#1A1F28}
 .hm .sw{box-shadow:inset 0 0 0 1px rgba(230,234,242,.55)}
+/* Live-Cursor: Stufe = Zeile, Kadenz = Spalte, Schnitt = Zielzelle */
+.hm .cur-row:not(.cur-cell){background-color:rgba(230,234,242,.06)!important}
+.hm .hd.cur-row,.hm .hd.cur-col{color:var(--fg);font-weight:700}
+.hm .cur-col:not(.cur-cell){box-shadow:inset 0 0 0 1px rgba(230,234,242,.22)}
+.hm .cur-cell{outline:2px solid var(--fg);outline-offset:-1px;position:relative;z-index:1}
+.hm .cur-cell.cur-ok{outline-color:var(--ok);box-shadow:0 0 10px rgba(76,175,99,.35)}
 .bar{height:6px;background:var(--edge);border-radius:3px;margin-top:16px;overflow:hidden}
 .bar i{display:block;height:100%;background:var(--accent);width:0;
   transition:width .4s linear}
@@ -809,8 +815,10 @@ footer{color:var(--dim);font-size:12px;text-align:center;margin-top:26px}
       </div>
       <div class="hm" id="hm"></div>
       <div class="hint flat">Zeilen = Stufen, Spalten = Kadenzband (z. B. <b>100–110</b>).
-        Helle Zellen = mehr Watt; heller Rand = Sweep-Stützstelle, sonst passiv gelernt.
-        Lernen: Stufe ≥20 s halten, rpm 40–119, Watt &gt; 0 — Status oben rechts.
+        Live-Markierung: aktuelle Stufe (Zeile) und Kadenz (Spalte); die Schnittzelle
+        zeigt, wohin der nächste Lernpunkt geht — grüner Rand = Lernen aktiv.
+        Helle Zellen = mehr Watt; heller Zellrand = Sweep, sonst passiv.
+        Stufe ± steht im Fahren-Dock; hier reicht die Markierung.
         Leere Zellen werden interpoliert, nicht erfunden.</div>
       <div class="row tight"><button id="mpr" class="ghost sm">Neu laden</button>
         <button id="mpc" class="danger sm">Fläche verwerfen</button></div>
@@ -1706,6 +1714,7 @@ function renderCalib(s){
   $('mpl').textContent=m.levels?((m.levelsCovered||0)+' von '+m.levels):'-';
   $('mpb').textContent=(m.bandsCovered!=null)?((m.bandsCovered||0)+' von 8'):'-';
   const pas=(c.passive)||{};
+  window.__lastCalib={pas:pas,m:m,sw:sw};
   const learnEl=$('mplearn'), learnSub=$('mplearnsub');
   if(learnEl){
     const why={
@@ -1728,10 +1737,43 @@ function renderCalib(s){
     if(pas.settleLeftMs) sub+=(sub?' · ':'')+'noch '+(pas.settleLeftMs/1000).toFixed(0)+' s';
     if(learnSub) learnSub.textContent=sub;
   }
+  updateHmCursor(pas,m,sw);
 
   if(m.points!=null&&m.points!==mpPts){
     if(mpPts>=0&&$('t-calib').classList.contains('on')) loadMap();
     mpPts=m.points;
+  }
+}
+
+/** Stufe = Zeile, Kadenzband = Spalte; Schnittzelle = wo gelernt wird. */
+function updateHmCursor(pas,m,sw){
+  const box=$('hm');
+  if(!box||!box.querySelector('[data-l],[data-b]')) return;
+  const step=m.stepTenths||10, min=(m.minTenths!=null)?m.minTenths:10;
+  let lt=(pas&&pas.levelTenths!=null)?pas.levelTenths:-1;
+  if(sw&&sw.running&&sw.levelTenths!=null&&sw.levelTenths>=0) lt=sw.levelTenths;
+  let li=-1;
+  if(lt!=null&&lt>=0&&step>0){
+    const off=lt-min;
+    if(off>=0&&off%step===0) li=off/step;
+  }
+  let bi=(pas&&pas.bandIdx!=null)?pas.bandIdx:-1;
+  if(bi<0&&pas&&pas.bandLo!=null){
+    const cadMin=(box.dataset.cadMin!=null)?(+box.dataset.cadMin):40;
+    const cadStep=(box.dataset.cadStep!=null)?(+box.dataset.cadStep):10;
+    bi=Math.round((pas.bandLo-cadMin)/cadStep);
+  }
+  box.querySelectorAll('.cur-row,.cur-col,.cur-cell,.cur-ok').forEach(el=>{
+    el.classList.remove('cur-row','cur-col','cur-cell','cur-ok');
+  });
+  if(li>=0) box.querySelectorAll('[data-l="'+li+'"]').forEach(el=>el.classList.add('cur-row'));
+  if(bi>=0) box.querySelectorAll('[data-b="'+bi+'"]').forEach(el=>el.classList.add('cur-col'));
+  if(li>=0&&bi>=0){
+    const cell=box.querySelector('[data-l="'+li+'"][data-b="'+bi+'"]');
+    if(cell){
+      cell.classList.add('cur-cell');
+      if(pas&&pas.accept) cell.classList.add('cur-ok');
+    }
   }
 }
 
@@ -1744,25 +1786,32 @@ function loadMap(){
       return;
     }
     box.style.gridTemplateColumns='30px repeat('+B+',1fr)';
+    box.dataset.cadMin=j.cadMin|0;
+    box.dataset.cadStep=j.cadStep|0;
     const W=j.w||[], N=j.n||[], S=j.s||[];
     let mx=0; W.forEach((v,i)=>{if(N[i]&&v>mx)mx=v});
     let h='<div class="hd"></div>';
     for(let b=0;b<B;b++){
       const lo=(j.cadMin|0)+(j.cadStep|0)*b, hi=lo+(j.cadStep|0);
-      h+='<div class="hd">'+lo+'–'+hi+'</div>';
+      h+='<div class="hd" data-b="'+b+'">'+lo+'–'+hi+'</div>';
     }
     // Hohe Stufen oben: die Flaeche soll sich wie ein Diagramm lesen.
     for(let l=L-1;l>=0;l--){
-      h+='<div class="hd">'+(l+1)+'</div>';
+      h+='<div class="hd" data-l="'+l+'">'+(l+1)+'</div>';
       for(let b=0;b<B;b++){
         const i=l*B+b;
-        if(!N[i]){h+='<div class="e"></div>';continue}
+        if(!N[i]){
+          h+='<div class="e" data-l="'+l+'" data-b="'+b+'"></div>';
+          continue;
+        }
         const a=mx?(0.18+0.82*W[i]/mx):0.6;
-        h+='<div class="'+(S[i]?'sw':'')+'" style="background:rgba(226,128,47,'
+        h+='<div class="'+(S[i]?'sw':'')+'" data-l="'+l+'" data-b="'+b+'" style="background:rgba(226,128,47,'
           +a.toFixed(2)+');color:'+(a>0.55?'#160B02':'#E6EAF2')+'">'+W[i]+'</div>';
       }
     }
     box.innerHTML=h;
+    // Cursor neu setzen, falls Status schon da ist (loadMap löscht DOM).
+    if(window.__lastCalib) updateHmCursor(window.__lastCalib.pas, window.__lastCalib.m, window.__lastCalib.sw);
   }).catch(e=>{$('mpmsg').className='msg err';$('mpmsg').textContent=''+e});
 }
 
