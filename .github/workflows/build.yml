@@ -19,6 +19,10 @@ jobs:
         run: pio test -e native
       - name: Fixture export roundtrip (6a)
         run: python tools/make-fixtures.py --verify-curated
+      - name: Doku-Links prüfen
+        run: |
+          pip install 'markdown>=3.5'
+          python tools/docs_html.py --check
 
   firmware:
     runs-on: ubuntu-latest

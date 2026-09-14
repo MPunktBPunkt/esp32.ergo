@@ -219,6 +219,12 @@ Fällt der Gurt aus, ist die richtige Reaktion je Person verschieden:
 | `reduce` | Stufe auf ein sicheres Niveau senken, warnen | **Vorgabe für Reha-Profile** |
 | `stop` | Session pausieren, Last weg | maximale Vorsicht |
 
+**Pulsquelle:** Für `HR_HOLD` und Reha-Deckel ist der **Gurt** (oder HR-Relay)
+die vorgesehene Quelle. Das Bike-HR-Feld in `0x2AD2` lag im Dual-Link-Lauf
+systematisch ≈ +25 bpm über dem Strap ([NACHTESTS.md](NACHTESTS.md) /
+ENTWICKLERDOKU). Die Firmware **sperrt** den Modus bei `hrSource=machine`
+derzeit **nicht** — wer Reha fährt, sollte den Gurt/Relay gekoppelt haben.
+
 ---
 
 ## 5. Workouts
@@ -359,7 +365,7 @@ Simulation/`0x11`, ERG-Assist und Gerätequirks. Hash auf versteckte Reiter
 fällt auf Ride zurück. Ab **0.3.21**: Ride-Modi mit Alltags-Labels, Ziel-Panel
 zum aktiven Modus, Start-Freigabe nach STOP sichtbar; Sim-Modus-Button nur mit
 Entwickler-UI. Nachtests in Kalibrierung gruppiert (`force` als Gefahr).
-Details: [UPDATE_UI_RIDE.md](../../debug/UPDATE_UI_RIDE.md).
+Details: [UPDATE_UI_RIDE.md](../../CHANGELOG.md).
 
 | Tab | Inhalt |
 |-----|--------|
@@ -390,25 +396,25 @@ keine eigenen Buttons.
 
 ## 8. Umsetzung
 
-Alles PROGMEM im `UiPages.h`-Muster der Familie, SSE für Live-Daten, Canvas für
-Charts, keine Fremdbibliotheken, keine Build-Kette. Das ist Vorgabe, weil die
-Schwesterprojekte es so machen und weil eine Firmware ohne Node-Toolchain
-gebaut werden können muss.
+**Entscheidung (Stand 0.1.2 / 0.3.x):** Die UI liegt als **gzip-PROGMEM** in der
+Firmware, nicht als Klartext-`UiPages.h` und nicht auf LittleFS.
 
-Das Budget dafür ist knapp — heartrate braucht für eine einfachere UI schon
-etwa 27 kB in `UiPages.h`. Konsequenzen:
+Pfad der Wahrheit:
 
-- Zonenfarben als CSS-Variablen, die ein einziger Zonenwechsel setzt. Kein
-  Farbwert mehrfach im Markup.
-- Die Seiten teilen Layout und Komponenten; Tabs werden clientseitig
-  umgeschaltet, nicht als getrennte Dokumente ausgeliefert.
-- Editor und Debug-Panel werden **nachgeladen**, nicht in die erste Seite
-  gepackt. Wer fährt, braucht sie nicht.
-- Fonts über CDN mit `system-ui` als Rückfall. Eine Firmware, die Schriften
-  ausliefert, ist keine Firmware.
+```
+web/index.html  →  tools/pack_ui.py  →  include/UiPagesGz.h  →  PROGMEM
+```
 
-Wenn das Budget nicht reicht, wandert die UI nach LittleFS statt in den Flash
-der Anwendung. Diese Entscheidung wird gemessen, nicht geraten.
+`platformio.ini` setzt `extra_scripts = pre:tools/pio_pack_ui.py`. Der
+Firmware-Build **braucht Python**. `src/web/UiPages.h` ist nur ein Stub, der
+`UiPagesGz.h` einbindet.
+
+Damit ist das Flash-Budget anders gelöst als im ursprünglichen Konzept
+(~33 kB gzip statt ~110 kB Klartext). LittleFS bleibt nur relevant, wenn die UI
+**ohne** Firmware-OTA austauschbar sein soll — nicht als Notlösung für Größe.
+
+Live-Daten: SSE. Charts: Canvas. Keine Fremd-UI-Bibliotheken. Eine Seite,
+clientseitige Tabs. Fonts über CDN mit `system-ui` als Rückfall.
 
 ---
 

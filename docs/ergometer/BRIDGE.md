@@ -1,10 +1,8 @@
 # Bridge — Rollen, Exklusiv-Steuerung, MyWhoosh
 
-Stand: **2026-09-13**, Firmware **0.3.17-dev**.
-Arbeitsnotiz Exclusive: [`debug/UPDATE_BRIDGE_EXCLUSIVE.md`](../../debug/UPDATE_BRIDGE_EXCLUSIVE.md).
-Resistance-Takeover: [`debug/UPDATE_BRIDGE_RESIST.md`](../../debug/UPDATE_BRIDGE_RESIST.md).
-Fast-Ramp: [`debug/UPDATE_BRIDGE_FAST_RAMP.md`](../../debug/UPDATE_BRIDGE_FAST_RAMP.md).
-Einstieg / Was läuft: [`STATE.md`](../../STATE.md).
+Stand: **2026-09-14**, Firmware **0.3.23-dev** (Regeln ab 0.3.14–0.3.17).
+Versionsgeschichte: [`CHANGELOG.md`](../../CHANGELOG.md).
+Einstieg: [`STATE.md`](../../STATE.md).
 
 Die Bridge macht aus dem Varon (nur Widerstandsstufen) einen FTMS-Trainer mit
 Wattziel für Apps wie MyWhoosh. Dieses Dokument hält die **Betriebsregeln**,
@@ -104,6 +102,16 @@ Limiter rampt Stufen nach oben max. 1 / ~2 s — große Gangsprünge fühlen sic
 träge an. **Ab 0.3.17:** Bridge-LEVEL nutzt temporär **500 ms**/Stufe und
 retry’t bis zum Ziel (`levelWantTenths` im Status). Coach/ERG bleiben bei 2 s.
 
+**ERG-Slew (`PowerController`, ab 0.3.15)** — Defaults im Header:
+
+| Parameter | Default | Bedeutung |
+|-----------|---------|-----------|
+| `periodMs` | 6000 | Regelzyklus |
+| `maxStepTenths` | 10 | max. ±1 Stufe pro Zyklus |
+| `retargetW` | 20 W | kleine MyWhoosh-Retargets ohne I-Reset / Sofortschreiben |
+
+Feintuning nach Bridge-Abnahme bleibt offen; Zahlen hier = Firmware-Defaults,
+nicht Messwerte.
 
 ---
 
@@ -114,7 +122,7 @@ Unverändert zur Bridge-MVP-Erweiterung:
 - `bridgeDifficultyPct` (50–150): skaliert App-Watt vor dem Regler
 - `bridgeHrSoft` / `bridgeHrMax` (0 = aus): Soft/Hard-Deckel nur auf Bridge-ERG
 
-Siehe auch [`debug/UPDATE_BRIDGE.md`](../../debug/UPDATE_BRIDGE.md).
+Siehe [`CHANGELOG.md`](../../CHANGELOG.md) Einträge 0.3.1 / 0.3.14–0.3.17.
 
 ---
 
@@ -128,4 +136,4 @@ Siehe auch [`debug/UPDATE_BRIDGE.md`](../../debug/UPDATE_BRIDGE.md).
 6. Difficulty / HR-Deckel optional prüfen
 
 Offen bleibt ggf. Feintuning der Slew-Parameter nach Bridge-Abnahme
-(siehe Firmware 0.3.15 / [UPDATE_ERG_SLEW](../../debug/UPDATE_ERG_SLEW.md)).
+(siehe Firmware 0.3.15 / [`CHANGELOG.md`](../../CHANGELOG.md)).

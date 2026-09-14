@@ -1,6 +1,6 @@
 # esp32.ergo
 
-![Version](https://img.shields.io/badge/version-0.1.0-green)
+![Version](https://img.shields.io/badge/version-0.3.23--dev-green)
 [![License: GPL v3](https://img.shields.io/badge/License-GPLv3-blue.svg)](https://www.gnu.org/licenses/gpl-3.0)
 [![Build](https://github.com/MPunktBPunkt/esp32.ergo/actions/workflows/build.yml/badge.svg)](https://github.com/MPunktBPunkt/esp32.ergo/actions/workflows/build.yml)
 [![Donate](https://img.shields.io/badge/Donate-PayPal-00457C.svg?logo=paypal)](https://www.paypal.com/donate/?business=martin%40bchmnn.de&currency_code=EUR)
@@ -8,14 +8,15 @@
 > **Trainingsrechner und BLE-Steuerung für das Ergometer Hammer Varon XTR II** — ERG-Emulation über die Widerstandsstufe, Pulsführung, Trainingszonen, Profile und Web-UI. Anbindung an [iobroker.esp-hub](https://github.com/MPunktBPunkt/iobroker.esp-hub).
 
 > [!NOTE]
-> **v0.1.0 (Coach) ist released.** Stand und Testergebnisse:
-> [`debug/RELEASE_v0.1.0.md`](debug/RELEASE_v0.1.0.md). Weiterarbeit beginnt bei
-> [`STATE.md`](STATE.md). Offen u. a. TestRunner, Flash-/UI-Budget, Bridge (v0.3).
+> Stand und offene Punkte: [`STATE.md`](STATE.md). Versionsgeschichte:
+> [`CHANGELOG.md`](CHANGELOG.md). Caps-Fix und „Erfolgsquittung beweist nichts“:
+> [`debug/UPDATE_CAPS_FIX.md`](debug/UPDATE_CAPS_FIX.md). Coach-Release v0.1.0:
+> [`debug/RELEASE_v0.1.0.md`](debug/RELEASE_v0.1.0.md).
 
 > [!TIP]
-> Stufenwirkung ist auf Hardware belegt (Journal WORKS, 0 Widersprüche). Caps-Fix
-> und die Regel „Erfolgsquittung beweist nichts“ bleiben Pflichtlektüre:
-> [`debug/UPDATE_CAPS_FIX.md`](debug/UPDATE_CAPS_FIX.md).
+> Technische Gesamtschau: [`docs/ergometer/ENTWICKLERDOKU.md`](docs/ergometer/ENTWICKLERDOKU.md).
+> Bridge: [`docs/ergometer/BRIDGE.md`](docs/ergometer/BRIDGE.md). Kennfläche:
+> [`docs/ergometer/KALIBRIERUNG.md`](docs/ergometer/KALIBRIERUNG.md).
 
 ---
 
@@ -70,14 +71,16 @@ Kadenztest leicht bestätigt.
 - **Web-UI:** Ride (Tablet), Bibliothek, Schritt-Editor, Tests-Stubs, Verlauf, Debug
 - Session-Archiv, Hub-Heartbeat `fwType: ergo`, OTA in beide Richtungen
 
-### v0.2 — Trainingslehre
+### v0.2 — Trainingslehre *(teilweise schon in 0.1)*
 
-Echter TestRunner (MAP / 20 min / Recovery), Interval-/Rampen-Editor, Ghost,
-LittleFS-UI falls Flash-Budget es erzwingt.
+Echter TestRunner (MAP / 20 min / Recovery), Interval-/Rampen-Editor, Ghost —
+teilweise mitgeliefert; siehe CHANGELOG.
 
-### v0.3 — Bridge
+### v0.3 — Bridge *(MVP ab 0.3.0-dev)*
 
-FTMS-Peripheral mit aufgewertetem Feature-Satz: MyWhoosh verbindet sich mit dem ESP32 statt mit dem Bike und bekommt ein echtes Wattziel, das die Firmware in Stufen übersetzt. Ab 0.3.14: **Observer vs. Controller** und Exklusiv-Lock, damit Coach und App nicht parallel regeln — siehe [`docs/ergometer/BRIDGE.md`](docs/ergometer/BRIDGE.md).
+FTMS-Peripheral: MyWhoosh verbindet sich mit dem ESP statt mit dem Bike.
+Ab 0.3.14: Observer vs. Controller und Exklusiv-Lock — siehe
+[`docs/ergometer/BRIDGE.md`](docs/ergometer/BRIDGE.md).
 
 ---
 
@@ -157,70 +160,79 @@ Heartbeat-Feld `fwType`: **`ergo`**
 
 ## API (Auswahl)
 
-Die Oberfläche hat die zehn Reiter aus [WEBINTERFACE.md](docs/ergometer/WEBINTERFACE.md) §7 — **Ride, Workouts, Tests, Verlauf, Profile, Geräte, Kalibrierung, Debug, Einstellungen, OTA**. Sechs davon tragen Inhalt, vier sind Platzhalter mit Zielversion. Ohne JavaScript zeigt die Seite alle Abschnitte untereinander und das OTA-Formular sendet native; diese Seite ist der Rückweg nach einem Fehlflash und darf nicht an einem Skriptfehler hängen.
+Die Oberfläche hat die Reiter aus [WEBINTERFACE.md](docs/ergometer/WEBINTERFACE.md)
+§7 (Betrieb + optional Entwickler-UI). Ohne JavaScript: Abschnitte untereinander
+und natives OTA-Formular — Rückweg nach Fehlflash.
 
-Erreichbar sind bisher die Shell (`/`, `/ota`, `/ota-upload`, `/api/status`, `/api/config/get` `/save`, `/api/system/restart`, `/events`), die BLE-Endpunkte (`/api/ble/scan/start` `/stop`, `/api/ble/devices`, `/api/ble/connect` `/disconnect` `/forget` `/reconnect`), die Handsteuerung (`/api/control/request` `/reset` `/start` `/stop` `/level` `/power`) die Kalibrierung (`/api/calib/sweep/start` `/stop`, `/api/calib/map`, `/api/calib/clear`) und der Debug-Modus (`/api/debug/ring`, `/api/debug/clear`, `/api/debug/export`).
+Vollständige Routenliste aus `src/app/App.cpp` (66 `server.on`-Pfade plus
+`/ota-upload` über die vierargumentige Form). Thematisch:
 
-| Endpoint | Funktion |
-|----------|----------|
-| `GET /api/status` | Gesamtstatus, Live-Werte, Session |
-| `GET /api/history` | Chart-Historie |
-| `GET /api/ble/devices` · `POST /api/ble/scan/start` `/stop` | Scan |
-| `POST /api/ble/connect` `/disconnect` `/remember` `/forget` | Verbindung |
-| `POST /api/control/mode` | `off` / `level` / `erg` / `hr` / `workout` / `sim` |
-| `POST /api/control/target` · `POST /api/control/stop` | Zielwert, Not-Stop |
-| `POST /api/calib/sweep/start` `/stop` | Geführter Stufen-Sweep |
-| `GET /api/calib/map` · `POST /api/calib/clear` | Kennfläche Stufe × Kadenz → Watt |
-| `GET/POST /api/profile/list` `/get` `/put` `/select` | Profile |
-| `GET/POST /api/workout/list` `/load` `/start` `/pause` `/skip` | Programme |
-| `POST /api/workout/put` · `GET /api/workout/download` `/validate` | Editor (v0.2) |
-| `GET/POST /api/test/list` `/start` `/result` `/accept-ftp` | Geführte Tests (v0.2) |
-| `GET/POST /api/calib/…` | Kennfläche, Sweep |
-| `POST /api/debug/ring` `/clear` | Mitschnitt ein/aus, Ausdünnung, leeren |
-| `GET /api/debug/export` | NDJSON-Rohbytes im Sondenformat — direkt als Fixture verwertbar |
-| `GET/POST /api/config/get` `/save` | Config |
-| `/events` | SSE (Live-Updates) |
+| Gruppe | Endpunkte |
+|--------|-----------|
+| Shell | `GET /` · `GET /ota` · `POST /ota-upload` · `GET /api/status` · `GET/POST /api/config/get` `/save` · `POST /api/system/restart` · `GET /events` |
+| BLE | `/api/ble/scan/start` `/stop` · `/api/ble/devices` · `/api/ble/connect` `/disconnect` `/forget` `/reconnect` |
+| Steuerung | `/api/control/mode` `/level` `/power` `/hr` `/reha` `/sim` `/request` `/reset` `/start` `/stop` |
+| Kalibrierung | `/api/calib/sweep/start` `/stop` · `/api/calib/map` · `/api/calib/clear` |
+| Profile | `/api/profile/list` `/get` `/put` `/select` `/delete` |
+| Workouts | `/api/workout/list` `/put` `/download` `/validate` `/start` `/pause` `/resume` `/skip` `/stop` `/favorite` `/import` `/tags` |
+| Tests | `/api/test/result` `/accept-ftp` |
+| Session | `/api/session/list` `/last` `/annotate` |
+| Bridge | `GET/POST /api/bridge` |
+| Geräte | `/api/devices` · `/api/device` |
+| FTP-Karriere | `/api/ftp-career` `/accept` `/decline` `/set` |
+| Progression | `/api/progression/get` `/accept` `/decline` |
+| Probe/Debug | `/api/probe/arm` `/clear` `/mark` · `/api/debug/ring` `/clear` `/export` |
+
+Nachtests nutzen die **Probe-API** (`/api/probe/*`) und den Debug-Export — siehe
+[NACHTESTS.md](docs/ergometer/NACHTESTS.md) und ENTWICKLERDOKU.
 
 ---
 
 ## Build und Tests
 
 ```bash
-pio run -e ergo              # Firmware für den S3
-pio test -e native           # Codec und Limiter auf dem Host
+pio run -e ergo              # Firmware für den S3 (braucht Python für UI-Pack)
+pio test -e native           # Hosttests der Arduino-freien Bausteine
+python tools/docs_html.py --check   # Doku-Links
 ```
 
-Zwei Hostsuiten: `test_codec` prüft den FTMS-Decoder gegen die aufgezeichneten Pakete, `test_limiter` die Sicherheitsschicht — Whitelist, Klemmen, Rasterung, Rampe und Deadman.
+**23** Hostsuiten, **240** `RUN_TEST`-Fälle (`grep -rc '^\s*RUN_TEST(' test/`).
+Die Positivliste steht in `platformio.ini` `[env:native]`.
 
-Beide Bausteine sind bewusst frei von Arduino, NimBLE und Zustand; der Limiter bekommt sogar die Zeit als Parameter statt `millis()` zu lesen. Bei einer Komponente, die verhindern soll, dass ein Ergometer unter einem Menschen stehen bleibt, ist ein Test der echten Logik kein Luxus.
-
-> In `platformio.ini` gibt es bewusst **keine** `[env]`-Sektion: PlatformIO vererbt sie an jedes Environment, womit `env:native` das `framework = arduino` samt Boardpflicht mitbekäme. Gemeinsame Werte stehen in `[common]` und werden explizit referenziert. Die Sollwerte der Fixtures stammen aus `tools/ftms.py` der Sonde, also aus einer unabhängigen zweiten Implementierung — sonst prüfte der Test sich selbst.
-
-Vollständigen Fixture-Satz erzeugen:
+> Keine `[env]`-Sektion in `platformio.ini` (sonst erbt `env:native` Arduino).
+> Fixture-Sollwerte: `tools/ref/ftms.py` (unabhängige Referenz).
 
 ```bash
-# Stichprobe aus Debug-Export (Abnahme 6a) — CI und lokal:
 python tools/make-fixtures.py --verify-curated
-
-# Optional voller Laborlauf (schreibt Temp-Header; fixtures_ibd.h nur mit --write-curated):
+# Optional Laborlauf (Monorepo-Nachbar):
 python tools/make-fixtures.py --scan ../nodes/esp32.ftmsprobe/docs/ergometer/scan-20260910
 ```
 
-`test/test_codec/fixtures_synth.h` wird davon **nicht** überschrieben. Es deckt die Feldkombinationen ab, die der Varon nie sendet: über 832 aufgezeichnete Pakete hinweg schickt das Gerät ausschließlich `flags = 0x0B54` mit 19 Byte. Ohne die konstruierten Pakete hätte man einen Varon-Decoder statt eines FTMS-Decoders.
+Drei Paketzahlen (nicht vermischen): Labor-Zusammenfassung **274**, eindeutige
+`0x2AD2`-Hexes **383**, eingecheckter Kernsatz **5** (`fixtures_ibd.h`, CI
+`--verify-curated`). `fixtures_synth.h` deckt Feldkombinationen ab, die der
+Varon nie sendet (nur `flags = 0x0B54` / 19 Byte im Laborlauf).
 
 ---
 
 ## Docs
 
-Die Planungsunterlagen liegen unter [`docs/ergometer/`](docs/ergometer/):
-
 | Dokument | Inhalt |
 |----------|--------|
-| [PFLICHTENHEFT.md](docs/ergometer/PFLICHTENHEFT.md) | Zielbild, Steuerung, Regelung, Versionen — Revision 4 |
-| [WEBINTERFACE.md](docs/ergometer/WEBINTERFACE.md) | Designkonzept der Web-UI: Zonen, Profile, Editor, Tests |
-| [GERAETEPROFIL.md](docs/ergometer/GERAETEPROFIL.md) | was am Gerät gemessen wurde, inkl. Abweichungen vom Standard |
-| [NACHTESTS.md](docs/ergometer/NACHTESTS.md) | sechs offene Messungen mit Kommandos und Entscheidungslogik |
-| [BLE-SCAN.md](docs/ergometer/BLE-SCAN.md) | Vorgehen beim Erkunden eines unbekannten Geräts |
+| [STATE.md](STATE.md) | lebender Stand, Offen, harte Regeln |
+| [CHANGELOG.md](CHANGELOG.md) | Versionsgeschichte |
+| [ENTWICKLERDOKU.md](docs/ergometer/ENTWICKLERDOKU.md) | Technik, Persistenz, Sicherheit, Regelung |
+| [PFLICHTENHEFT.md](docs/ergometer/PFLICHTENHEFT.md) | Konzept |
+| [GERAETEPROFIL.md](docs/ergometer/GERAETEPROFIL.md) | gemessenes Gerät |
+| [KALIBRIERUNG.md](docs/ergometer/KALIBRIERUNG.md) | Kennfläche |
+| [BRIDGE.md](docs/ergometer/BRIDGE.md) | Bridge-Betrieb |
+| [NACHTESTS.md](docs/ergometer/NACHTESTS.md) | Nachtests (Test 6 offen) |
+| [WEBINTERFACE.md](docs/ergometer/WEBINTERFACE.md) | UI-Design |
+| [BEDIENUNG.md](docs/ergometer/BEDIENUNG.md) | kurze Bedienung |
+| [BLE-SCAN.md](docs/ergometer/BLE-SCAN.md) | Scan-Vorlage |
+
+HTML-Handbuch erzeugen: `python tools/docs_html.py` → `docs/HANDBUCH.html`
+(nicht eingecheckt).
 
 ---
 

@@ -1,24 +1,27 @@
-# debug/ — Handoff zwischen Cursor-Instanzen
+# debug/ — Messungen, Archiv, Werkzeuge
 
-> **Der Einstiegspunkt ist [`STATE.md`](../STATE.md) im Wurzelverzeichnis**, nicht
-> diese Datei. Dort steht der aktuelle Stand, der eine offene Beweis und die
-> nächsten Schritte.
+> Einstieg: [`STATE.md`](../STATE.md). Kanondocs: [`docs/ergometer/`](../docs/ergometer/).
+> Changelog: [`CHANGELOG.md`](../CHANGELOG.md).
 >
-> Alles hier sind **Protokolle einzelner Arbeitsschritte**. Sie beschreiben den
-> Stand zu ihrem Zeitpunkt und werden nicht nachgeführt. Wer sie als Anweisung
-> liest, fängt drei Schritte zu früh an.
+> Die ehemaligen kurzen `UPDATE_*.md`-Notizen stecken im Changelog und in den
+> Kanondocs. Erledigte Aufträge liegen unter [`archiv/`](archiv/).
 
-| Datei | Inhalt | Stand |
-|-------|--------|-------|
-| **[UPDATE_CAPS_FIX.md](UPDATE_CAPS_FIX.md)** | **`caps.wide`-Fix, Debug-Modus, Steuer-Journal, Kopierliste** | **jüngste Übergabe** |
-| [HW_TEST_REPORT.md](HW_TEST_REPORT.md) | Hardware-Session 2026-09-11 auf `.88` | Protokoll |
-| [UPDATE_BLE.md](UPDATE_BLE.md) | BLE-Update, Buildzahlen, Checkliste | Protokoll |
-| [UPDATE_CONNECTIVITY.md](UPDATE_CONNECTIVITY.md) | Shell und erstes OTA | erledigt |
-| [TODO_PFLICHTENHEFT.md](TODO_PFLICHTENHEFT.md) | Auftrag BLE-Fundament | Schritte 1–4 erledigt |
-| [TODO_WIFI_OTA.md](TODO_WIFI_OTA.md) | Connectivity-Auftrag | erledigt |
-| [UPDATE_LIMITER.md](UPDATE_LIMITER.md) | Limiter-Build | Protokoll |
-| [FIRST_BUILD.md](FIRST_BUILD.md) | erster Codec-Build | Protokoll |
-| [PLATFORMIO_FIX.md](PLATFORMIO_FIX.md) | `[common]` und Native-Tests | weiterhin gültige Falle |
-| [RECOMMENDATIONS.md](RECOMMENDATIONS.md) | Kurz-Prioritäten | ersetzt durch `STATE.md` §5 |
-| [commands.sh](commands.sh) | Build- und Testbefehle | — |
-| **[HW_NACHTEST_20260913.md](HW_NACHTEST_20260913.md)** | Nachtests 3–5, Sim, Reconnect, Dual-HR | **2026-09-13** |
+| Datei | Rolle |
+|-------|--------|
+| [RELEASE_v0.1.0.md](RELEASE_v0.1.0.md) | Release + Messwerte Coach |
+| [UPDATE_CAPS_FIX.md](UPDATE_CAPS_FIX.md) | Caps-Fix, Journal-Lektion |
+| [UPDATE_FIXTURE_6A.md](UPDATE_FIXTURE_6A.md) | Abnahme 6a / CI curated |
+| [PLATFORMIO_FIX.md](PLATFORMIO_FIX.md) | harte Falle `[env]` — weiterhin gültig |
+| [HW_TEST1_60RPM.md](HW_TEST1_60RPM.md) | Sweep 60 rpm |
+| [HW_TEST2_80RPM.md](HW_TEST2_80RPM.md) | Sweep 80 rpm |
+| [HW_TEST2_LIGHT.md](HW_TEST2_LIGHT.md) | Vorläufer 80 rpm |
+| [HW_NACHTEST_20260913.md](HW_NACHTEST_20260913.md) | Nachtest 4/5/Reconnect |
+| [UPDATE_NACHTEST_RESULTS.md](UPDATE_NACHTEST_RESULTS.md) | Nachtest 3 am Draht |
+| [TODO_DOKUMENTATION.md](TODO_DOKUMENTATION.md) | Auftrag Doku-Aufräumen (2026-09-14) |
+| [commands.sh](commands.sh) | Build-/Test-Befehle |
+| [captures/](captures/) | Rohmitschnitte — siehe captures/README |
+| [calib/](calib/) | Powermap-Snapshots — siehe calib/README |
+| [archiv/](archiv/) | erledigte Aufträge/Protokolle |
+
+Nach dem Aufräumen: **13 Markdown-Dateien** hier (inkl. TODO und README), plus
+Archiv und Rohdaten.

@@ -67,7 +67,12 @@ supports_hr_target        = false
 **Das ist der wichtigste Befund des ganzen Laufs.** Es gibt kein
 Set-Target-Power. Klassisches ERG über Opcode `05` ist nicht vorgesehen, und
 passend dazu fehlt `2AD8`. Produktiv bleibt `0x05` gesperrt; Draht-Nachtest
-nur über bewussten Limiter-Bypass (`allowUntrustedPower` / `force=1`).
+nur über bewussten Limiter-Bypass:
+`POST /api/control/power?watt=100&raw=1&force=1` setzt `allowUntrustedPower`
+**nur für diesen Write** und stellt ihn zurück (Verdict weiter `Clamp` /
+`UNTRUSTED`). Ohne `force` bleibt Deny. Details historisch:
+[`debug/archiv/UPDATE_NACHTEST_FORCE.md`](../../debug/archiv/UPDATE_NACHTEST_FORCE.md).
+Nach einem Test den Bypass nicht dauerhaft anlassen.
 
 ## 4. Stellgröße — `2AD6` = `0A00A0000A00`
 
@@ -129,7 +134,7 @@ keine Antwort.
 |----------|---------|----------|
 | `00` Request Control | `80 00 01` | Success — Steuerung offen |
 | `07` Start/Resume | `80 07 01` | Success |
-| `05 64 00` Target Power 100 W | `80 05 01` | Success **ohne Wirkungsbeleg** |
+| `05 64 00` Target Power 100 W | `80 05 01` | Success, **NO_EFFECT** (2026-09-13, `force=1` — [UPDATE_NACHTEST_RESULTS.md](../../debug/UPDATE_NACHTEST_RESULTS.md)) |
 | `04 0A` Resistance uint8 | `80 04 01` | Success, **keine Wirkung** |
 | `04 64 00` Resistance sint16 | `80 04 01` | Success, **wirkt** |
 | `08 01` Stop | `80 08 01` | Success |
@@ -147,11 +152,15 @@ auch `05`, das es laut Feature-Bits nicht kann. Success ist kein Wirkungsbeleg.
 
 ---
 
-## 7. Nachrechnung der Wirkungsmessung
+## 7. Nachrechnung der Wirkungsmessung *(Ursprung von ControlJournal)*
+
+> **Historisch** — Laborlauf 2026-09-10. Dieser Abschnitt erklärt, *warum*
+> `ControlJournal` Watt pro Kadenz bewertet. Stand der Kennfläche und der
+> Encoding-Frage: siehe Abschluss unten und [KALIBRIERUNG.md](KALIBRIERUNG.md).
 
 Die Sonde hat drei Vorher/Nachher-Fenster von je 12 s gemessen. Ihr
-automatisches Urteil lautet dreimal „wirkt". Zwei davon halten der Prüfung
-nicht stand, weil die Verdict-Logik die Kadenz nicht herausrechnet.
+automatisches Urteil lautete dreimal „wirkt". Zwei davon hielten der Prüfung
+nicht stand, weil die Verdict-Logik die Kadenz nicht herausrechnete.
 
 | # | Kommando | Power vor→nach | Kadenz vor→nach | Belastbar? |
 |---|----------|----------------|-----------------|------------|
@@ -159,46 +168,61 @@ nicht stand, weil die Verdict-Logik die Kadenz nicht herausrechnet.
 | 2 | `04 0A` | 10,6 → 24,3 W | 25,7 → **58,1** rpm | **Nein.** Die Kadenz hat sich mehr als verdoppelt. Bei ~59 rpm lag die Leistung vorher (Test 3) bei 24,9 W und im Ruhefenster bei 25,3 W — also unverändert. Der Write hat nichts getan. |
 | 3 | `04 64 00` | 24,9 → **88,9** W | 59,1 → **51,2** rpm | **Ja.** Leistung +64 W, obwohl die Kadenz um 8 rpm *fiel*. Eindeutig. |
 
-Damit steht die Encoding-Frage auf **einem** sauberen Datenpunkt. Das Ergebnis
-ist plausibel, aber dünn.
+Damals stand die Encoding-Frage auf **einem** sauberen Datenpunkt — plausibel,
+aber dünn.
 
 Nebenbei erklärt sich Test 2 elegant: erwartet das Gerät sint16 und bekommt ein
 Byte, dann ist der Wert entweder ungültig oder er liest sich als roh 10 =
 Stufe **1,0** — dem Minimum. Beide Deutungen sagen „keine Änderung gegenüber
 Grundlast", und genau das wurde gemessen.
 
-**Konsequenz für Nachtests:** Ein Wirkungsurteil darf nur zählen, wenn die
-Kadenz in beiden Fenstern stabil ist. Besser noch: nicht Leistung vergleichen,
-sondern Leistung *pro Kadenz*.
+**Damalige Forderung:** Ein Wirkungsurteil darf nur zählen, wenn die Kadenz in
+beiden Fenstern stabil ist — besser Leistung *pro Kadenz* statt Leistung allein.
 
-## 8. Das Leistungsraster — die offene Kernfrage
+**Stand:** Die Encoding-Frage ist entschieden (`04` sint16 wirkt; siehe Sweeps
+in §8 und §9). Die Forderung ist umgesetzt in
+`src/control/ControlJournal.{h,cpp}` und in der Kennfläche
+([KALIBRIERUNG.md](KALIBRIERUNG.md): 62 Zellen belegt, Sweeps bei 60 und 80 rpm).
 
-Aus den belastbaren Punkten:
+## 8. Das Leistungsraster — gemessen und entschieden
 
-| Stufe | Leistung | Kadenz |
-|-------|----------|--------|
-| Grundlast (≈ 1,0) | 25 W | 59 rpm |
-| 10,0 | 89 W (77–108) | 51 rpm |
+**Stand:** Variante 3 (Kadenz) trifft zu — bei fester Stufe steigt die Leistung
+mit der Kadenz. Zusätzlich liegt die Kurve bei 60 rpm **über** der frühen
+linearen Extrapolation (~130 W): Stufe 16 liefert ~170 W @ 60 rpm und ~245 W
+@ 80 rpm. Quellen: [HW_TEST1_60RPM.md](../../debug/HW_TEST1_60RPM.md),
+[HW_TEST2_80RPM.md](../../debug/HW_TEST2_80RPM.md). `0x11` ist Option für
+feinere Last und Spitzen, nicht mehr Pflicht gegen einen Deckel bei ~130 W.
 
-Neun Stufen ergeben +64 W, also grob **7 W pro Stufe**. Linear extrapoliert
-landet Stufe 16,0 bei etwa **130 W**.
+### Belastbare Punkte
 
-Das wäre ein Problem. Das Bike ist für 20–400 W ausgelegt, aber über den
-FTMS-Widerstandskanal wären dann nur rund 130 W erreichbar — zu wenig für
-alles oberhalb von Grundlagentraining.
+| Stufe | Leistung | Kadenz | Quelle |
+|-------|----------|--------|--------|
+| Grundlast (≈ 1,0) | 25 W | 59 rpm | Labor 2026-09-10 (§7, Punkt 3 Ruhefenster / Grundlast) |
+| 10,0 | 89 W (77–108) | 51 rpm | Labor 2026-09-10 (§7, `04 64 00`) |
+| 2,0 … 16,0 | 30,7 … **170,2 W** | ~60 rpm | Sweep 2026-09-11 — [HW_TEST1_60RPM.md](../../debug/HW_TEST1_60RPM.md) |
+| 16,0 | **244,6 W** (~245 W) | ~82 rpm | Sweep 2026-09-13 — [HW_TEST2_80RPM.md](../../debug/HW_TEST2_80RPM.md) |
+| 8,0 | 122,9 W | ~79 rpm | dieselbe Quelle; leicht: 122,7 W — [HW_TEST2_LIGHT.md](../../debug/HW_TEST2_LIGHT.md) |
 
-Drei Möglichkeiten, und nur eine Messung entscheidet:
+Sweep 60 rpm (gültig): Stufe 2→16 in Zweistufenschritten ca. **+20 W** je Schritt,
+nahezu linear bis 170,2 W ([HW_TEST1_60RPM.md](../../debug/HW_TEST1_60RPM.md)).
 
-1. Die Kennlinie ist **progressiv** (bei Magnetbremsen üblich) und Stufe 16
-   liegt deutlich höher als die Extrapolation.
-2. Die Kennlinie ist **linear** und der Widerstandskanal deckelt bei ~130 W.
-   Dann ist `0x11` Simulation der einzige Weg zu höheren Lasten.
-3. Die Leistung hängt doch **stark von der Kadenz** ab. Dann wird bei 90 rpm
-   dieselbe Stufe deutlich mehr Watt liefern, und das Raster reicht weiter als
-   gedacht.
+### Historisch: die offene Extrapolation (vor den Sweeps)
 
-Variante 3 ist nach der Bedienungsanleitung die wahrscheinlichste — siehe §11.
-Der Sweep in [NACHTESTS.md](NACHTESTS.md) misst es nach.
+Aus den beiden Laborpunkten Grundlast 25 W und Stufe 10 ≈ 89 W: neun Stufen
+ergaben +64 W, grob **7 W pro Stufe**. Linear extrapoliert landete Stufe 16,0
+bei etwa **130 W**. Das wirkte wie ein Problem — zu wenig für alles oberhalb
+von Grundlage — und machte `0x11` zeitweise zur Pflicht-Kandidatin.
+
+Drei Möglichkeiten standen damals offen:
+
+1. Kennlinie **progressiv**, Stufe 16 deutlich über der Extrapolation.
+2. Kennlinie **linear**, Deckel ~130 W → `0x11` einziger Weg zu höheren Lasten.
+3. Leistung hängt **stark von der Kadenz** ab (Fläche Stufe×Kadenz).
+
+Variante 3 war nach der Bedienungsanleitung die wahrscheinlichste (§11) und
+ist gemessen bestätigt; die 60-rpm-Kurve liegt zudem über der ~130-W-
+Extrapolation. Deshalb ist `0x11` heute Option, nicht Pflicht — siehe
+[NACHTESTS.md](NACHTESTS.md) Test 1 und 2.
 
 ## 9. Offen / nachgeführt (Stand 2026-09-13 Abend)
 
@@ -251,9 +275,8 @@ Power — die Maschine kennt kein Wattziel, ihr Programm kennt eines.
 
 Zweitens, und das ist die Konsequenz für uns: bei **fester** Stufe steigt die
 Leistung mit der Kadenz. Die Kennlinie Stufe → Watt ist damit keine Tabelle,
-sondern eine Fläche über Stufe und Kadenz. Variante 3 aus §8 ist die
-wahrscheinliche, und Test 2 der Nachtests wird das voraussichtlich bestätigen
-statt widerlegen.
+sondern eine Fläche über Stufe und Kadenz. Variante 3 aus §8 ist gemessen
+bestätigt ([NACHTESTS.md](NACHTESTS.md) Test 2).
 
 Der positive Teil daran: `PowerController` in `esp32.ergo` macht dann genau
 das, was die Konsole intern auch macht. Das Verfahren ist vom Hersteller

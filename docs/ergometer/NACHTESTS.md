@@ -1,35 +1,19 @@
-# Nachtests — vor `esp32.ergo` v0.1
+# Nachtests — Ergebnisse (eine Zeile offen)
 
 Der erste Lauf hat FTMS bestätigt (siehe [GERAETEPROFIL.md](GERAETEPROFIL.md)).
-Sechs Fragen sind offen, und zwei davon bestimmen, ob v0.1 überhaupt
-sinnvoll gebaut werden kann.
+**Fünf der sechs Fragen sind beantwortet.** Test 6 (Crash unter Last) ist offen.
+Das Repo `esp32.ergo` existiert; **v0.1.0** ist released. Die Messungen unten
+laufen über die Ergo-Firmware (Kalibrier-Reiter / Probe-API), nicht mehr über
+die Sonde allein.
 
-Reihenfolge ist bewusst: Test 1 und 2 zuerst, alles andere danach.
-
-> **Was sich seit dem Schreiben dieser Datei geändert hat.** Die
-> `probe-run.py`-Kommandos unten beschreiben noch die Sonde. Gefahren werden die
-> Tests inzwischen mit `esp32.ergo` selbst:
->
-> - **Test 1 und 2** laufen über den Reiter **Kalibrierung**. Der `SweepRunner`
->   hält Einschwingzeit und Mittelungsfenster ein, verwirft Punkte mit
->   weggelaufener Kadenz *und weist sie als verworfen aus*, und legt das Ergebnis
->   als Kennfläche persistent ab. Der Abschnitt „Bug in der Wirkungsauswertung"
->   am Ende dieser Datei ist damit in Code gegossen und nicht mehr
->   Menschendisziplin.
-> - Die **Guard-Tabelle** unter „Vorbereitung" betrifft die Sonde. In `esp32.ergo`
->   übernimmt der `Limiter` diese Rolle; `guardAllowSim` entspricht dort der noch
->   fehlenden Freigabe für `0x11`.
-> - **Vier der sechs Tests brauchen keinen Fahrer** — welche, steht in
->   [`STATE.md`](../../STATE.md) §4.
-> - Vorher steht allerdings ein Beweis, den diese Datei noch nicht kennt: dass
->   eine gestellte Stufe überhaupt wirkt. Die erste Hardware-Session hat lauter
->   Erfolgsquittungen ohne Wirkung gesehen. `STATE.md` §2 und §3.
+Reihenfolge der Planung war: Test 1 und 2 zuerst — beide sind gelaufen.
 
 ---
 
 ## Vorbereitung
 
-Die Labor-Defaults der Sonde stehen dem Sweep im Weg:
+Die Labor-Defaults der Sonde standen dem Sweep im Weg (historisch für die
+Sonden-Kommandos unten):
 
 | Guard | Default | Für die Tests |
 |-------|---------|---------------|
@@ -38,13 +22,15 @@ Die Labor-Defaults der Sonde stehen dem Sweep im Weg:
 | `guardAllowSim` | false | für Test 4 auf true |
 | `guardDeadmanS` | 20 | bleibt — der Runner hält Keepalive |
 
+In `esp32.ergo` übernimmt der `Limiter` diese Rolle; `allowSimulation` ist die
+Freigabe für `0x11` (am 2026-09-13 benutzt).
+
 MyWhoosh, Kinomap und nRF Connect schließen. Das Konsolendisplay bleibt
-während der Messung aus, die Live-Werte stehen im Sonden-UI.
+während der Messung aus.
 
 Und der Punkt, der alle Messungen trägt: **gleichmäßig treten und die Kadenz
-halten**. Zwei der drei Wirkungsmessungen des ersten Laufs sind wertlos, weil
-die Kadenz weggelaufen ist. Ein Metronom oder die Kadenzanzeige im Sonden-UI
-hilft mehr als gutes Zureden.
+halten**. Zwei der drei Wirkungsmessungen des ersten Laufs waren wertlos, weil
+die Kadenz weggelaufen ist.
 
 ---
 
@@ -63,17 +49,18 @@ tools/probe-run.py --host <ip> control --level 1
 **Zu protokollieren:** je Stufe die mittlere Leistung, die mittlere Kadenz und
 die Streuung. Ohne stabile Kadenz ist der Punkt ungültig.
 
-**Gemessen:** [HW_TEST1_60RPM.md](../../debug/HW_TEST1_60RPM.md),
-[HW_TEST2_LIGHT.md](../../debug/HW_TEST2_LIGHT.md),
-[HW_TEST2_80RPM.md](../../debug/HW_TEST2_80RPM.md). Wattziel-Draht:
-[UPDATE_NACHTEST_RESULTS.md](../../debug/UPDATE_NACHTEST_RESULTS.md).
+> **Ergebnis** (2026-09-11,
+> [HW_TEST1_60RPM.md](../../debug/HW_TEST1_60RPM.md)):
+> 8 von 9 Punkten gültig. Stufe 16,0 bei 60 rpm: **Mittel 170,2 W**
+> (Δ je zwei Stufen ca. +20 W, nahezu linear). Band **130–200 W** —
+> Widerstandskanal trägt Grundlage und Intervalle bis Schwelle.
 
 **Erwartung und Entscheidung:**
 
 | Ergebnis bei Stufe 16 | Folge |
 |-----------------------|-------|
 | deutlich über 200 W | Bester Fall. Widerstandskanal trägt v0.1 vollständig. |
-| 130–200 W | Reicht für Grundlage und Intervalle bis Schwelle. Höhere Lasten über `0x11`. |
+| **130–200 W** ← **gemessen (~170 W @ 60 rpm)** | Reicht für Grundlage und Intervalle bis Schwelle. Höhere Lasten über `0x11`. |
 | um 130 W (lineare Extrapolation) | Widerstandskanal deckelt. `0x11` wird Pflicht, nicht Option. |
 
 ## Test 2 — Kadenzabhängigkeit
@@ -89,13 +76,20 @@ der Widerstand." Das beworbene „drehzahlunabhängig" ist also eine Eigenschaft
 des **Konsolenprogramms**, nicht der Stufen. Bei fester Stufe sollte die
 Leistung mit der Kadenz steigen.
 
-Dieser Test ist damit weniger eine offene Frage als eine Bestätigung mit
-Zahlen — aber die Zahlen brauchen wir, denn sie sind die Kennfläche, auf der
-`PowerController` arbeitet. Fällt er überraschend anders aus und die Leistung
-bleibt über die Kadenz konstant, wird die Emulation deutlich einfacher.
+> **Ergebnis** (leicht 2026-09-11
+> [HW_TEST2_LIGHT.md](../../debug/HW_TEST2_LIGHT.md);
+> grob 2026-09-13
+> [HW_TEST2_80RPM.md](../../debug/HW_TEST2_80RPM.md)):
+> Bei fester Stufe steigt die Leistung mit der Kadenz — **Fläche**, keine
+> Tabelle. Stufe 16 @ 80 rpm: **Mittel 244,6 W** (~245 W). Stufe 8: 122,7 W
+> (leicht) / 122,9 W (grob). Stufe 12 @ 80 rpm verworfen (Kadenz nicht gehalten).
 
-Mindestens ein dritter Kadenzpunkt (etwa 100 rpm) bei zwei Stufen ist sinnvoll,
-um zu sehen, ob der Zusammenhang linear ist oder abknickt.
+**Entscheidung:**
+
+| Beobachtung | Folge |
+|-------------|-------|
+| **Leistung steigt mit Kadenz** ← **gemessen** | `PowerController` arbeitet auf einer Kennfläche Stufe×Kadenz. |
+| Leistung bleibt über die Kadenz konstant | Emulation wäre einfacher (reine Stufe→Watt-Tabelle). |
 
 ## Test 3 — Watt-Nachtest
 
@@ -108,14 +102,24 @@ tools/probe-run.py --host <ip> watt --watt 100 --no-prompt
 **Durchgehend treten, vor und nach dem Write, ohne Pause.** Genau das ist im
 ersten Lauf schiefgegangen: die Kadenz war beim Write schon auf null.
 
-Wahrscheinliches Ergebnis: `80 05 01` und keine Wirkung. Dann ist die Frage
-endgültig beantwortet und die ERG-Emulation ist gesetzt.
+> **Ergebnis** (2026-09-13 Abend, FW 0.3.19-dev, `force=1`,
+> [UPDATE_NACHTEST_RESULTS.md](../../debug/UPDATE_NACHTEST_RESULTS.md)):
+> Draht `056400` (100 W), Quittung **Success**, Urteil **NO_EFFECT**
+> (96→101 W, 80,8→84,1 rpm). Produktiv kein `0x05` ans Bike; ERG weiter über
+> Stufen/`PowerMap`.
+
+**Entscheidung:**
+
+| Ergebnis | Folge |
+|----------|-------|
+| **`80 05 01` und keine Wirkung** ← **gemessen (NO_EFFECT)** | Frage endgültig beantwortet; ERG-Emulation ist gesetzt. |
+| Success und messbare Laständerung | Feature-Bits wären falsch; nativer Wattpfad möglich. |
 
 ## Test 4 — Simulation `0x11`
 
 **Frage:** Funktioniert der feine Steuerkanal?
 
-Guard `allowSim` freigeben, mit **kleiner** Steigung anfangen.
+Guard `allowSim` / `allowSimulation` freigeben, mit **kleiner** Steigung anfangen.
 
 ```bash
 tools/probe-run.py --host <ip> sim --grade 1
@@ -129,11 +133,22 @@ Crr (uint8, 0,0001), Cw (uint8, 0,01 kg/m).
 Das ist aus zwei Gründen der interessanteste Test. Erstens ist die Auflösung
 von 0,01 % Steigung um Größenordnungen feiner als 16 Widerstandsstufen.
 Zweitens ist `0x11` genau das, was MyWhoosh und Zwift im SIM-Modus senden —
-wenn das Bike es nativ versteht, kann die Bridge in v0.2 diese Kommandos
-einfach durchreichen.
+wenn das Bike es nativ versteht, kann die Bridge diese Kommandos durchreichen.
 
 Vorsicht: wenn Steigung wirkt, kann sie *stark* wirken. In Einerschritten
 hochgehen, Not-Stop bereithalten.
+
+> **Ergebnis** (2026-09-13 Vormittag, FW 0.3.9-dev, Stufe 7, ~75 rpm,
+> [HW_NACHTEST_20260913.md](../../debug/HW_NACHTEST_20260913.md)):
+> 1 % → **NO_EFFECT** (Success, contradictory); 3 % und 6 % → **WORKS**
+> (Δ W/rpm ~+25 % / ~+26 %, Peak ~174 W @ 78 rpm). Wirksamer Steuerkanal ab ~3 %.
+
+**Entscheidung:**
+
+| Ergebnis | Folge |
+|----------|-------|
+| wirkt nicht / nur Success | Bridge muss Grade lokal in Stufen umsetzen. |
+| **wirkt ab ~3 %** ← **gemessen** | Passthrough nach Freigabe (`allowSimulation`) architektonisch sinnvoll. |
 
 ## Test 5 — Dual-Link Bike + Puls
 
@@ -143,43 +158,44 @@ hochgehen, Not-Stop bereithalten.
 tools/probe-run.py --host <ip> dual --hr-mac <H9-MAC>
 ```
 
-Der erste Lauf hat nur belegt, dass der H9 **scanbar** war. Das ist kein
-Dual-Link. Und das gesamte Konzept — v0.1 mit zwei Links, v0.2 mit drei —
-hängt daran.
-
 Zu prüfen: beide Notify-Ströme gleichzeitig stabil, über mindestens 10 Minuten,
-bei laufendem WLAN und offenem SSE. Wenn hier Pakete wegbrechen, ist das eine
-Architekturfrage und keine Detailfrage.
+bei laufendem WLAN und offenem SSE.
+
+> **Ergebnis** (2026-09-13,
+> [HW_NACHTEST_20260913.md](../../debug/HW_NACHTEST_20260913.md)):
+> Dual-Link Bike + H9 unter Last **ok** (~10 Min ohne Linkabriss).
+> `hrSource=strap`; Bike-HR − Strap ≈ **+25 bpm** (Mittel über 312 Ticks).
+> Reconnect Bike LOST → READY ok (`reconnects: 1`); kurzer ESP-WLAN-Blip
+> beim Linkverlust, kein Brick.
+
+**Entscheidung:**
+
+| Ergebnis | Folge |
+|----------|-------|
+| Pakete brechen weg | Architekturfrage (weniger Links / Relay-Pflicht). |
+| **beide Ströme stabil** ← **gemessen** | Verbindungsbudget für v0.1 (zwei Links) trägt. |
 
 Zweiter Durchgang gegen das **HR-Relay** von `esp32.heartrate` v0.3 statt gegen
 den H9 direkt: der Relay-Knoten hält den Gurt und gibt ihn als eigener
-`0x180D`-Sensor weiter. Für die Sonde ist das nur ein anderer Peer, für die
-Topologie macht es den Unterschied — siehe Pflichtenheft §3.
+`0x180D`-Sensor weiter. Für die Topologie macht es den Unterschied — siehe
+Pflichtenheft §3.
 
 ### Nebenbei: die beiden Pulsquellen vergleichen
 
 Der H9 sendet BLE, ANT+ und 5-kHz-GymLink gleichzeitig, GymLink ab Werk an.
-Das Bike hat einen 5-kHz-Empfänger und legt den Wert ins HR-Feld von `2AD2` —
-so kamen die 78–84 bpm in den ersten Lauf.
+Das Bike hat einen 5-kHz-Empfänger und legt den Wert ins HR-Feld von `2AD2`.
 
-Während des Dual-Tests also beide Werte mitschreiben: HR aus `2A37` über BLE
-und HR aus `2AD2` vom Bike. Interessant ist, wie weit sie auseinanderliegen und
-wie träge die GymLink-Kette ist. Ist der Bike-Wert brauchbar, hat `esp32.ergo`
-eine Pulsquelle, die **kein Verbindungsbudget kostet** — allerdings ohne
-RR-Intervalle und damit ohne HRV.
+Während des Dual-Tests beide Werte mitschreiben: HR aus `2A37` über BLE und HR
+aus `2AD2` vom Bike. Gemessen (siehe Ergebniskasten): GymLink-Kette für
+Regelung ungenau/träge — Dashboard ok, `HR_HOLD` nur mit Vorsicht. RR-Intervalle
+weiterhin nur über BLE.
 
-## Test 6 — Crash unter Last
+## Test 6 — Crash unter Last *(offen)*
 
 **Frage:** Was macht das Bike, wenn der Client wegbricht, während eine hohe
 Stufe gesetzt ist?
 
-```bash
-tools/probe-run.py --host <ip> crash
-```
-
-Stufe auf etwa 10 setzen, dann den Crash auslösen — ohne vorheriges `08 01`.
-
-Drei mögliche Ausgänge, alle mit Folgen für den Limiter:
+Drei mögliche Ausgänge, alle mit Folgen für den Limiter / Hub-Watchdog:
 
 | Verhalten des Bikes | Folge für `esp32.ergo` |
 |---------------------|------------------------|
@@ -187,32 +203,40 @@ Drei mögliche Ausgänge, alle mit Folgen für den Limiter:
 | Last bleibt stehen, Konsole übernimmt | Akzeptabel, aber der Fahrer muss es wissen. |
 | Last bleibt stehen und ist nicht bedienbar | **Ernst.** Dann braucht jeder Reboot-Pfad ein garantiertes `08 01` davor, und der Hub-Watchdog bleibt aus. |
 
-Das Sonden-Log liegt im RAM und ist nach dem Crash weg — `probe-run.py crash`
-holt es vorher ab. Diese Reihenfolge nicht selbst nachbauen.
+### Anleitung auf der Ergo-Firmware
+
+Der Debug-Ring liegt im **RAM** und ist nach dem Reset weg — vorher sichern.
+
+1. Mitschnitt an: `POST /api/probe/arm`
+2. Stufe ~10 setzen (Profil mit ausreichend `maxLevel`)
+3. Ring **vorher** sichern: `GET /api/debug/export`
+4. Reset **ohne** vorheriges `08 01` (kein Stop)
+5. Danach Kurbel von Hand drehen und prüfen, ob die Last steht / fällt /
+   bedienbar ist
+
+Hilfreich für den Handkurbel-Vergleich Stufe niedrig vs. hoch (nicht denselben
+Crash-Pfad, aber denselben Hand-Beweis): [`tools/hand-proof.sh`](../../tools/hand-proof.sh).
+
+Sonden-Äquivalent (historisch): `tools/probe-run.py --host <ip> crash` — holt
+das Log vorher ab.
 
 ---
 
-## Was danach festgezogen wird
+## Was die Tests festgezogen haben
 
-| Messung | Legt fest |
-|---------|-----------|
-| Test 1 | Leistungsbereich, Kalibriertabelle, ob v0.1 trägt |
-| Test 2 | Architektur von `PowerController` — Tabelle oder Regler |
-| Test 3 | Ob `MANUAL_ERG` emuliert werden muss (Erwartung: ja) |
-| Test 4 | Zweiter Steuerkanal, Passthrough-Fähigkeit der Bridge |
-| Test 5 | Verbindungsbudget für v0.1 und v0.2 |
-| Test 6 | Reboot- und Fehlerpfade im Limiter |
-
-Erst danach lohnt das `esp32.ergo`-Repo.
+| Messung | Legt fest | Stand |
+|---------|-----------|-------|
+| Test 1 | Leistungsbereich, Kalibriertabelle, ob v0.1 trägt | **erledigt** (~170 W @ 60 rpm) |
+| Test 2 | Architektur von `PowerController` — Tabelle oder Regler | **erledigt** (Fläche) |
+| Test 3 | Ob `MANUAL_ERG` emuliert werden muss | **erledigt** (ja; NO_EFFECT) |
+| Test 4 | Zweiter Steuerkanal, Passthrough-Fähigkeit der Bridge | **erledigt** (wirkt ab ~3 %) |
+| Test 5 | Verbindungsbudget für Dual-Link | **erledigt** |
+| Test 6 | Reboot- und Fehlerpfade im Limiter / Hub-Watchdog | **offen** |
 
 ## Bug in der Wirkungsauswertung
 
-Für den nächsten Sondenlauf relevant: die Verdict-Logik von `probe-run.py`
-urteilt „wirkt" allein aus dem Leistungsdelta und rechnet die Kadenz nicht
-heraus. Im ersten Lauf hat sie deshalb zweimal einen Effekt bescheinigt, wo
-keiner war — einmal bei Kadenz null, einmal bei mehr als verdoppelter Kadenz.
-Details in [GERAETEPROFIL.md §7](GERAETEPROFIL.md).
-
-Sauber wäre: Fenster verwerfen, wenn die mittlere Kadenz unter einer Schwelle
-liegt oder sich zwischen den Fenstern um mehr als etwa 10 % ändert, und das
-Urteil auf Watt pro Kadenz stützen statt auf Watt allein.
+Die frühe Verdict-Logik urteilte „wirkt“ allein aus dem Leistungsdelta und
+rechnete die Kadenz nicht heraus — deshalb zweimal ein Scheineffekt (Kadenz
+null bzw. verdoppelt). `ControlJournal` bewertet seither Watt pro Kadenz und
+verwirft instabile Fenster; Details in [GERAETEPROFIL.md §7](GERAETEPROFIL.md)
+und `src/control/ControlJournal.{h,cpp}`.

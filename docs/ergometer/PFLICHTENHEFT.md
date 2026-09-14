@@ -5,7 +5,7 @@ HAMMER Varon XTR II (SKU 10006, BLE-Name `TC174`) über BLE, mit lokaler WebUI u
 ESP-Hub-Anbindung.
 
 Baut auf dem Muster von `esp32.heartrate` auf (PlatformIO, `HubClient`, WiFiManager,
-ConfigStore, SSE-WebUI, Web-OTA, Hub-OTA). NimBLE als GATT Central — in v0.2
+ConfigStore, SSE-WebUI, Web-OTA, Hub-OTA). NimBLE als GATT Central — in **v0.3**
 zusätzlich als Peripheral.
 
 Arbeitsname: `esp32.ergo`
@@ -28,7 +28,7 @@ Drei Erkenntnisse aus Revision 3 tragen die Architektur:
    für die FTMS-Bridge.
 
 - Gemessenes Geräteprofil und Auswertung der Anleitung: [GERAETEPROFIL.md](GERAETEPROFIL.md)
-- Offene Messungen vor dem ersten Commit: [NACHTESTS.md](NACHTESTS.md)
+- Nachtests (fünf beantwortet, Test 6 offen): [NACHTESTS.md](NACHTESTS.md)
 - Erster Protokolltest (erledigt): [BLE-SCAN.md](BLE-SCAN.md)
 
 ---
@@ -44,7 +44,7 @@ Trainings angeschaut zu werden.
 
 Erstens: das Bike bietet über BLE **keine Watt-Steuerung**. Es nimmt nur
 Widerstandsstufen. Jede App, die ERG-Intervalle fahren will, scheitert daran.
-Der ESP32 baut diese Fähigkeit nach — und gibt sie in v0.2 als Bridge an
+Der ESP32 baut diese Fähigkeit nach — und gibt sie in **v0.3** als Bridge an
 MyWhoosh weiter.
 
 Zweitens das pulsgesteuerte Training. Die Konsole hat dafür die Programme HR1,
@@ -60,7 +60,7 @@ beidseitiger Regler, der den Zielpuls von beiden Seiten hält, mit RR-Intervalle
 und HRV im Rücken.
 
 **Motivation bleibt erhalten.** MyWhoosh soll nicht ersetzt werden. Der
-Zielzustand v0.2 ist eine Bridge, nicht ein Ersatz.
+Zielzustand **v0.3** ist eine Bridge, nicht ein Ersatz.
 
 ### Kernprinzip Steuerung
 
@@ -359,7 +359,7 @@ Risiko.
 
 ---
 
-## 3. Muss (v0.2 — Bridge)
+## 3. Muss (v0.3 — Bridge)
 
 Der ESP32 ist gleichzeitig Central zum Bike **und** FTMS-Peripheral für MyWhoosh.
 
@@ -584,7 +584,7 @@ konstant bleibt." Das Verfahren ist also vom Hersteller vorgemacht — nur rechn
 die Konsole blind, während der ESP32 die tatsächliche Leistung zurückmisst.
 
 Damit ist die Bauform vorgegeben: **Vorsteuerung aus der Kennfläche plus
-langsame Rückführung.** Aus Zielwatt und aktueller Kadenz liefert `CalibTable`
+langsame Rückführung.** Aus Zielwatt und aktueller Kadenz liefert `PowerMap`
 die passende Stufe, und ein langsamer Integralterm korrigiert die Abweichung
 zwischen erwarteter und gemessener Leistung. Die Kadenz ist dabei keine
 Störgröße, die man wegregelt, sondern ein **gemessener Eingang** der
@@ -606,7 +606,7 @@ Weiter gilt:
   einschwingen muss und die Leistung ohnehin geglättet wird.
 - **Stufen-Slew (0.3.15):** höchstens eine Stufe pro Zyklus Richtung Map-Wunsch;
   kleine Ziel-Updates (&lt; ~20 W, typisch Bridge-Spam) lösen keinen Sofort-Sprung
-  aus. Siehe [debug/UPDATE_ERG_SLEW.md](../../debug/UPDATE_ERG_SLEW.md).
+  aus. Siehe [debug/UPDATE_ERG_SLEW.md](../../CHANGELOG.md#0315-dev--2026-09-13).
 
 ### `HrController` — Pulsregelung
 
@@ -741,9 +741,9 @@ Die Sonde ist ausdrücklich kein Wegwurf-Code. Vier Module wandern mit:
 | `BleProbe` (Sonde) | `BleCentral` + `FtmsClient` |
 | `tools/ftms.py` (Sonde) | `FtmsCodec` (C++), gleiche Fixtures |
 | `ProbeGuard` (Sonde) | `Limiter` |
-| `ProbeLog` (Sonde) | `DebugLog` |
+| `ProbeLog` (Sonde) | `DebugRing` + `ControlJournal` |
 | `ConfigStore`, `HubClient`, `NetUtil`, `UiPages` | unverändert übernehmen |
-| `scan-20260910/*.jsonl` (Sonde) | Testfixtures für `FtmsCodec` |
+| `scan-20260910/*.jsonl` (Sonde) | kuratierte Fixtures für `FtmsCodec` (`fixtures_ibd.h`) |
 | **`HrServer`** (heartrate v0.3) | **`FtmsServer`** — direkte Vorlage |
 | `HrParser` / `buildHeartRateMeasurement()` | Muster „Parser und Encoder als Paar, Roundtrip-testbar" |
 
@@ -767,38 +767,58 @@ esp32.ergo/
     ├── main.cpp
     ├── app/App.*
     ├── core/ConfigStore.*  HubClient.*  NetUtil.*  HistoryStore.*  SessionStore.*
-    │         ProfileStore.*
-    ├── ble/BleCentral.*    FtmsClient.*  FtmsCodec.*  HrProfile.*  DeviceStore.*
-    │        FtmsServer.*   (v0.2)
+    │         ProfileStore.*  DeviceStore.*  SessionTracker.*  Zone.*  Progression.*
+    │         FtpCareer.*
+    ├── ble/BleCentral.*    FtmsClient.*  FtmsCodec.*  HrClient.*  FtmsServer.* (v0.3)
+    │        DebugRing.*  CyclingCodec.*
     ├── control/Limiter.*   PowerController.*  HrController.*  WorkoutEngine.*
-    │           CalibTable.*  Metrics.*  DebugLog.*  TestRunner.*
+    │           PowerMap.*  ControlJournal.*  TestRunner.*  ControlMode.*
+    │           SweepRunner.*  RehaController.*  WorkoutJson.*  ZwoImport.*
+    │           BridgeAssist.*  SimAssist.*
     └── web/UiPages.*
 ```
 
-| Modul | Verantwortung |
-|-------|----------------|
-| `BleCentral` | Scan, Multi-Connect, NimBLE-Lifecycle, RSSI, CCCD-Fallback |
-| `FtmsCodec` | reines Parsen und Bauen der FTMS-Bytes, **ohne BLE-Abhängigkeit** |
-| `FtmsClient` | Discovery, Subscriptions, Control-Point-Sequenzen, Freigabe halten |
-| `FtmsServer` | Peripheral-Seite der Bridge, inkl. aufgewertetem `2ACC`/`2AD8` (v0.2) |
-| `HrProfile` | HRM-Parsing, RR-Pipeline (aus heartrate) |
-| `Limiter` | **einziger** Schreibpfad zum Bike, alle Regeln aus §6 |
-| `CalibTable` | Kennlinie Stufe → Leistung, Persistenz, Interpolation |
-| `PowerController` | ERG-Emulation, Zielwatt → Stufe |
-| `HrController` | Pulsregelung → Stufe |
-| `WorkoutEngine` | Programmablauf, Schritt-Zustand, Zielwertquelle, Pulsdeckel je Schritt |
-| `FtmsCapabilities` | leitet aus Features, Bereichen und Datenstrom ab, was das Gerät kann; bestimmt die Steuerstrategie |
-| `DeviceStore` | Geräteprofil je MAC: Stufenformat, Kennfläche, Leistungsdecke, Eigenarten |
-| `ProfileStore` | Nutzerprofile, Grenzen, Zonenmodelle, aktives Profil |
-| `TestRunner` | Rampe, 20 Minuten, Recovery; Auswertung ohne automatische Übernahme |
-| `Metrics` | NP, IF, TSS, kJ, Zonen, FTP-Schätzung |
-| `DebugLog` | Rohbyte-Ring, Phasenmarken, Steuer-Journal, NDJSON-Export |
-| `SessionStore` | Session-Persistenz, Bestleistungen fürs Ghost |
-| `App` | Scheduler WiFi ↔ BLE, Zustandsmaschine, Watchdog |
+| Modul | Pfad | Verantwortung |
+|-------|------|----------------|
+| `BleCentral` | `src/ble/` | Scan, Multi-Connect, NimBLE-Lifecycle, RSSI, CCCD-Fallback |
+| `FtmsCodec` | `src/ble/` | reines Parsen und Bauen der FTMS-Bytes, **ohne BLE-Abhängigkeit** |
+| `FtmsClient` | `src/ble/` | Discovery, Subscriptions, Control-Point-Sequenzen, Freigabe halten |
+| `FtmsServer` | `src/ble/` | Peripheral-Seite der Bridge, inkl. aufgewertetem `2ACC`/`2AD8` (**v0.3**) |
+| `HrClient` | `src/ble/HrClient.{h,cpp}` | HRM-Parsing, RR-Pipeline (aus heartrate) |
+| `CyclingCodec` | `src/ble/` | CPS/CSC-Payloads für die Bridge |
+| `DebugRing` | `src/ble/` | Rohbyte-Ring, Phasenmarken, NDJSON-Export |
+| `Limiter` | `src/control/` | **einziger** Schreibpfad zum Bike, alle Regeln aus §6 |
+| `PowerMap` | `src/control/PowerMap.{h,cpp}` | Kennfläche Stufe × Kadenz → Watt, Persistenz, Interpolation |
+| `ControlJournal` | `src/control/` | Steuer-Journal: Wirkung kadenznormiert (WORKS / NO_EFFECT / Widerspruch) |
+| `ControlMode` | `src/control/` | Moduszustand (OFF, LEVEL, ERG, HR_HOLD, REHA, WORKOUT, SIM) |
+| `PowerController` | `src/control/` | ERG-Emulation, Zielwatt → Stufe |
+| `HrController` | `src/control/` | Pulsregelung → Zielwatt → `PowerController` |
+| `RehaController` | `src/control/` | festes Wattziel mit Soft-/Hard-Pulsdeckel |
+| `WorkoutEngine` | `src/control/` | Programmablauf, Schritt-Zustand, Zielwertquelle, Pulsdeckel je Schritt |
+| `WorkoutJson` / `ZwoImport` | `src/control/` | Workout-Parse bzw. `.zwo`-Import |
+| `SweepRunner` | `src/control/` | geführter Kalibrier-Sweep |
+| `BridgeAssist` / `SimAssist` | `src/control/` | Difficulty/HR-Deckel der Bridge; optionale Sim-Hilfe über Decke |
+| `FtmsCapabilities` | `src/ble/` | leitet aus Features, Bereichen und Datenstrom ab, was das Gerät kann; bestimmt die Steuerstrategie |
+| `DeviceStore` | `src/core/` | Geräteprofil je MAC: Stufenformat, Kennfläche-Slot, Leistungsdecke, Eigenarten |
+| `ProfileStore` | `src/core/` | Nutzerprofile, Grenzen, Zonenmodelle, aktives Profil |
+| `TestRunner` | `src/control/` | Rampe, 20 Minuten, Recovery; Auswertung ohne automatische Übernahme |
+| `SessionTracker` / `Zone` | `src/core/` | NP, IF, TSS, kJ, Zonenzeit, FTP-Schätzung (kein eigenes `Metrics`-Modul) |
+| `SessionSummary` / `SessionStore` | `src/core/` | Session-Zusammenfassung und Persistenz, Bestleistungen fürs Ghost |
+| `Progression` / `FtpCareer` | `src/core/` | Physio-Steigerung bzw. FTP-Verlauf |
+| `App` | `src/app/` | Scheduler WiFi ↔ BLE, Zustandsmaschine, Watchdog |
 
-`FtmsCodec` bleibt BLE-frei. Damit sind die Parser und die Grenzfälle gegen die
-274 aufgezeichneten Pakete aus dem Laborlauf testbar, ohne Hardware — genau wie
-`tools/ftms.py` es heute schon vormacht.
+Weitere Bausteine und Dateinamen: siehe `src/`. **Welche Module hosttestbar
+sind, steht nur in der Positivliste** von `platformio.ini` unter `[env:native]`
+(`build_src_filter`) — nicht hier verdoppeln.
+
+`FtmsCodec` bleibt BLE-frei. Der Laborlauf hat laut `ergebnis.json` **274**
+geparste Bike-Data-Pakete und **383** eindeutige `0x2AD2`-Hexes
+(`bike-data.jsonl`); der eingecheckte Kernsatz in `test/test_codec/fixtures_ibd.h`
+umfasst **5** handgeprüfte Fixtures plus synthetische Layouts in
+`fixtures_synth.h`. Die CI prüft den Kernsatz mit
+`python tools/make-fixtures.py --verify-curated` — siehe Kopfkommentar in
+`fixtures_ibd.h` und `debug/UPDATE_FIXTURE_6A.md`. Parser und Grenzfälle sind damit
+ohne Hardware testbar, ohne dass „alle 274" im Repo liegen müssten.
 
 ### WiFi / BLE Coexistence
 
@@ -829,19 +849,30 @@ Firmware-Bin: `ergo.<semver>.esp32s3.bin`
 
 ### PlatformIO
 
-Vorlage ist das Env `heartrate-s3`, das denselben Rollenmix schon fährt:
+**Warnung:** Niemals eine `[env]`-Sektion anlegen. PlatformIO vererbt sie an
+jedes Environment — auch an `[env:native]` — und zerlegt damit die Hosttests
+(„Please specify `board`"). Gemeinsame Flags gehören in `[common]` und werden
+explizit referenziert. Das ist harte Regel 2 in [`STATE.md`](../../STATE.md)
+und der Inhalt von `debug/PLATFORMIO_FIX.md`.
+
+Vorlage ist das Env `heartrate-s3`, das denselben Rollenmix schon fährt; im
+Repo heißt das Ziel-Environment `[env:ergo]`:
 
 ```ini
-[env:ergo-s3]
+[env:ergo]
+platform = espressif32@6.4.0
+framework = arduino
 board = esp32-s3-devkitc-1
 board_build.partitions = min_spiffs.csv
+monitor_speed = 115200
+lib_deps = ${common.lib_deps}
+extra_scripts = pre:tools/pio_pack_ui.py
 build_flags =
-  ${env.build_flags}
+  ${common.build_flags}
   -DARDUINO_USB_CDC_ON_BOOT=0
   -DCONFIG_BT_NIMBLE_MAX_CONNECTIONS=3
   -DCONFIG_NIMBLE_CPP_DEBUG_ASSERT_ENABLED=0
-  ; ROLE_PERIPHERAL / ROLE_BROADCASTER NICHT deaktivieren (Bridge v0.2)
-lib_deps = h2zero/NimBLE-Arduino@^1.4.3
+; ROLE_PERIPHERAL / ROLE_BROADCASTER NICHT deaktivieren (Bridge **v0.3**)
 ```
 
 Bemerkenswert daran: `heartrate-s3` läuft mit drei Links, WiFi und offener
@@ -900,23 +931,35 @@ SIM-Passthrough, falls Test 4 es hergibt.
 HRV-Readiness als Intensitätsvorschlag, Langzeitstatistik im ioBroker,
 Workout-Import aus `.zwo`, Export als TCX oder FIT.
 
-Die Reihenfolge von v0.2 und v0.3 ist die eine offene Scope-Entscheidung. Für
+Die Reihenfolge von v0.2 und v0.3 war die eine offene Scope-Entscheidung. Für
 v0.2 zuerst spricht, dass Editor und Tests direkt auf v0.1 aufsetzen und beiden
 Nutzern sofort etwas bringen. Für v0.3 zuerst spricht, dass MyWhoosh die
 Motivation ist, die erhalten bleiben soll.
 
+**In der Praxis ist die Entscheidung gefallen:** Editor, geführte Tests,
+Progression und Ghost kamen mit **v0.1.0**; die Bridge folgte als **0.3.x**.
+Wer den Plan liest, muss das nicht aus Changelogs rückrechnen.
+
 ---
 
 ## 12. Abnahmekriterien v0.1
+
+Es sind **24** Kriterien: die Labels laufen 1…22, dazu die eingeschobenen
+**6a** und **6b** (Debug-Ring bzw. Steuer-Journal). Die Labels werden nicht
+umnummeriert — Referenzen im Projekt bleiben gültig. Niemand darf die Anzahl
+aus dem Höchstlabel ableiten.
 
 1. Nach Boot verbindet sich der ESP mit **nichts**. Konsole und Handy
    funktionieren unverändert.
 2. Connect per gemerkter MAC gelingt, **auch wenn das Bike nicht advertised**.
 3. Watt, Kadenz, Geschwindigkeit, Distanz, Energie und Zeit erscheinen in der UI,
    plausibel gegen die Konsolenwerte vor dem Connect.
-4. `FtmsCodec` dekodiert alle 274 Fixture-Pakete aus dem Laborlauf fehlerfrei und
-   überlebt zusätzlich ein konstruiertes Paket mit gesetztem Flag-Bit 0 und
-   variablem Layout ohne Fehlausrichtung.
+4. `FtmsCodec` dekodiert den eingecheckten Kernsatz von **5** kuratierten
+   `0x2AD2`-Paketen aus `test/test_codec/fixtures_ibd.h` fehlerfrei, überlebt
+   zusätzlich die synthetischen Layouts in `fixtures_synth.h`, und
+   `python tools/make-fixtures.py --verify-curated` läuft in der CI grün.
+   (Laborlauf: 274 geparste / 383 eindeutige Pakete — siehe Kopf von
+   `fixtures_ibd.h`; die Abnahme verlangt nicht, alle 274 im Repo zu halten.)
 5. `MANUAL_LEVEL` Stufe 10 → messbarer Leistungsanstieg gegenüber Stufe 1 bei
    gehaltener Kadenz, Rampe bleibt bei einer Stufe pro 2 s.
 6. Der Kalibrierlauf erzeugt eine vollständige Kennfläche über Stufe 1…16 und
@@ -996,10 +1039,12 @@ Blockierend, siehe [NACHTESTS.md](NACHTESTS.md):
 - **Test 1 Stufen-Sweep** — Leistungsbereich und Kennlinie
 - **Test 2 Kadenzabhängigkeit** — Architektur von `PowerController`
 
-Nicht blockierend, aber vor v0.2 zu klären:
+Nicht blockierend, aber vor weiteren Releases zu klären:
 
-- Test 3 Watt-Nachtest, Test 4 Simulation, Test 5 Dual-Link, Test 6 Crash
-- **Reihenfolge v0.2 (Editor und Tests) gegen v0.3 (Bridge)**
+- Test 3 Watt-Nachtest, Test 4 Simulation, Test 5 Dual-Link (Messungen liegen
+  vor — siehe [NACHTESTS.md](NACHTESTS.md)); Test 6 Crash unter Last **offen**
+- ~~Reihenfolge v0.2 (Editor und Tests) gegen v0.3 (Bridge)~~ — in der Praxis
+  entschieden, siehe §11
 - Baut v0.1 auch für den D1 Mini oder von Anfang an nur S3
 - Session-Format: eigenes JSON oder gleich TCX/FIT
 - Flash-Budget der UI: reicht PROGMEM, oder muss sie nach LittleFS? Wird am

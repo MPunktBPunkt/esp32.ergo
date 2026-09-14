@@ -125,7 +125,7 @@ Aus Status nach den Tests (Ring weiter an, weitere LEVEL-Writes möglich):
 |-------|--------|
 | `debug/captures/nachtest-20260913T085205Z.jsonl` | Watch-Ticks |
 | `dist/ergo.0.3.9-dev.esp32s3.bin` | geflashte Bin |
-| `debug/UPDATE_NACHTEST_PROBE.md` | Firmware-Probe-API |
+| `debug/archiv/UPDATE_NACHTEST_PROBE.md` | Firmware-Probe-API |
 
 ---
 

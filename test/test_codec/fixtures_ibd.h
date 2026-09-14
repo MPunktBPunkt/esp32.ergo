@@ -1,8 +1,9 @@
 // Echte 0x2AD2-Pakete aus dem Sondenlauf scan-20260910 (Hammer Varon XTR II).
 //
-// Dies ist der VON HAND gepruefte Kernsatz. `tools/make-fixtures.py` ersetzt
-// diese Datei durch alle 383 eindeutigen Pakete des Laufs, sobald sie in einer
-// Umgebung mit Python laeuft. Struktur und Feldnamen bleiben identisch.
+// Drei Zahlen, die man nicht vermischen darf (Quelle: Sondenlauf + make-fixtures):
+//   - Labor-Zusammenfassung `ergebnis.json` / Bericht: 274 geparste Bike-Data-Pakete
+//   - Eindeutige 0x2AD2-Hexes in bike-data.jsonl: 383 (make-fixtures.py sammelt diese)
+//   - Dieser eingecheckte Kernsatz: 5 von Hand gepruefte Eintraege (CI: --verify-curated)
 //
 // Bemerkenswert: das Geraet sendet ueber den gesamten Lauf ausschliesslich
 // flags = 0x0B54 mit 19 Byte. Die uebrigen Feldkombinationen des Standards

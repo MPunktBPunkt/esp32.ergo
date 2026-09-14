@@ -1,6 +1,6 @@
 # Entwicklerdokumentation — esp32.ergo
 
-**Stand:** 2026-09-13 · Firmware **0.3.21-dev**  
+**Stand:** 2026-09-14 · gültig für Firmware **0.3.2x**  
 **Gerät:** ESP32-S3 `192.168.178.88` · Bike Hammer Varon XTR II (BLE `TC174`) · Polar H9  
 
 Dies ist die **technische Gesamtschau**: Technologien, Probe-Weg, was Bike und
@@ -19,7 +19,7 @@ unter `debug/` und werden nicht nachgeführt.
 | Architektur / Grenzen brauchst | diese Datei + [`GERAETEPROFIL.md`](GERAETEPROFIL.md) |
 | UI / Profile / Workouts planst | [`WEBINTERFACE.md`](WEBINTERFACE.md), [`PFLICHTENHEFT.md`](PFLICHTENHEFT.md) |
 | Bridge / MyWhoosh | [`BRIDGE.md`](BRIDGE.md) |
-| Rohmessungen der Sonde | `nodes/esp32.ftmsprobe/docs/ergometer/` |
+| Rohmessungen der Sonde | Sibling-Clone `../nodes/esp32.ftmsprobe/docs/ergometer/` (siehe §16) |
 
 ---
 
@@ -66,7 +66,7 @@ das: BLE-Central, Guard (Whitelist, Deadman), Ring-Log, automatisierter Runner.
 
 | Artefakt | Ort |
 |----------|-----|
-| Runner / Bericht | `nodes/esp32.ftmsprobe/docs/ergometer/scan-20260910/` |
+| Runner / Bericht | `../nodes/esp32.ftmsprobe/docs/ergometer/scan-20260910/` |
 | GATT, Reads, Effects | `gatt.json`, `reads.json`, `effects.json`, `ergebnis.json` |
 | Rohstreams | `bike-data.jsonl`, `controlpoint.jsonl`, `probe-log.jsonl` |
 | Verdichtung | `ERGEBNISBERICHT.md`, `DATEN.md` im Probe-Repo |
@@ -106,13 +106,9 @@ Ablauf (vereinfacht):
 
 ### 4.2 GATT (gemessen)
 
-```
-1800 Generic Access          2A00 2A01 2AC9
-1801 Generic Attribute       2A05 2B29 2B2A
-180A Device Information      …
-1850 Vendor                  2C00 2C01   (für uns irrelevant)
-1826 FTMS                    2ACE(N) 2AD9(W+N) 2AD6(R) 2ACC(R) 2AD2(N)
-```
+Kurz: Generic Access / Attribute / Device Info, Vendor `1850`, FTMS `1826` mit
+`2ACE`, `2AD9`, `2AD6`, `2ACC`, `2AD2`. **Vollständige Charakteristikliste:**
+[`GERAETEPROFIL.md` §2](GERAETEPROFIL.md).
 
 **Nicht vorhanden am Bike:** `2AD8` Power Range, CPS `0x1818`, CSC `0x1816`,
 FitShow. CPS/CSC existieren nur auf der **Bridge** (für Apps).
@@ -193,6 +189,21 @@ Bike-Empfänger → HR-Feld in `2AD2` **ohne** dass ergo den Gurt gekoppelt hat.
 - Mittel **Bike-HR − Strap ≈ +25 bpm** (GymLink/Konsole träge/ungenau)  
 - H9: **nur ein BLE-Central** → Relay-Architektur (`esp32.heartrate`)
 
+**Befund für Reha / Soft-Ceiling.** Ein systematischer Offset von etwa
+25 Schlägen ist für einen Pulsdeckel **kein Vorsichtshinweis, sondern
+ausschusswürdig**: wer den Soft-Ceiling auf dem Bike-HR fährt, greift 25 bpm
+zu spät oder zu früh. Für `HR_HOLD` und Reha bleibt die Strap-/Relay-Quelle die
+tragfähige Messgröße; Bike-HR eignet sich als Gegenprobe und Rückfallebene im
+Dashboard, nicht als Deckel-Messung.
+
+**Firmware-Verhalten (geprüft in `App.cpp`).** Die Firmware **verweigert
+`HR_HOLD` und Reha nicht**, wenn `hrSource=machine` ist. `resolveHrSource()`
+nimmt Strap/Relay, sonst das HR-Feld aus `2AD2`, sonst `none`.
+`loopHr` / `loopReha` nutzen `effectiveHr()` und behandeln jede Quelle außer
+`none` als frisch, sobald ein Wert > 0 anliegt. Es gibt keinen Mode-Guard der
+Form „nur Strap“. Wer mit nur GymLink fährt, kann den Deckel also auf dem
+falschen Sensor laufen lassen — das ist ein bekannter Softspot, kein Hardening.
+
 ---
 
 ## 6. Debugdaten, die Entscheidungen erzwungen haben
@@ -232,9 +243,17 @@ deshalb Sweep mit festem Fenster und Verwerfung.
 | Debug-Tab / Steuer-Journal | WORKS vs. Lüge live |
 | `POST /api/probe/arm` | dichter Ring + leeres Journal |
 | `POST /api/probe/mark` | Snapshot Watt/rpm/HR/Stufe |
-| `tools/nachtest_watch.sh` | JSONL-Ticks für Offline-Auswertung |
+| `tools/nachtest_watch.sh` | paralleler JSONL-Tick (`/api/status` inkl. Probe/Journal/Bridge) für Offline-Auswertung |
+| `tools/hand-proof.sh` | Handkurbel-Beweis Stufe 1 vs. 16 ohne Fahrer (Ring an, Profil, Request/Start) |
+| `tools/hw_smoke.sh` | HTTP-Smoke nach OTA: Status, Builtins, Validate — **ohne** Bike-Link |
 | `GET /api/debug/export` | Ring als JSONL |
 | Heatmap Kalibrierung | Sweep-Zellen (Rand) vs. passiv; Live-Cursor Stufe×Kadenz (0.3.23) |
+
+**Partitionierung.** `board_build.partitions = min_spiffs.csv` wählt die
+Arduino-ESP32-Tabelle mit großer App-OTA und kleinem SPIFFS: App-Partition
+**1 966 080 Byte** (`0x1E0000`, `app0`/`app1`) — genau die Zahl, die in
+Build-Protokollen als Nenner der Flash-Auslastung steht. SPIFFS bleibt
+128 KiB (`0x20000`) für Workouts/Sessions; die UI liegt gzip in PROGMEM.
 
 ---
 
@@ -245,8 +264,15 @@ deshalb Sweep mit festem Fenster und Verwerfung.
 [`kalibrierung-map-20260913.json`](kalibrierung-map-20260913.json).
 
 Persistente Map: NVS Slot 0 / MAC `c2:32:a5:1e:bf:b5`.  
-Snapshot: **16/16 Stufen**, **7/8 Bänder** (110–120 leer), **ceilingW ≈ 224**,
-~480 Stützstellen. Band 40–50 durch passives Lernen voll; 100–110 nur dünn.
+Snapshot laut [`KALIBRIERUNG.md`](KALIBRIERUNG.md): **16/16 Stufen**,
+**7/8 Bänder** (110–120 leer), **ceilingW ≈ 224**, **62 Rasterzellen** belegt.
+Die ~**480 Stützstellen** sind Einzelmessungen (Sweep-Fenster und passive
+Samples), die in diese 62 Zellen einfließen — keine zweite Zählung derselben
+Größe. Band 40–50 durch passives Lernen voll; 100–110 nur dünn.
+
+`ceilingW ≈ 226` in [`debug/HW_TEST2_80RPM.md`](../../debug/HW_TEST2_80RPM.md)
+ist eine **Momentaufnahme** direkt nach dem 80-rpm-Lauf; die dokumentierte
+Karten-Decke bleibt **224** aus der Kalibrierungsübersicht.
 
 ### 7.1 Test 1 — 60 rpm (2026-09-11)
 
@@ -336,7 +362,200 @@ Geräteprofil Labor-Varon (Defaults ab 0.3.20 auch nach NVS-Load):
 
 ---
 
-## 9. Harte Regeln (nicht verhandelbar)
+## 9. Persistenz
+
+Fünf NVS-Namespaces und LittleFS tragen den Zustand. Ein Formatwechsel ohne
+Migration macht Profile oder die Kennfläche lautlos unbrauchbar — die Fläche
+ist ein Messergebnis, das Stunden auf dem Rad gekostet hat.
+
+### NVS
+
+| Namespace | Inhalt | Hinweise |
+|-----------|--------|----------|
+| `esphub` | Gerätename, `hub_host`, `hub_port` | **Familienweit** geteilt mit Sonde/heartrate; Firmwarewechsel auf demselben Chip behält die Felder (`ConfigStore`) |
+| `ergo` | Knotenspezifische Config, versioniert über `cfg_ver` | Bike-/HR-MAC, Bridge, Simulation, Dev-UI, Watchdog, NTP, … Fehlende Schlüssel behalten Defaults |
+| `ergodev` | `DeviceStore`: Profile je MAC (Format, `powerTrusted`, Ceiling, Slot) | Serialisierung mit Magic `'ERDV'` (`0x45524456`), Version **1** |
+| `ergomap` | `PowerMap`-Bytes je Slot (`m0`…`m3`, Legacy-Key `pmap`) | siehe Magic/Version unten |
+| `ergoprofs` | Nutzerprofile (`ProfileStore`) | Magic `'ERGP'` (`0x45524750`), Version **2** |
+
+**PowerMap-Blob.** Header 8 Byte, Zellen je 9 Byte, little-endian byteweise
+(kein `memcpy` der Struktur). Magic-Bytes `'E''M'` (`0x45 0x4D`), Version
+**1** (`PowerMap.cpp`). Falsches Magic, falsche Version oder unpassende Länge
+→ `load()` lässt die Fläche **unverändert leer** — Upgrade-Bruch ohne sichtbaren
+Fehler, außer Coverage 0. Nach dem Laden prüft die UI auf `mapReady` /
+Zellenzahl.
+
+### LittleFS
+
+Beim Start: `/workouts`, `/sessions`, `/progression` (mkdir falls nötig).
+
+| Pfad | Zweck |
+|------|--------|
+| `/workouts/<id>.json` | hochgeladene / editierte Workouts |
+| `/workouts/meta.json` | Tags und Metadaten |
+| `/sessions/log.jsonl` | Session-Archiv (Anhängen) |
+| `/sessions/last.json` | letzte Zusammenfassung |
+| `/progression/*`, `/progression/ftp_career.json` | Physio-Steigerung, FTP-Verlauf |
+
+Volllaufen: Writes scheitern mit HTTP 500/503; Builtins bleiben im Flash. Die
+App-Partition ist groß (`min_spiffs`, siehe §6.4), SPIFFS bewusst klein —
+Workouts und Sessions müssen schlank bleiben.
+
+---
+
+## 10. Statusobjekt (`/api/status`)
+
+`buildStatusJson` in `App.cpp` ist die Schnittstelle für UI, Hub-Debug und
+`nachtest_watch.sh`. Hier nur Felder, die man ohne Quellcode nicht errät
+(kommentierte Teilmenge, keine vollständige Schema-Liste):
+
+```jsonc
+{
+  "mode": "MANUAL_ERG",          // ControlMode-Name
+  "hrSource": "strap",           // strap | relay | machine | none
+  "heartRate": 132,              // effectiveHr() zur aktiven Quelle
+  "bikeLink": true,              // OTA/deploy verweigert, solange true
+  "erg": {
+    "targetW": 120,
+    "smoothedW": 118.4,
+    "ceiling": false,            // true = Ziel oberhalb Kennfläche (UI: unerreichbar)
+    "mapReady": true
+  },
+  "bridge": {
+    "clientRole": "observer",    // none | connected | observer | controller
+    "resistIgnored": false,      // Resistance kurz nach Power verworfen (ERG-Spam-Schutz)
+    "levelWantTenths": -1,       // gewünschte App-Stufe, solange Bridge LEVEL fährt
+    "exclusive": false,          // App ist Controller → Coach-Last gesperrt
+    "driving": false
+  },
+  "calib": {
+    "passive": {
+      "accept": true,            // true = nächster passiver Sample würde lernen
+      "reason": "learning"       // sweep | no_live | rpm_low | settle | …
+    }
+  },
+  "debug": {
+    "journal": {
+      "head": {
+        "contradictory": false   // Success-Quittung + NO_EFFECT-Messung
+      }
+    }
+  }
+}
+```
+
+**Hinweise.** Das Hub-IO `target_reachable` aus dem Pflichtenheft ist im
+Status-JSON als Negation von `erg.ceiling` zu lesen (Decke = Ziel nicht
+erreichbar). `clientRole` kommt aus `FtmsServer::clientRole()`.
+`passive.accept` ist ein Live-Hinweis in der Heatmap, kein Persistenz-Flag.
+`contradictory` sitzt am Journal-Eintrag (`ControlJournal::contradictory()`).
+
+---
+
+## 11. Sicherheit
+
+Was schiefgehen kann, und was dann passiert — zusammenhängend, weil Widerstand
+unter dem Fuß steht.
+
+**Not-Stop.** `POST /api/control/stop` und der fixe UI-Button senden `08 01`
+durch den Limiter ohne Whitelist-Prüfung. Auch bei Bridge-Lock bleibt STOP
+erlaubt; Coach-Last ist gesperrt, Not-Stop nicht. OTA und Hub-Shell lehnen ab,
+solange `bikeLink` oder eine Session aktiv ist — ein Flash unter Last wäre ein
+Reset ohne `08 01`.
+
+**Pulsverlust.** Je Profil `freeze` / `reduce` / `stop` (`HrLossPolicy`).
+`HrController` und `RehaController` werten dasselbe Politikfeld aus: Stop →
+`ftms.stop` + Sessionende; Freeze → keine neuen Stufenwrites; Reduce → Wattziel
+absenken. Timeout-Schwelle typisch 8 s ohne frischen Puls.
+
+**Bike-Verlust unter Last.** Verbindungsabbruch pausiert die Session-Rechnung;
+die Stufe am Bike bleibt, was sie war — das Gerät meldet sie nicht zurück. Nach
+Reconnect: Stufe neu setzen, Schattenwert nicht blind übernehmen. Ob das Bike
+bei Client-Absturz die Last hält, entscheidet **Nachtest 6** (noch offen).
+
+**Hub-Watchdog.** `watchdogS` in der Config startet den Knoten neu, wenn der
+Hub schweigt. Unter Bike-Link ist das gefährlich, solange Test 6 nicht zeigt,
+dass ein Abbruch lastfrei endet. Bis dahin: Watchdog unter Last nicht als
+Sicherheitsnetz behandeln; gewollte Neustarts senden vorher `08 01`.
+
+**Bewusste Bypässe.** `force=1` an der Probe-/Raw-Route setzt kurz
+`allowUntrustedPower` und lässt ein `0x05` Wattziel durch den Limiter (Nachtest
+3). Danach muss der Flag zurück. Produktiver Pfad bleibt: kein `0x05` ans Varon.
+
+**Rampen.** Aufwärts max. eine Gerätestufe pro `rampMs` (Default 2 s). Lastabbau
+sofort. Bridge-LEVEL (manuelle App-Gänge) setzt `setRampOverrideMs(500)` —
+noch Rampe, kein Sprung, aber schneller als Coach-ERG. Nach Erreichen der
+Wunschstufe fällt der Override wieder weg.
+
+---
+
+## 12. Regelung
+
+Vier Arduino-freie Regler; Zeit und Messwerte kommen als Parameter. Hosttests
+decken die Kerne ab (`pio test -e native`).
+
+### PowerController
+
+**Eingänge:** Zielwatt, aktuelle Kadenz und Leistung aus `2AD2` (`fresh`),
+`PowerMap`. **Ausgänge:** gewünschte Stufe in Zehnteln, Flags `ceiling` /
+`mapReady`, geglättete Leistung. **Zustand:** Integral auf dem Wattfehler,
+geglättetes Ist, letzte Stufe, Retarget-Schwelle. **Grenzen:** Periodik
+(~6 s), Deadband, I-Limit, Slew max. eine Stufe pro Zyklus; kleine Ziel-Updates
+(&lt; ~20 W, Bridge-Spam) lösen keinen Sofort-Sprung aus. **Alternative, die
+verworfen wurde:** direkt Puls→Stufe oder reines I-ohne Map — beides ignoriert
+die Kadenzachse der Fläche; die Bauform ist Vorsteuerung aus der Map plus
+langsamer Rückführung.
+
+### HrController
+
+**Eingänge:** Zielpuls, frischer HR, optionale harte Profil-HRmax,
+`HrLossPolicy`. **Ausgänge:** Wattziel für den inneren `PowerController`,
+`lost`, geglätteter Puls. **Zustand:** Integral BPM→Watt, Soft-Armzeit,
+Verlust-Timer. **Grenzen:** Deadband ±3 bpm, min/max Watt, `lostAfterMs`,
+stärkerer Gain über Cap. **Alternative:** direkter Puls→Stufe — scheitert an
+Kadenzwechseln bei fester Stufe; die Kaskade hält den inneren Kreis auf einer
+stabilen Größe.
+
+### WorkoutEngine
+
+**Eingänge:** Schrittliste (Builtin oder geladen), FTP für `ftp_pct`, Zeit.
+**Ausgänge:** `desiredW`, optionale `hrSoft`/`hrMax` je Schritt, Restzeiten,
+State Idle/Running/Paused/Done. **Zustand:** Schrittindex, Pause-Akkumulator,
+Session-Arm. **Grenzen:** max. 16 Schritte; `selfPaced` ohne Wattziel.
+**Alternative:** alles in der UI steuern — abgelehnt, weil der Ablauf
+hosttestbar und ohne JSON im Kern bleiben soll; Parse liegt in `WorkoutJson`.
+
+### RehaController
+
+**Eingänge:** festes Sollwatt, Soft-/Hard-Pulsgrenzen, Dauer, frischer HR,
+Verlustpolitik. **Ausgänge:** `effectiveW` (abgesenkt unter Deckel),
+`capActive`, Interventionszähler, `finished`/`lost`. **Zustand:** effektive
+Leistung, Timer, Cap-Flag. **Grenzen:** Soft-Cut- und Hard-Cut-Gain,
+langsame Rückkehr (`restorePerS`), min. Watt. **Alternative:** denselben
+Pfad wie `HR_HOLD` (Zielpuls) — bewusst getrennt: Reha hält die Leistung und
+schneidet nur von oben; `HR_HOLD` regelt beidseitig auf einen Zielpuls.
+
+---
+
+## 13. Glossar
+
+| Begriff | Bedeutung hier |
+|---------|----------------|
+| **W/rpm** | Watt pro Kadenz — normierte Größe im Steuer-Journal (Wirkung der Stufe, nicht der Trittfrequenz) |
+| **Kennfläche** | Raster Stufe × Kadenzband → geschätzte Watt (`PowerMap`) |
+| **Schattenwert** | vom ESP gesetzte Stufe; das Bike meldet keine Resistance in `2AD2` |
+| **Stützstelle** | einzelne Messung (Sweep-Fenster oder passives Sample), die eine Zelle füllt |
+| **Kadenzband** | 10-rpm-Spalte der Fläche (40–50 … 110–120) |
+| **Ceiling** | Zielwatt oberhalb der höchsten bekannten Stufe / gemessenen Decke |
+| **Slew** | Begrenzung der Stufenänderung pro Regelzyklus (ERG) bzw. Ramp-Zeit (Limiter) |
+| **Takeover** | Bridge: App übernimmt Laststeuerung (Controller); Coach-Last gesperrt |
+| **Observer / Controller** | Bridge-Rollen: nur lesen bzw. Lastkommandos gesendet |
+| **unjudged** | Journal-Urteil verweigert (Kadenz zu niedrig oder weggelaufen) |
+| **contradictory** | Success-Quittung und NO_EFFECT-Messung zugleich |
+
+---
+
+## 14. Harte Regeln (nicht verhandelbar)
 
 1. `/ota-upload` und Hub-Shell bleiben in jeder Bin.  
 2. Kein `[env]` in `platformio.ini` — `[common]` + native Positivliste.  
@@ -348,7 +567,7 @@ Geräteprofil Labor-Varon (Defaults ab 0.3.20 auch nach NVS-Load):
 
 ---
 
-## 10. Offen
+## 15. Offen
 
 1. Nachtest 6 — Verhalten bei Client-Abbruch unter hoher Stufe  
 2. Formale Bridge-Abnahme (MyWhoosh ERG + Exclusive/Observer)  
@@ -357,18 +576,22 @@ Geräteprofil Labor-Varon (Defaults ab 0.3.20 auch nach NVS-Load):
 
 ---
 
-## 11. Quellenindex
+## 16. Quellenindex
+
+Pfade zu Scan-Daten der Sonde sind relativ zum **Sibling-Clone** im esphub-
+Monorepo: von `esp32.ergo/` aus `../nodes/esp32.ftmsprobe/...`. Ein Checkout
+nur des Ergo-Repos hat diese Pfade nicht; dann gilt das GitHub-Repo der Sonde.
 
 | Thema | Pfad |
 |-------|------|
 | Lebender Stand | [`STATE.md`](../../STATE.md) |
 | Geräteprofil | [`GERAETEPROFIL.md`](GERAETEPROFIL.md) |
-| Nachtest-Plan | [`NACHTESTS.md`](NACHTESTS.md) |
+| Nachtest-Plan / Ergebnisse | [`NACHTESTS.md`](NACHTESTS.md) |
 | Bridge | [`BRIDGE.md`](BRIDGE.md) |
 | WebUI | [`WEBINTERFACE.md`](WEBINTERFACE.md) |
-| Probe-Scan 2026-09-10 | `nodes/esp32.ftmsprobe/docs/ergometer/scan-20260910/` |
-| Probe DATEN/IBD | `nodes/esp32.ftmsprobe/docs/ergometer/DATEN.md` |
+| Probe-Scan 2026-09-10 | `../nodes/esp32.ftmsprobe/docs/ergometer/scan-20260910/` |
+| Probe DATEN/IBD | `../nodes/esp32.ftmsprobe/docs/ergometer/DATEN.md` |
 | Kalibrierung 60/80 | `debug/HW_TEST1_60RPM.md`, `HW_TEST2_*.md` |
 | Nachtest-Abend | `debug/UPDATE_NACHTEST_RESULTS.md` |
 | Caps-Fix | `debug/UPDATE_CAPS_FIX.md` |
-| Dev-UI / Ride-UI | `debug/UPDATE_DEV_UI.md`, `UPDATE_UI_RIDE.md` |
+| Dev-UI / Ride-UI | `CHANGELOG.md` (0.3.18–0.3.21) |

@@ -1,6 +1,6 @@
 # Update — `caps.wide` war falsch, und warum das so lange unsichtbar blieb
 
-Antwort auf Punkt 1 aus [HW_TEST_REPORT.md](HW_TEST_REPORT.md) „Für die
+Antwort auf Punkt 1 aus [HW_TEST_REPORT.md](archiv/HW_TEST_REPORT.md) „Für die
 Entwurfs-Instanz": *`caps.wide=false` am Varon vs. sint16-Annahme klären
 (wirkt Success allein?)*.
 
