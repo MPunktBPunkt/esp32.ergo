@@ -196,7 +196,7 @@ pio test -e native           # Hosttests der Arduino-freien Bausteine
 python tools/docs_html.py --check   # Doku-Links
 ```
 
-**23** Hostsuiten, **240** `RUN_TEST`-Fälle (`grep -rc '^\s*RUN_TEST(' test/`).
+**24** Hostsuiten, **245** `RUN_TEST`-Fälle (`grep -rc '^\s*RUN_TEST(' test/`).
 Die Positivliste steht in `platformio.ini` `[env:native]`.
 
 > Keine `[env]`-Sektion in `platformio.ini` (sonst erbt `env:native` Arduino).

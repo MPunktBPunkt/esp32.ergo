@@ -320,14 +320,25 @@ void App::onLink(ergo::Role role, bool up) {
 
 ergo::HrSource App::resolveHrSource() const {
     const uint32_t now = millis();
-    // Reihenfolge nach Verlaesslichkeit: eigener Gurt, dann das Bike-Feld.
-    // Das Relay kommt, wenn die HTTP-Quelle implementiert ist.
+    // Reihenfolge nach Verlaesslichkeit: eigener Gurt (oder Relay als 0x180D),
+    // dann das Bike-Feld. Relay und Strap laufen heute beide über HrClient —
+    // resolve meldet Strap; hrUsableForControl akzeptiert beides.
     if (hrc.hasSample() && !hrc.stale(now)) return ergo::HrSource::Strap;
     if (ftms.hasLive() && !ftms.stale(now) && ftms.capabilities().ibdReportsHeartRate &&
         ftms.live().heartRateBpm > 0) {
         return ergo::HrSource::Machine;
     }
     return ergo::HrSource::None;
+}
+
+void App::rejectHrSourceNotTrusted_() {
+    JsonDocument doc;
+    doc["ok"] = false;
+    doc["reason"] = "hr_source_not_trusted";
+    doc["hrSource"] = ergo::hrSourceName(resolveHrSource());
+    doc["error"] =
+        "Pulsquelle nicht zugelassen fuer HR_HOLD/Reha — Gurt oder HR-Relay koppeln";
+    NetUtil::sendJson(server, 409, doc);
 }
 
 uint8_t App::effectiveHr() const {
@@ -477,6 +488,7 @@ void App::buildStatusJson(JsonDocument& doc) {
     reha["remainingS"] = rehaCtl.remainingS();
     reha["lost"] = rehaCtl.lost();
     reha["finished"] = rehaCtl.finished();
+    reha["capArmed"] = hrControlOk_();
     if (const ergo::Profile* ap = profiles.active()) {
         const char* loss = "reduce";
         if (ap->onHrLoss == ergo::HrLossPolicy::Freeze) loss = "freeze";
@@ -492,6 +504,7 @@ void App::buildStatusJson(JsonDocument& doc) {
     wo["desiredW"] = woSnap_.desiredW;
     wo["hrMax"] = woSnap_.hrMax;
     wo["hrSoft"] = woSnap_.hrSoft;
+    wo["hrCapArmed"] = hrControlOk_() && (woSnap_.hrMax > 0 || woSnap_.hrSoft > 0);
     wo["selfPaced"] = woSnap_.selfPaced;
     wo["stepRemainingS"] = woSnap_.stepRemainingS;
     wo["totalRemainingS"] = woSnap_.totalRemainingS;
@@ -671,6 +684,7 @@ void App::buildStatusJson(JsonDocument& doc) {
     }
 
     doc["hrSource"] = ergo::hrSourceName(resolveHrSource());
+    doc["hrUsable"] = hrControlOk_();
     doc["heartRate"] = effectiveHr();
 
     JsonObject lim = doc["limiter"].to<JsonObject>();
@@ -1118,6 +1132,11 @@ void App::registerControlRoutes() {
             NetUtil::sendError(server, 409, "Kennfläche leer — zuerst Kalibrierung");
             return;
         }
+        if ((m == ergo::ControlMode::HrHold || m == ergo::ControlMode::Reha) &&
+            !hrControlOk_()) {
+            rejectHrSourceNotTrusted_();
+            return;
+        }
         if (!control.setMode(m)) {
             NetUtil::sendError(server, 409, "Modus abgelehnt");
             return;
@@ -1530,6 +1549,10 @@ void App::registerControlRoutes() {
             NetUtil::sendError(server, 409, "nicht im Modus HR_HOLD");
             return;
         }
+        if (!hrControlOk_()) {
+            rejectHrSourceNotTrusted_();
+            return;
+        }
         int bpm = server.hasArg("bpm") ? server.arg("bpm").toInt()
                                        : (server.hasArg("hr") ? server.arg("hr").toInt() : 0);
         if (bpm <= 0) {
@@ -1553,6 +1576,10 @@ void App::registerControlRoutes() {
         if (!requireProfile()) return;
         if (!control.allowsReha()) {
             NetUtil::sendError(server, 409, "nicht im Modus REHA");
+            return;
+        }
+        if (!hrControlOk_()) {
+            rejectHrSourceNotTrusted_();
             return;
         }
         if (server.hasArg("watt")) {
@@ -2729,7 +2756,7 @@ void App::loopHr(unsigned long now) {
     if (sweep.running()) return;
 
     const uint8_t hr = effectiveHr();
-    const bool hrFresh = (resolveHrSource() != ergo::HrSource::None) && hr > 0;
+    const bool hrFresh = hrControlOk_() && hr > 0;
     uint8_t hardMax = 0;
     if (const ergo::Profile* ap = profiles.active()) {
         hardMax = ap->maxHr;
@@ -2856,7 +2883,17 @@ void App::loopWorkout(unsigned long now) {
 void App::applyRehaCap(unsigned long now, bool fromWorkout) {
     const char* tag = fromWorkout ? "WO" : "REHA";
     const uint8_t hr = effectiveHr();
-    const bool hrFresh = (resolveHrSource() != ergo::HrSource::None) && hr > 0;
+    const ergo::HrSource src = resolveHrSource();
+    const bool usable = ergo::hrUsableForControl(src);
+    // Workout: ohne Gurtquelle Watt weiterfahren, Deckel nicht bewaffnen.
+    if (fromWorkout && !usable) {
+        const float w = rehaCtl.desiredW();
+        control.setPowerTargetW(w);
+        powerCtl.setTargetW(w);
+        if (w > 0.0f) session_.noteDesiredW(w);
+        return;
+    }
+    const bool hrFresh = usable && hr > 0;
     if (const ergo::Profile* ap = profiles.active()) {
         rehaCtl.setLossPolicy(ap->onHrLoss);
     }

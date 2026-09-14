@@ -4,7 +4,7 @@
 [docs/ergometer/ENTWICKLERDOKU.md](docs/ergometer/ENTWICKLERDOKU.md).
 Versionsgeschichte: [CHANGELOG.md](CHANGELOG.md).
 
-Stand: **2026-09-14** · Firmware **0.3.23-dev**
+Stand: **2026-09-14** · Firmware **0.3.24-dev**
 
 ---
 
@@ -25,6 +25,7 @@ Stand: **2026-09-14** · Firmware **0.3.23-dev**
 2. **Bridge-Abnahme** MyWhoosh (ERG + Exclusive/Observer)
 3. Optional: Kadenzband 100–110 / 110–120 dichter; `allowSimulation` aus
 4. Formale ERG/HR/Reha-Fahrer-Abnahme
+5. **SIM-Passthrough** (§11 v0.3) — Test 4 ok, Code fehlt
 
 `debug/` hält Primärmessungen und Archiv — siehe [`debug/README.md`](debug/README.md).
 
@@ -39,8 +40,8 @@ Stand: **2026-09-14** · Firmware **0.3.23-dev**
 | Hub | `192.168.178.113:8093`, `fwType: ergo` |
 | Rollback-Bin | `../nodes/esp32.ftmsprobe/dist/ftmsprobe.0.1.4.esp32s3.bin` (Monorepo) |
 | Build-Host | Debian, `pio` unter `/home/martin/.venvs/pio/bin/pio` |
-| Aktuelle Bin | `dist/ergo.0.3.23-dev.esp32s3.bin` |
-| Flash | Bin 1 472 992 B / App-Partition 1 966 080 B (`min_spiffs`) ≈ **74,9 %** (0.3.23-dev, 2026-09-13) |
+| Aktuelle Bin | `dist/ergo.0.3.24-dev.esp32s3.bin` |
+| Flash | Bin 1 473 936 B / App-Partition 1 966 080 B (`min_spiffs`) ≈ **75,0 %** (0.3.24-dev, 2026-09-14) |
 
 Die Entwurfs-Instanz auf Windows hat **nur git** — kein PlatformIO, keinen
 Compiler. **Firmware- und UI-Build brauchen Python** (`tools/pio_pack_ui.py` →
@@ -72,9 +73,9 @@ ohne Firmware-OTA austauschbar sein soll.
 3. `allowSimulation` wieder aus, wenn nicht dauerhaft nötig
 4. Formale ERG/HR/Reha-Abnahme mit Fahrer
 
-**Befund HR-Quellen:** Bike-HR − Strap ≈ +25 bpm. Firmware **verweigert** HR_HOLD/Reha
-**nicht** bei `hrSource=machine` — für Reha-Deckel problematisch; siehe
-ENTWICKLERDOKU Sicherheit/Puls.
+**HR-Quellen (entschieden, 0.3.24):** Bike-HR − Strap ≈ +25 bpm. `HR_HOLD` /
+Reha nur mit Strap oder Relay (`hrUsableForControl`); Bike-HR für Regelung =
+Verlust. Anzeige/Aufzeichnung bleiben erlaubt.
 
 ## 4. Harte Regeln
 
@@ -102,13 +103,22 @@ Liste: [PFLICHTENHEFT.md](docs/ergometer/PFLICHTENHEFT.md) §12 — **24** Krite
 | 6 | **erfüllt für Architektur** (60 rpm voll + 80 rpm leicht); dichtere Map optional |
 | 6a | **erfüllt** (Host + Live-Export + CI `--verify-curated`) |
 | 6b | gebaut; Rampen-Stub auf Hardware (kein volles MAP) |
-| 7 | Mechanik da (`MANUAL_ERG`); Fahrer-Abnahme offen |
+| 7 | gebaut, Fahrer-Abnahme offen |
 | 8 | Ceiling-Flag + UI |
-| 9–12 | nicht angefangen / nicht formal abgenommen |
+| 9 | gebaut, Fahrer-Abnahme offen (`HrController`; Gurt/Relay-Gate) |
+| 10 | gebaut, Fahrer-Abnahme offen (`HrLossPolicy`) |
+| 11 | gebaut (`/api/control/stop` + Limiter); formale Abnahme offen |
+| 12 | gebaut, Fahrer-Abnahme offen (`autoPauseS`) |
 | 13 | erfüllt (gewollter Neustart sendet `08 01`) |
-| 14–17 | nicht angefangen / nicht formal abgenommen |
+| 14 | gebaut, Fahrer-Abnahme offen (Reconnect LOST → READY gemessen) |
+| 15 | gebaut, Fahrer-Abnahme offen (SSE) |
+| 16 | gebaut, Fahrer-Abnahme offen (`SessionStore` + Hub) |
+| 17 | gebaut; **nur menschlich beurteilbar** (Tablet in zwei Metern) |
 | 18 | Profile + Sessions + Workouts + Progression auf Hardware genutzt |
-| 19–22 | nicht angefangen / nicht formal abgenommen |
+| 19 | gebaut, Fahrer-Abnahme offen (Reha-Deckel + Gate) |
+| 20 | gebaut, Fahrer-Abnahme offen (Limiter-/Profilgrenzen) |
+| 21 | gebaut, Fahrer-Abnahme offen (Verlustpolitik je Profil) |
+| 22 | gebaut, Fahrer-Abnahme offen (`zoneTimeS`) |
 
 ## 6. Welches Dokument beantwortet was
 

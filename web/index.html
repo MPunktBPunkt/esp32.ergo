@@ -1545,8 +1545,12 @@ function renderBle(s){
   $('merg').disabled=!hasP||!(erg.mapReady)||bridgeLock;
   const allowSim=!!(s.allowSimulation);
   if($('msim')) $('msim').disabled=!hasP||!allowSim||bridgeLock;
-  $('mhr').disabled=!hasP||!(erg.mapReady)||bridgeLock;
-  $('mreha').disabled=!hasP||!(erg.mapReady)||bridgeLock;
+  const hrOk=!!s.hrUsable;
+  const hrNeed='Pulsquelle Bike (+25 bpm gegen Gurt) — für Pulsregelung nicht zugelassen. Gurt oder HR-Relay koppeln.';
+  $('mhr').disabled=!hasP||!(erg.mapReady)||bridgeLock||!hrOk;
+  $('mreha').disabled=!hasP||!(erg.mapReady)||bridgeLock||!hrOk;
+  $('mhr').title=(!hrOk&&hasP)?hrNeed:'';
+  $('mreha').title=(!hrOk&&hasP)?hrNeed:'';
   $('mwo').disabled=!hasP||!(erg.mapReady)||bridgeLock;
   const woOn=mode==='WORKOUT';
   if($('worow')) $('worow').hidden=!woOn;
@@ -1555,7 +1559,7 @@ function renderBle(s){
   $('woskip').disabled=!woOn;
   $('erggo').disabled=!hasP||!(erg.mapReady)||mode==='HR_HOLD'||mode==='SIM'||bridgeLock;
   if($('simgo')) $('simgo').disabled=!hasP||!allowSim||bridgeLock;
-  $('hrgo').disabled=!hasP||!(erg.mapReady)||mode!=='HR_HOLD'||bridgeLock;
+  $('hrgo').disabled=!hasP||!(erg.mapReady)||mode!=='HR_HOLD'||bridgeLock||!hrOk;
   if(mode==='SIM'&&s.gradeTargetPct!=null&&document.activeElement!==$('simg'))
     $('simg').value=Number(s.gradeTargetPct).toFixed(1);
   if(hh.targetBpm&&document.activeElement!==$('hrbpm')) $('hrbpm').value=hh.targetBpm;
@@ -1567,7 +1571,9 @@ function renderBle(s){
     ?(mode==='MANUAL_ERG'&&erg.ceiling?'Ziel oberhalb der Kennfläche — höchste Stufe':'')
     :'ERG/HR/REHA: zuerst Kalibrierung (Kennfläche)';
   let hrHint='';
-  if(mode==='HR_HOLD'&&hh.lost){
+  if(!hrOk&&hasP){
+    hrHint=hrNeed;
+  } else if(mode==='HR_HOLD'&&hh.lost){
     const pol=hh.onHrLoss||'reduce';
     hrHint=pol==='stop'?'Pulsverlust — STOP':
            pol==='freeze'?'Pulsverlust — Stufe eingefroren':
@@ -1575,7 +1581,9 @@ function renderBle(s){
   }
   $('hrsub').textContent=hrHint;
   let rehaHint='';
-  if(mode==='REHA'){
+  if(!hrOk&&hasP){
+    rehaHint=hrNeed;
+  } else if(mode==='REHA'){
     if(rh.lost){
       const pol=rh.onHrLoss||'reduce';
       rehaHint=pol==='stop'?'Pulsverlust — STOP':
@@ -1587,6 +1595,8 @@ function renderBle(s){
     } else if(rh.interventions){
       rehaHint='Deckel griff '+rh.interventions+'×';
     }
+  } else if(mode==='WORKOUT' && (wo.hrMax||wo.hrSoft) && wo.hrCapArmed===false){
+    rehaHint='Pulsdeckel inaktiv: keine Gurtquelle';
   }
   $('rehasub').textContent=rehaHint;
   $('rprof').style.color=(pi&&pi.color)?('#'+('000000'+Number(pi.color).toString(16)).slice(-6)):'';

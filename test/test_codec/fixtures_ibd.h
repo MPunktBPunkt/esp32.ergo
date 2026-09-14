@@ -1,11 +1,15 @@
 // Echte 0x2AD2-Pakete aus dem Sondenlauf scan-20260910 (Hammer Varon XTR II).
 //
-// Drei Zahlen, die man nicht vermischen darf (Quelle: Sondenlauf + make-fixtures):
-//   - Labor-Zusammenfassung `ergebnis.json` / Bericht: 274 geparste Bike-Data-Pakete
-//   - Eindeutige 0x2AD2-Hexes in bike-data.jsonl: 383 (make-fixtures.py sammelt diese)
-//   - Dieser eingecheckte Kernsatz: 5 von Hand gepruefte Eintraege (CI: --verify-curated)
+// Vier Zahlen, die man nicht vermischen darf:
+//   - 419 Zeilen in bike-data.jsonl (Roh-NDJSON des Laborlaufs, inkl. Nicht-2AD2)
+//   - 274 „geparste“ Bike-Data in ergebnis.json / Laborbericht (Zusammenfassung)
+//   - 383 eindeutige 0x2AD2-Hexes (make-fixtures.py sammelt diese)
+//   - 5 Eintraege in diesem Kernsatz (CI: --verify-curated)
+// 274 und 383 zaehlen verschiedene Mengen (Bericht vs. Unique-Hex); sie sind
+// kein Widerspruch. Eine fruehere „832“ in fixtures_synth.h war unbelegt und
+// wurde entfernt.
 //
-// Bemerkenswert: das Geraet sendet ueber den gesamten Lauf ausschliesslich
+// Bemerkenswert: das Geraet sendet im Laborlauf ausschliesslich
 // flags = 0x0B54 mit 19 Byte. Die uebrigen Feldkombinationen des Standards
 // deckt fixtures_synth.h ab — sonst testet man einen Varon-Decoder statt
 // eines FTMS-Decoders.

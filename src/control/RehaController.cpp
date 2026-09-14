@@ -98,7 +98,19 @@ RehaController::Tick RehaController::tick(uint32_t nowMs, uint8_t hrBpm, bool hr
     }
     t.lost = lost_;
     if (lost_ || dtS <= 0.0f) {
+        if (lost_) {
+            capActive_ = false;
+            t.capActive = false;
+        }
         t.effectiveW = effectiveW_;
+        return t;
+    }
+
+    // Ohne frische vertrauenswuerdige Quelle nicht regeln (kein Cap auf altem BPM).
+    if (!hrFresh) {
+        t.effectiveW = effectiveW_;
+        t.capActive = capActive_;
+        t.interventions = interventions_;
         return t;
     }
 

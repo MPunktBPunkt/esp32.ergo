@@ -2,6 +2,10 @@
 """Build docs/HANDBUCH.html from the canon markdown list, or --check links only.
 
 No network. Requires: pip install 'markdown>=3.5'
+
+Linkcheck: .md-Ziele und Existenz werden hart geprüft (Exit 1). Fragment-Anker
+(#…) sind nur weich — Renderer sluggen unterschiedlich; ein veralteter Anker
+macht die CI deshalb nicht rot.
 """
 
 from __future__ import annotations
@@ -155,7 +159,9 @@ def check_links() -> list[str]:
         allowed_extra = {
             "debug/README.md",
             "debug/TODO_DOKUMENTATION.md",
+            "debug/TODO_NACHFASS_20260914.md",
             "debug/NOTIZ_ENTWURF_20260914.md",
+            "debug/NOTIZ_NACHFASS_20260914.md",
             "debug/HW_TEST2_LIGHT.md",
             "debug/UPDATE_FIXTURE_6A.md",
             "debug/captures/README.md",

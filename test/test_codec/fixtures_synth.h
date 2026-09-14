@@ -3,7 +3,7 @@
 // tools/make-fixtures.py NICHT ueberschrieben.
 //
 // Ohne sie testet die Suite genau einen Pfad (flags 0x0B54), weil das Geraet
-// ueber 832 Pakete hinweg nichts anderes schickt.
+// im Laborlauf keine anderen Flag-Layouts schickt (siehe fixtures_ibd.h Kopf).
 #pragma once
 
 #include "fixtures_ibd.h"  // struct IbdFixture

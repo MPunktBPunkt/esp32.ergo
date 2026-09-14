@@ -3,6 +3,7 @@
 #include <Arduino.h>
 
 #include "BuildFlags.h"
+#include "ble/HrSource.h"
 
 namespace ergo {
 
@@ -67,22 +68,5 @@ struct HrSample {
     uint16_t energyKj = 0;
     uint32_t at = 0;  // millis der Notify
 };
-
-/** Woher der aktuell gueltige Puls kommt. */
-enum class HrSource : uint8_t {
-    None = 0,
-    Strap,   // eigener BLE-Link auf 0x180D
-    Relay,   // esp32.heartrate als Zwischenstation
-    Machine, // 0x2AD2-Feld des Bikes (beim Varon aus dem 5-kHz-Sender)
-};
-
-inline const char* hrSourceName(HrSource s) {
-    switch (s) {
-        case HrSource::Strap: return "strap";
-        case HrSource::Relay: return "relay";
-        case HrSource::Machine: return "machine";
-        default: return "none";
-    }
-}
 
 }  // namespace ergo

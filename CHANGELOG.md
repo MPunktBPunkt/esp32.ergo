@@ -3,6 +3,13 @@
 Absteigend nach Version. Kurze Einträge aus den ehemaligen `debug/UPDATE_*.md`-
 Notizen; Belege und Messwerte bleiben in den Primärprotokollen unter `debug/`.
 
+## 0.3.24-dev — 2026-09-14
+
+`HR_HOLD` / Reha nur mit Strap oder Relay (`hrUsableForControl`). Bike-HR
+(+25 bpm) löst Verlustpolitik aus, kein stiller Rückfall. Workout-Pulsdeckel
+ohne Gurtquelle unbewaffnet. Status: `hrUsable`, `reha.capArmed`,
+`workout.hrCapArmed`.
+
 ## 0.3.23-dev — 2026-09-13
 
 Kennfläche: Live-Cursor Stufe×Kadenz-Zelle. Status: `calib.passive.bandIdx`.
@@ -17,6 +24,12 @@ Calib-UI: Kadenzband-Spalten mit Bereichen; Live-Hinweis `calib.passive`.
 
 Ride: Alltags-Labels für Modi; Start/Freigabe nach STOP; Nachtest-Hierarchie
 im Calib-Tab.
+
+## 0.3.20-dev — 2026-09-13
+
+Nachtest-Abend: `0x05` am Draht **NO_EFFECT** trotz Success (`force=1`).
+DeviceStore: Varon-Defaults (`sint16`, `powerTrusted=0`) auch nach NVS-Load /
+`remember` nachziehen. Beleg: `debug/UPDATE_NACHTEST_RESULTS.md`.
 
 ## 0.3.19-dev / 0.3.18-dev — 2026-09-13
 
@@ -53,6 +66,18 @@ Optional `0x11`-Sim-Assist am Stufendach (`ergSimAssist`, default aus).
 ## 0.3.11-dev — 2026-09-13
 
 DeviceStore: bis 4 Geräte, NVS `ergodev`, Map-Slots; `/api/devices`, `/api/device`.
+
+## 0.3.10-dev — 2026-09-13
+
+Nachtest-Force: `force=1` lässt `0x05` einmalig durch den Limiter (dann zurück).
+STOP setzt Simulation auf Grade 0 wenn `allowSimulation`. Journal `cmd` bis 8 Byte;
+`probe.hrDelta`. Beleg: `debug/archiv/UPDATE_NACHTEST_FORCE.md`.
+
+## 0.3.9-dev — 2026-09-13
+
+Probe-API: `/api/probe/arm` `/mark` `/clear`, Status `probe.*`,
+`allowSimulation` + `/api/control/sim`. UI-Karte Nachtests 3–6. Beleg:
+`debug/archiv/UPDATE_NACHTEST_PROBE.md`, `debug/HW_NACHTEST_20260913.md`.
 
 ## 0.3.8-dev — 2026-09-12
 
@@ -95,6 +120,11 @@ FTMS-Peripheral-Bridge (Wattziel für Apps → Stufen am Varon).
 
 Gzip-UI (`web/index.html` → `UiPagesGz.h`); TestRunner MAP/20 min/Recovery.
 Flash-Budget über Kompression statt LittleFS-Auslagerung gelöst.
+
+## 0.1.1 — 2026-09-12
+
+Caps-Fix / Journal-Nachziehen und kleinere Coach-Fixes nach v0.1.0
+(`UPDATE_CAPS_FIX.md`). Dist-Bin `ergo.0.1.1.esp32s3.bin`.
 
 ## 0.1.0 — 2026-09-12
 

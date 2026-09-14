@@ -677,16 +677,17 @@ die kein kommerzielles Produkt braucht: auf diesem Bike hängt die Leistung bei
 fester Stufe an der Kadenz, und wer sie ruhig hält, bekommt eine deutlich
 genauere Regelung.
 
-Umsetzung wie in der Familie: PROGMEM im `UiPages.h`-Muster, SSE für Live-Daten,
-Canvas für Charts, keine Fremdbibliotheken, keine Build-Kette. Das Flash-Budget
-ist dabei der kritische Punkt — heartrate braucht für eine einfachere UI schon
-etwa 27 kB. Editor und Debug-Panel werden nachgeladen statt mitgeliefert; reicht
-es trotzdem nicht, wandert die UI nach LittleFS. Diese Entscheidung wird
-gemessen, nicht geraten.
+Umsetzung: gzip-PROGMEM, Python-Build (`tools/pio_pack_ui.py`), SSE und Canvas —
+siehe [WEBINTERFACE.md](WEBINTERFACE.md) §8. LittleFS ist für das UI-Budget nicht
+nötig.
 
 ---
 
 ## 8. API und SSE
+
+Diese Tabelle ist die Zielform aus Revision 4. Die **gebaute** API steht im
+[README](../../README.md#api-auswahl) (Abschnitt API); Namen weichen an mehreren
+Stellen ab.
 
 | Endpoint | Methode | Zweck |
 |----------|---------|-------|
@@ -891,9 +892,9 @@ nicht verwenden.
 
 ### v0.0 — Messen (läuft, `esp32.ftmsprobe`)
 
-Protokolltest erledigt. Offen sind die sechs Punkte aus
-[NACHTESTS.md](NACHTESTS.md), davon zwei blockierend: Stufen-Sweep und
-Kadenzabhängigkeit.
+Protokolltest erledigt. Fünf der sechs Punkte aus
+[NACHTESTS.md](NACHTESTS.md) sind beantwortet; **Test 6** (Crash unter Last)
+bleibt offen.
 
 ### v0.1 — Coach
 
@@ -975,9 +976,12 @@ aus dem Höchstlabel ableiten.
 8. `MANUAL_ERG` auf ein **unerreichbares** Ziel → UI markiert es als unerreichbar
    und zeigt den erreichbaren Wert. Kein stummes Klemmen.
 9. `HR_HOLD` auf 140 BPM → Puls stabilisiert innerhalb von fünf Minuten im
-   Totband, ohne dass die Stufe pendelt.
+   Totband, ohne dass die Stufe pendelt. Voraussetzung: vertrauenswürdige
+   Pulsquelle (Gurt oder Relay, `hrUsableForControl`); Bike-HR allein reicht
+   nicht.
 10. Gurt mitten in `HR_HOLD` ausschalten → Stufe friert ein, UI warnt sichtbar,
-    Rückfall auf `MANUAL_LEVEL` nach Timeout.
+    Rückfall auf `MANUAL_LEVEL` nach Timeout. Rückfall auf Bike-HR zählt als
+    Pulsverlust, nicht als Ersatzquelle.
 11. Not-Stop → Bike lastfrei in unter einer Sekunde.
 12. Trittfrequenz 10 s auf null → automatische Pause.
 13. Gewollter Neustart sendet vorher `08 01`.
@@ -992,10 +996,12 @@ aus dem Höchstlabel ableiten.
 19. Das Reha-Programm fährt 10 Minuten bei 60 W durch, ohne dass der Puls 120
     übersteigt. Der Deckel fängt im Anfahrband darunter an gegenzuhalten, und
     jeder Eingriff wird in der UI benannt und in der Session gezählt.
+    Voraussetzung wie bei Nr. 9: Deckel nur mit Gurt/Relay (`hrUsableForControl`).
 20. Die harten Profilgrenzen für Leistung, Puls und Stufe lassen sich von keinem
     Workout und keinem Modus überschreiten.
 21. Bei Pulsverlust verhält sich das Gerät so, wie es im aktiven Profil steht —
-    `reduce` senkt die Stufe, `freeze` hält sie.
+    `reduce` senkt die Stufe, `freeze` hält sie. Unzulässige Quelle
+    (`machine`/`none`) während `HR_HOLD`/Reha gilt als Verlust.
 22. Die Zonenschiene stimmt am Sessionende mit der Auswertung überein.
 
 ## 13. Abnahmekriterien Bridge
@@ -1021,14 +1027,14 @@ Betriebsregeln und Checkliste: [BRIDGE.md](BRIDGE.md).
 
 | Risiko | Bewertung |
 |--------|-----------|
-| **Stufe 16 erreicht nur ~130 W** | **Projektkritisch.** Lineare Extrapolation aus den Laborpunkten legt das nahe. Dann trägt der Widerstandskanal nur Grundlagentraining und `0x11` wird Pflicht. Test 1 entscheidet. |
+| **Stufe 16 erreicht nur ~130 W** | **Entschärft.** Test 1: ~170 W @ 60 rpm; Test 2: ~245 W @ 80 rpm. Der Widerstandskanal trägt v0.1 vollständig; `0x11` ist Option für feine Last und Spitzen, nicht Pflicht gegen einen Deckel. |
 | Nur 16 Stufen als Stellgröße | ERG ist grundsätzlich quantisiert. Ehrlich in der UI zeigen statt exakte Zielwerte vorzutäuschen. |
 | Kein Set Target Power | Erledigt durch Emulation, verlagert aber Aufwand in `PowerController` und Kalibrierung. |
 | Keine Rückmeldung der Stufe | Schattenwert kann auseinanderlaufen. Nach jedem Connect Stufe neu setzen statt annehmen. |
-| Drei BLE-Links am Ergo-Knoten | **Entschärft.** `heartrate-s3` fährt denselben Rollenmix mit `MAX_CONNECTIONS=3` produktiv, ohne PSRAM. Am Bike ist der Dual-Link trotzdem noch zu messen (Test 5); Rückfallebene ist der Puls aus `2AD2` und damit nur zwei Links. |
+| Drei BLE-Links am Ergo-Knoten | **Entschärft.** `heartrate-s3` fährt denselben Rollenmix mit `MAX_CONNECTIONS=3` produktiv, ohne PSRAM. Dual-Link am Bike gemessen und unter Last stabil — [HW_NACHTEST_20260913.md](../../debug/HW_NACHTEST_20260913.md). Rückfallebene bleibt der Puls aus `2AD2` (Anzeige), für Regelung siehe §12 / `hrUsableForControl`. |
 | Peripheral-Rolle für die Bridge | **Entschärft.** `HrServer` in heartrate v0.3 ist die laufende Vorlage samt Advertising, Client-Limit und Notify-Einspeisung aus dem Loop. |
 | Verhalten des Bikes bei Client-Abbruch | Test 6 lief nie. Bis dahin Hub-Watchdog aus und `08 01` vor jedem Neustart. |
-| Encoding auf einem Datenpunkt | `04 <sint16>` ruht auf einer belastbaren Messung. Der Sweep bestätigt es nebenbei. |
+| Encoding auf einem Datenpunkt | **Entschärft.** Vollständiger Sweep plus Steuer-Journal mit **0 Widersprüchen**. |
 | `HR_HOLD` pendelt | Träger Puls plus grobes Stufenraster. Großes Totband, langsamer Zyklus. |
 | Funklast WiFi + 3× BLE | Bekanntes Terrain aus heartrate, hier enger. |
 
@@ -1036,28 +1042,42 @@ Betriebsregeln und Checkliste: [BRIDGE.md](BRIDGE.md).
 
 Blockierend, siehe [NACHTESTS.md](NACHTESTS.md):
 
-- **Test 1 Stufen-Sweep** — Leistungsbereich und Kennlinie
-- **Test 2 Kadenzabhängigkeit** — Architektur von `PowerController`
+- **Test 6 Crash unter Last** — Hub-Watchdog unter Bike-Link; bis dahin Watchdog
+  aus und `08 01` vor jedem Neustart
 
-Nicht blockierend, aber vor weiteren Releases zu klären:
+Geschlossen (Messung / Entscheidung):
 
-- Test 3 Watt-Nachtest, Test 4 Simulation, Test 5 Dual-Link (Messungen liegen
-  vor — siehe [NACHTESTS.md](NACHTESTS.md)); Test 6 Crash unter Last **offen**
-- ~~Reihenfolge v0.2 (Editor und Tests) gegen v0.3 (Bridge)~~ — in der Praxis
-  entschieden, siehe §11
+- ~~**Test 1 Stufen-Sweep**, **Test 2 Kadenzabhängigkeit**~~ — erledigt; siehe
+  [NACHTESTS.md](NACHTESTS.md)
+- ~~Test 3 Watt-Nachtest, Test 4 Simulation, Test 5 Dual-Link~~ — Messungen
+  liegen vor
+- ~~Flash-Budget der UI (PROGMEM vs. LittleFS)~~ — gemessen ≈ 74,9 %;
+  entschieden durch gzip-PROGMEM ([WEBINTERFACE.md](WEBINTERFACE.md) §8)
+- ~~Trägheit / Versatz der 5-kHz-Kette für `HR_HOLD`~~ — nur Dashboard:
+  +25 bpm gegen Gurt; Code-Gate ab 0.3.24 (`hrUsableForControl`), siehe
+  [ENTWICKLERDOKU.md](ENTWICKLERDOKU.md) §11 Sicherheit
+- ~~Reihenfolge v0.2 gegen v0.3~~ — in der Praxis entschieden, siehe §11
+
+Teilweise beantwortet, Abnahme offen:
+
+- Rampe 20 W/min über 16 Stufen — Kennfläche liefert die Stufenweite je
+  Kadenzband; Feinheit und Fahrgefühl an die **ERG-Fahrer-Abnahme** (§12 Nr. 7)
+
+Offen (echte Entscheidungen):
+
 - Baut v0.1 auch für den D1 Mini oder von Anfang an nur S3
 - Session-Format: eigenes JSON oder gleich TCX/FIT
-- Flash-Budget der UI: reicht PROGMEM, oder muss sie nach LittleFS? Wird am
-  ersten Build gemessen.
-- Ob die Rampe mit 20 W/min über 16 Stufen brauchbar fein ist oder auf `0x11`
-  warten muss
 - Ob die Kalibrierung pro Fahrer geführt wird (Masse beeinflusst nichts am
   Widerstand, aber die HR-Regelparameter schon)
 - Ob der Relay-Knoten und der Ergo-Knoten getrennt bleiben oder ob `esp32.ergo`
   das Relay später selbst mitbringt. Getrennt ist sauberer — zwei Produkte, zwei
-  Verantwortungen — kostet aber ein zweites Board.
-- Wie träge der Puls über die 5-kHz-Kette ins `2AD2`-Feld kommt. Entscheidet, ob
-  die budgetfreie Quelle für `HR_HOLD` taugt oder nur fürs Dashboard.
+  Verantwortungen — kostet aber ein zweites Board
+- **SIM-Passthrough** (§11 v0.3: `0x11` der App durchreichen) — **nicht gebaut**,
+  obwohl Test 4 die Vorbedingung erfüllt (`0x11` wirkt ab ~3 %)
+
+Planmäßig später, kein Rückstand:
+
+- HRV-Readiness und TCX/FIT-Export — v0.4, nicht Backlog von v0.1–v0.3
 
 Erledigt seit Revision 2:
 

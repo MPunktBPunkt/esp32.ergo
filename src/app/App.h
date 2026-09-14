@@ -145,6 +145,11 @@ private:
 
     /** Welcher Puls gilt gerade, und woher. */
     ergo::HrSource resolveHrSource() const;
+    /** HTTP 409 mit reason=hr_source_not_trusted. */
+    void rejectHrSourceNotTrusted_();
+    bool hrControlOk_() const {
+        return ergo::hrUsableForControl(resolveHrSource());
+    }
     uint8_t effectiveHr() const;
 
     // ── Kalibrierung ────────────────────────────────────────────────────────

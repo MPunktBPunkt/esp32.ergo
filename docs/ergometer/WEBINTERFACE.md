@@ -219,11 +219,11 @@ Fällt der Gurt aus, ist die richtige Reaktion je Person verschieden:
 | `reduce` | Stufe auf ein sicheres Niveau senken, warnen | **Vorgabe für Reha-Profile** |
 | `stop` | Session pausieren, Last weg | maximale Vorsicht |
 
-**Pulsquelle:** Für `HR_HOLD` und Reha-Deckel ist der **Gurt** (oder HR-Relay)
-die vorgesehene Quelle. Das Bike-HR-Feld in `0x2AD2` lag im Dual-Link-Lauf
-systematisch ≈ +25 bpm über dem Strap ([NACHTESTS.md](NACHTESTS.md) /
-ENTWICKLERDOKU). Die Firmware **sperrt** den Modus bei `hrSource=machine`
-derzeit **nicht** — wer Reha fährt, sollte den Gurt/Relay gekoppelt haben.
+**Pulsquelle:** Für `HR_HOLD` und Reha-Deckel sind nur **Gurt** oder **HR-Relay**
+zulässig (`hrUsable`). Bike-HR (`machine`, ≈ +25 bpm gegen Strap) wird abgelehnt:
+HTTP 409 beim Start, während der Fahrt als Pulsverlust (gleiche Politik wie
+Gurtabriss). Die UI deaktiviert die Bedienelemente und nennt den Grund im
+Klartext.
 
 ---
 

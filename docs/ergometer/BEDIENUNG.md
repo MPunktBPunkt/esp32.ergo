@@ -11,7 +11,7 @@ Kurz für jemanden, der das Gerät **nutzt**, nicht baut. Details: Web-UI und
 4. **Workout** aus der Bibliothek starten oder Editor nutzen.
 5. **Session** danach unter Verlauf ansehen / annotieren.
 
-## Drei Dinge, die überraschen
+## Vier Dinge, die überraschen
 
 1. **Konsolendisplay bleibt aus**, solange der ESP als Central am Bike hängt —
    die Web-UI ist die Anzeige.
@@ -19,10 +19,11 @@ Kurz für jemanden, der das Gerät **nutzt**, nicht baut. Details: Web-UI und
    die Bridge am ESP ist der Weg für die App.
 3. **Stufe ist ein Schattenwert** — das Bike meldet die gestellte Stufe nicht
    zurück (`~` in der UI).
+4. **Pulsregelung braucht den Gurt** — `HR_HOLD` und Reha starten nur mit Gurt
+   oder HR-Relay; Bike-HR reicht nicht (≈ +25 bpm Versatz).
 
 ## Sicherheit (alltagsnah)
 
 - **STOP** ist immer erreichbar (auch wenn die Bridge steuert).
-- Reha / Pulsdeckel: möglichst **Gurt oder HR-Relay**, nicht nur Bike-HR
-  (Bike-HR lag ~25 bpm höher).
+- Reha / Pulsdeckel: **Gurt oder HR-Relay** Pflicht, nicht nur Bike-HR.
 - OTA/Neustart nicht unter Last ohne Stop — siehe harte Regeln in `STATE.md`.

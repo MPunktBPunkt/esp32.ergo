@@ -189,20 +189,17 @@ Bike-Empfänger → HR-Feld in `2AD2` **ohne** dass ergo den Gurt gekoppelt hat.
 - Mittel **Bike-HR − Strap ≈ +25 bpm** (GymLink/Konsole träge/ungenau)  
 - H9: **nur ein BLE-Central** → Relay-Architektur (`esp32.heartrate`)
 
-**Befund für Reha / Soft-Ceiling.** Ein systematischer Offset von etwa
-25 Schlägen ist für einen Pulsdeckel **kein Vorsichtshinweis, sondern
-ausschusswürdig**: wer den Soft-Ceiling auf dem Bike-HR fährt, greift 25 bpm
-zu spät oder zu früh. Für `HR_HOLD` und Reha bleibt die Strap-/Relay-Quelle die
-tragfähige Messgröße; Bike-HR eignet sich als Gegenprobe und Rückfallebene im
-Dashboard, nicht als Deckel-Messung.
+**Befund für Reha / Soft-Ceiling — harte Regel ab 0.3.24.** Ein systematischer
+Offset von etwa 25 Schlägen ist für einen Pulsdeckel **kein Vorsichtshinweis,
+sondern Ausschlussgrund**. `hrUsableForControl` lässt nur `Strap` und `Relay`
+zu; `Machine` und `None` speisen `HR_HOLD` und Reha nicht. Bike-HR bleibt für
+Anzeige, Aufzeichnung und Zonen erlaubt.
 
-**Firmware-Verhalten (geprüft in `App.cpp`).** Die Firmware **verweigert
-`HR_HOLD` und Reha nicht**, wenn `hrSource=machine` ist. `resolveHrSource()`
-nimmt Strap/Relay, sonst das HR-Feld aus `2AD2`, sonst `none`.
-`loopHr` / `loopReha` nutzen `effectiveHr()` und behandeln jede Quelle außer
-`none` als frisch, sobald ein Wert > 0 anliegt. Es gibt keinen Mode-Guard der
-Form „nur Strap“. Wer mit nur GymLink fährt, kann den Deckel also auf dem
-falschen Sensor laufen lassen — das ist ein bekannter Softspot, kein Hardening.
+**Firmware-Verhalten.** Eintritt in `HR_HOLD` / Reha ohne vertrauenswürdige Quelle
+→ HTTP 409 (`hr_source_not_trusted`). Läuft die Quelle währenddessen auf
+`Machine` zurück, gilt das als **Pulsverlust** (`hrFresh=false` an die Regler),
+nicht als stiller Ersatz. Workout-Schritte mit `hrSoft`/`hrMax` laufen auf Watt
+weiter; der Deckel bleibt unbewaffnet (`workout.hrCapArmed=false`).
 
 ---
 
@@ -413,6 +410,7 @@ Workouts und Sessions müssen schlank bleiben.
 {
   "mode": "MANUAL_ERG",          // ControlMode-Name
   "hrSource": "strap",           // strap | relay | machine | none
+  "hrUsable": true,              // Strap/Relay → HR_HOLD/Reha erlaubt
   "heartRate": 132,              // effectiveHr() zur aktiven Quelle
   "bikeLink": true,              // OTA/deploy verweigert, solange true
   "erg": {
@@ -420,6 +418,12 @@ Workouts und Sessions müssen schlank bleiben.
     "smoothedW": 118.4,
     "ceiling": false,            // true = Ziel oberhalb Kennfläche (UI: unerreichbar)
     "mapReady": true
+  },
+  "reha": {
+    "capArmed": true             // false = Deckel unbewaffnet (keine Gurtquelle)
+  },
+  "workout": {
+    "hrCapArmed": false          // Soft/Hard-HR nur bei hrUsable
   },
   "bridge": {
     "clientRole": "observer",    // none | connected | observer | controller
@@ -449,6 +453,9 @@ Status-JSON als Negation von `erg.ceiling` zu lesen (Decke = Ziel nicht
 erreichbar). `clientRole` kommt aus `FtmsServer::clientRole()`.
 `passive.accept` ist ein Live-Hinweis in der Heatmap, kein Persistenz-Flag.
 `contradictory` sitzt am Journal-Eintrag (`ControlJournal::contradictory()`).
+`hrUsable` spiegelt `hrUsableForControl(resolveHrSource())`. `reha.capArmed` /
+`workout.hrCapArmed` sagen der UI, ob der Pulsdeckel bewaffnet ist — ohne
+Eigenlogik.
 
 ---
 
@@ -467,6 +474,15 @@ Reset ohne `08 01`.
 `HrController` und `RehaController` werten dasselbe Politikfeld aus: Stop →
 `ftms.stop` + Sessionende; Freeze → keine neuen Stufenwrites; Reduce → Wattziel
 absenken. Timeout-Schwelle typisch 8 s ohne frischen Puls.
+
+**Vertrauenswürdige Pulsquellen.** Für `HR_HOLD` und Reha gelten nur `Strap`
+und `Relay` (`hrUsableForControl` in `BleTypes.h`). `Machine` (Bike-`2AD2` /
+5-kHz-GymLink) und `None` sind ausgeschlossen — Dual-Link: Bike ≈ Strap+25 bpm.
+Fällt die Quelle während der Fahrt auf `Machine` zurück, ist das **kein** stiller
+Ersatz, sondern Pulsverlust: dieselbe `HrLossPolicy` wie beim Gurtabriss, inkl.
+UI-Warnung und Session-Eintrag. Eintritt ohne Gurt/Relay → HTTP 409
+`hr_source_not_trusted`. Workout-Wattziele laufen weiter; ein Schritt-Pulsdeckel
+bleibt unbewaffnet.
 
 **Bike-Verlust unter Last.** Verbindungsabbruch pausiert die Session-Rechnung;
 die Stufe am Bike bleibt, was sie war — das Gerät meldet sie nicht zurück. Nach
@@ -508,13 +524,14 @@ langsamer Rückführung.
 
 ### HrController
 
-**Eingänge:** Zielpuls, frischer HR, optionale harte Profil-HRmax,
+**Eingänge:** Zielpuls, frischer HR (`hrFresh` — App setzt `false`, wenn die
+Quelle nicht `hrUsableForControl` ist), optionale harte Profil-HRmax,
 `HrLossPolicy`. **Ausgänge:** Wattziel für den inneren `PowerController`,
 `lost`, geglätteter Puls. **Zustand:** Integral BPM→Watt, Soft-Armzeit,
 Verlust-Timer. **Grenzen:** Deadband ±3 bpm, min/max Watt, `lostAfterMs`,
-stärkerer Gain über Cap. **Alternative:** direkter Puls→Stufe — scheitert an
-Kadenzwechseln bei fester Stufe; die Kaskade hält den inneren Kreis auf einer
-stabilen Größe.
+stärkerer Gain über Cap. Unzulässige Quelle = Verlustpfad, kein zweiter Semantik.
+**Alternative:** direkter Puls→Stufe — scheitert an Kadenzwechseln bei fester
+Stufe; die Kaskade hält den inneren Kreis auf einer stabilen Größe.
 
 ### WorkoutEngine
 
@@ -527,13 +544,15 @@ hosttestbar und ohne JSON im Kern bleiben soll; Parse liegt in `WorkoutJson`.
 
 ### RehaController
 
-**Eingänge:** festes Sollwatt, Soft-/Hard-Pulsgrenzen, Dauer, frischer HR,
-Verlustpolitik. **Ausgänge:** `effectiveW` (abgesenkt unter Deckel),
-`capActive`, Interventionszähler, `finished`/`lost`. **Zustand:** effektive
-Leistung, Timer, Cap-Flag. **Grenzen:** Soft-Cut- und Hard-Cut-Gain,
-langsame Rückkehr (`restorePerS`), min. Watt. **Alternative:** denselben
-Pfad wie `HR_HOLD` (Zielpuls) — bewusst getrennt: Reha hält die Leistung und
-schneidet nur von oben; `HR_HOLD` regelt beidseitig auf einen Zielpuls.
+**Eingänge:** festes Sollwatt, Soft-/Hard-Pulsgrenzen, Dauer, frischer HR
+(gleiche `hrFresh`-/Quellen-Gate wie `HrController`), Verlustpolitik.
+**Ausgänge:** `effectiveW` (abgesenkt unter Deckel), `capActive`,
+Interventionszähler, `finished`/`lost`. **Zustand:** effektive Leistung, Timer,
+Cap-Flag. **Grenzen:** Soft-Cut- und Hard-Cut-Gain, langsame Rückkehr
+(`restorePerS`), min. Watt. Quelle unzulässig → `lost`, `capActive` fällt; kein
+Eingriffszähler (Verlust, nicht Intervention). **Alternative:** denselben Pfad
+wie `HR_HOLD` (Zielpuls) — bewusst getrennt: Reha hält die Leistung und schneidet
+nur von oben; `HR_HOLD` regelt beidseitig auf einen Zielpuls.
 
 ---
 
