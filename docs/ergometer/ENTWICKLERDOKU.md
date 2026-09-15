@@ -1,6 +1,6 @@
 # Entwicklerdokumentation — esp32.ergo
 
-**Stand:** 2026-09-14 · gültig für Firmware **0.3.2x**  
+**Stand:** 2026-09-15 · gültig für Firmware **0.3.2x**  
 **Gerät:** ESP32-S3 `192.168.178.88` · Bike Hammer Varon XTR II (BLE `TC174`) · Polar H9  
 
 Dies ist die **technische Gesamtschau**: Technologien, Probe-Weg, was Bike und
@@ -256,20 +256,26 @@ Build-Protokollen als Nenner der Flash-Auslastung steht. SPIFFS bleibt
 
 ## 7. Kalibrierdaten (aktueller Stand)
 
-**Vollständige Heatmap-Tabelle (Abend 2026-09-13, inkl. passiv ~40 rpm):**
-[`KALIBRIERUNG.md`](KALIBRIERUNG.md) · Roh-JSON
-[`kalibrierung-map-20260913.json`](kalibrierung-map-20260913.json).
+**Vollständige Heatmap-Tabelle (2026-09-15, passiv + Sweep):**
+[`KALIBRIERUNG.md`](KALIBRIERUNG.md) · Watt-Raster
+[`kalibrierung-map-20260915.json`](kalibrierung-map-20260915.json) · letzter
+API-Dump mit Sample-Zählern
+[`kalibrierung-map-20260913.json`](kalibrierung-map-20260913.json) · Screenshot
+[`screenshots/kennflaeche.png`](screenshots/kennflaeche.png).
 
 Persistente Map: NVS Slot 0 / MAC `c2:32:a5:1e:bf:b5`.  
 Snapshot laut [`KALIBRIERUNG.md`](KALIBRIERUNG.md): **16/16 Stufen**,
-**7/8 Bänder** (110–120 leer), **ceilingW ≈ 224**, **62 Rasterzellen** belegt.
-Die ~**480 Stützstellen** sind Einzelmessungen (Sweep-Fenster und passive
-Samples), die in diese 62 Zellen einfließen — keine zweite Zählung derselben
-Größe. Band 40–50 durch passives Lernen voll; 100–110 nur dünn.
+**8/8 Bänder**, **99/128 Rasterzellen** belegt, **753 Stützstellen**
+(11 Sweep). Die Stützstellen sind Einzelmessungen (Sweep-Fenster und passive
+Samples), die in die Rasterzellen einfließen — keine zweite Zählung derselben
+Größe. Stufe 4–11 ist über alle Bänder voll; Stufe 12–16 bleibt in den hohen
+Kadenzbändern dünn. DeviceStore-`ceilingW` in der UI weiter **224**;
+heißeste Zelle **339 W** @ Stufe 16 / 100–110 rpm.
 
 `ceilingW ≈ 226` in [`debug/HW_TEST2_80RPM.md`](../../debug/HW_TEST2_80RPM.md)
-ist eine **Momentaufnahme** direkt nach dem 80-rpm-Lauf; die dokumentierte
-Karten-Decke bleibt **224** aus der Kalibrierungsübersicht.
+ist eine **Momentaufnahme** direkt nach dem 80-rpm-Lauf; die gespeicherte
+Karten-Decke bleibt **224** aus dem Geräteprofil, unabhängig von der
+339-W-Zelle in der Heatmap.
 
 ### 7.1 Test 1 — 60 rpm (2026-09-11)
 

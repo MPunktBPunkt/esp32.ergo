@@ -11,6 +11,15 @@ Kurz für jemanden, der das Gerät **nutzt**, nicht baut. Details: Web-UI und
 4. **Workout** aus der Bibliothek starten oder Editor nutzen.
 5. **Session** danach unter Verlauf ansehen / annotieren.
 
+![Profile wählen](screenshots/profile.png)
+
+![Ride](screenshots/ride.png)
+
+![Workouts](screenshots/workouts.png)
+
+Weitere Reiter: [WEBINTERFACE.md §7](WEBINTERFACE.md). Kennfläche:
+[KALIBRIERUNG.md](KALIBRIERUNG.md).
+
 ## Vier Dinge, die überraschen
 
 1. **Konsolendisplay bleibt aus**, solange der ESP als Central am Bike hängt —
