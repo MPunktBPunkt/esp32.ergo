@@ -77,6 +77,7 @@ pre {
   overflow-wrap: anywhere; white-space: pre-wrap;
 }
 blockquote { border-left: 3px solid var(--accent); margin: 1rem 0; padding: 0.25rem 0.75rem; color: var(--dim); }
+img { max-width: 100%; height: auto; border: 1px solid var(--edge); border-radius: 8px; margin: 0.75rem 0; }
 @media print {
   nav { display: none; }
   main { margin: 0; max-width: none; }
@@ -213,6 +214,7 @@ def check_links() -> list[str]:
                 "debug/calib/README.md",
                 "docs/ergometer/README.md",
                 "docs/ergometer/kalibrierung-map-20260913.json",
+                "docs/ergometer/kalibrierung-map-20260915.json",
             }:
                 # json is fine; for md require list or allowed
                 if trel.endswith(".md"):
@@ -268,7 +270,22 @@ def render_html() -> str:
                 return f'<a href="#{tid}--{frag}">{text}</a>'
             return f'<a href="#{tid}">{text}</a>'
 
-        linked = re.sub(r"\[([^\]]*)\]\(([^)]+)\)", repl_link, raw)
+        def rewrite_img(m: re.Match[str]) -> str:
+            alt, href = m.group(1), m.group(2).strip()
+            if href.startswith(("http://", "https://", "mailto:", "data:")):
+                return m.group(0)
+            path_part = href.split("#", 1)[0].split("?", 1)[0]
+            if not path_part:
+                return m.group(0)
+            resolved = (src.parent / path_part).resolve()
+            try:
+                out_rel = resolved.relative_to(OUT.parent.resolve()).as_posix()
+            except ValueError:
+                return m.group(0)
+            return f"![{alt}]({out_rel})"
+
+        with_imgs = re.sub(r"!\[([^\]]*)\]\(([^)]+)\)", rewrite_img, raw)
+        linked = re.sub(r"\[([^\]]*)\]\(([^)]+)\)", repl_link, with_imgs)
         # rewrite ## headings to include doc prefix in id via attr_list after render is hard;
         # inject HTML markers instead
         html_body = mdlib.markdown(linked, extensions=extensions)

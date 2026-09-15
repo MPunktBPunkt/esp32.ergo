@@ -4,7 +4,8 @@
 [docs/ergometer/ENTWICKLERDOKU.md](docs/ergometer/ENTWICKLERDOKU.md).
 Versionsgeschichte: [CHANGELOG.md](CHANGELOG.md).
 
-Stand: **2026-09-14** · Firmware **0.3.24-dev**
+Stand: **2026-09-15** · Firmware **0.3.24-dev** (Live-UI-Badge auf den
+Screenshots: **0.3.23-dev**)
 
 ---
 
@@ -23,7 +24,7 @@ Stand: **2026-09-14** · Firmware **0.3.24-dev**
 
 1. **Nachtest 6** — Crash unter Last (Stufe ~10, hart Reset ohne STOP)
 2. **Bridge-Abnahme** MyWhoosh (ERG + Exclusive/Observer)
-3. Optional: Kadenzband 100–110 / 110–120 dichter; `allowSimulation` aus
+3. Optional: Stufe 12–16 in den hohen Kadenzbändern; `allowSimulation` aus
 4. Formale ERG/HR/Reha-Fahrer-Abnahme
 5. **SIM-Passthrough** (§11 v0.3) — Test 4 ok, Code fehlt
 
@@ -100,7 +101,7 @@ Liste: [PFLICHTENHEFT.md](docs/ergometer/PFLICHTENHEFT.md) §12 — **24** Krite
 |---|---|
 | 1–4 | erfüllt (4 = CI curated fixtures, nicht „274 Pakete“) |
 | 5 | **erfüllt** (Test 1: linear bis ~170 W @ Stufe 16; Journal WORKS) |
-| 6 | **erfüllt für Architektur** (60 rpm voll + 80 rpm leicht); dichtere Map optional |
+| 6 | **erfüllt für Architektur** (60 rpm voll + 80 rpm + passiv 8/8 Bänder); Stufe 12–16 @ hohe Kadenz optional |
 | 6a | **erfüllt** (Host + Live-Export + CI `--verify-curated`) |
 | 6b | gebaut; Rampen-Stub auf Hardware (kein volles MAP) |
 | 7 | gebaut, Fahrer-Abnahme offen |

@@ -40,6 +40,13 @@ HR-Relay / Polar H9 ────────┘         │
 
 Der Puls kommt wahlweise direkt vom Gurt, vom [HR-Relay](https://github.com/MPunktBPunkt/esp32.heartrate) oder aus dem `0x2AD2`-Feld des Bikes, das der Polar H9 über 5 kHz GymLink speist. Die Relay-Variante ist die interessante: der H9 lässt nur **einen** BLE-Client zu, das Relay hält ihn und bedient MyWhoosh und den Ergo-Node gleichzeitig.
 
+![Ride-Ansicht](docs/ergometer/screenshots/ride.png)
+
+![Kennfläche Stufe × Kadenz](docs/ergometer/screenshots/kennflaeche.png)
+
+Weitere UI-Bilder: [`docs/ergometer/WEBINTERFACE.md`](docs/ergometer/WEBINTERFACE.md)
+(Abschnitt Live-Screenshots).
+
 ---
 
 ## Was das Gerät kann — und was nicht

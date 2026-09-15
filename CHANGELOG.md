@@ -3,6 +3,15 @@
 Absteigend nach Version. Kurze Einträge aus den ehemaligen `debug/UPDATE_*.md`-
 Notizen; Belege und Messwerte bleiben in den Primärprotokollen unter `debug/`.
 
+## Doku — 2026-09-15
+
+Live-Screenshots der Web-UI unter
+[`docs/ergometer/WEBINTERFACE.md`](docs/ergometer/WEBINTERFACE.md)
+(Ride, Workouts, Profile, Geräte, Einstellungen, OTA, Kalibrierung, Debug).
+Kennfläche aus der Heatmap: **753 Stützstellen**, **99/128 Zellen**,
+**8/8 Bänder**, Peak **339 W** @ Stufe 16 / 100–110 rpm.
+Tabelle: [`docs/ergometer/KALIBRIERUNG.md`](docs/ergometer/KALIBRIERUNG.md).
+
 ## 0.3.24-dev — 2026-09-14
 
 `HR_HOLD` / Reha nur mit Strap oder Relay (`hrUsableForControl`). Bike-HR
