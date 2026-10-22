@@ -15,6 +15,7 @@
 #include "control/SimAssist.h"
 #include "core/FtpCareer.h"
 #include "core/Progression.h"
+#include "core/HwInfo.h"
 #include "core/NetUtil.h"
 #include "core/PsramAlloc.h"
 #include "core/Zone.h"
@@ -43,13 +44,14 @@ void App::begin() {
     delay(300);
     Serial.printf("\n=== esp32.ergo v%s (%s) ===\n", FW_VERSION, ERGO_BOARD_LABEL);
     Serial.printf("[BOOT] reset reason %d\n", (int)esp_reset_reason());
+    HwInfo::begin();
     Serial.printf("[MEM] heap %u  min %u  psram %u  freePsram %u\n",
                   (unsigned)ergo::freeHeap(), (unsigned)ergo::minFreeHeap(),
                   (unsigned)ergo::psramSize(), (unsigned)ergo::freePsram());
     if (!ergo::psramReady()) {
-        Serial.println(
-            "[MEM] PSRAM 0 — memory_type pruefen (N16R8=qio_opi, N8R2=qio_qspi). "
-            "Ring bleibt intern.");
+        Serial.printf("[MEM] PSRAM 0 — Build braucht %s (Modul %s). Ring bleibt intern.\n",
+                      HwInfo::psramBytesEfuse() == (2u << 20) ? "qio_qspi" : "qio_opi",
+                      HwInfo::moduleGuess());
     }
 
     config.begin();
@@ -480,7 +482,17 @@ void App::buildStatusJson(JsonDocument& doc) {
     doc["psram"] = ergo::psramSize();
     doc["freePsram"] = ergo::freePsram();
     doc["psramReady"] = ergo::psramReady();
+    doc["hwModule"] = HwInfo::moduleGuess();
     doc["freeSketch"] = ESP.getFreeSketchSpace();
+    {
+        JsonObject hw = doc["hw"].to<JsonObject>();
+        hw["chip"] = ESP.getChipModel();
+        hw["chip_rev"] = ESP.getChipRevision();
+        hw["heap_free"] = ergo::freeHeap();
+        hw["heap_min_free"] = ergo::minFreeHeap();
+        hw["heap_max_alloc"] = ESP.getMaxAllocHeap();
+        HwInfo::toJson(hw);
+    }
     doc["hub"] = config.hubHost + ":" + String(config.hubPort);
     doc["hubOk"] = hub.lastOk();
     doc["codecSelfTest"] = codecSelfTest_;
@@ -751,6 +763,7 @@ void App::buildHeartbeat(JsonDocument& doc) {
     doc["minHeap"] = ergo::minFreeHeap();
     doc["psram"] = ergo::psramSize();
     doc["freePsram"] = ergo::freePsram();
+    doc["hwModule"] = HwInfo::moduleGuess();
     doc["freeSketch"] = ESP.getFreeSketchSpace();
     doc["fwType"] = FW_TYPE;
     doc["board"] = ERGO_BOARD_ID;

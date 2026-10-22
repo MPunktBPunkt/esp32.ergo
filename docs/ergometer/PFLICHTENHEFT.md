@@ -86,8 +86,8 @@ während der Fahrt nicht verbunden.
 
 ### Plattform
 
-- **ESP32-S3 (YD-ESP32-S3 N16R8)** als primäres Ziel, PSRAM aktiv
-  (`qio_opi` + `BOARD_HAS_PSRAM`; allokiert nur explizite Puffer, nicht `malloc`)
+- **ESP32-S3 (YD-ESP32-S3 N8R2)** als primäres Ziel, PSRAM aktiv
+  (`qio_qspi` + `BOARD_HAS_PSRAM`; allokiert nur explizite Puffer, nicht `malloc`)
 - WiFiManager (Captive Portal), keine Secrets im Source, NVS-Namespace `esphub`
 - ConfigStore (NVS), LittleFS für Workouts, Kalibrierung und Session-Archiv
 - WebServer :80, SSE, Browser-OTA
@@ -840,7 +840,7 @@ Semantik, für ein Gerät mit laufender SSE-UI nicht.
 
 | Item | Hinweis |
 |------|---------|
-| **YD-ESP32-S3 (N16R8)** | Ergo-Knoten, primäres Ziel, `esptool flash_id` vorher |
+| **YD-ESP32-S3 (N8R2)** | Ergo-Knoten; hu-probe eFuse/JEDEC: 8 MiB Quad-Flash, 2 MiB Quad-PSRAM AP_3v3 |
 | **Zweiter ESP32-S3** | Relay-Knoten mit `esp32.heartrate` v0.3, hält den Gurt |
 | HAMMER Varon XTR II | `TC174`, MAC `c2:32:a5:1e:bf:b5`, Profil vermessen |
 | Polar H9 | BLE (1 Client) + ANT+ + 5-kHz-GymLink gleichzeitig |
@@ -879,12 +879,12 @@ build_flags =
 ```
 
 `heartrate-s3` hat belegt, dass drei Links + WiFi + SSE **ohne** PSRAM laufen.
-Ergo schaltet PSRAM trotzdem ein (N16R8, `qio_opi` + `BOARD_HAS_PSRAM`), aber
+Ergo schaltet PSRAM trotzdem ein (N8R2, `qio_qspi` + `BOARD_HAS_PSRAM`), aber
 **nicht** als globalen Heap: BLE/WiFi/DMA bleiben intern. Nutzen — gemessen
 in hu-probe, Sheet `esp32-s3-silicon`: mehr interner Headroom, längerer
 Debug-Ring, Status-JSON aus SPIRAM. PSRAM heilt **keine** RF-/Last-Crashes
 (Nachtest 6 bleibt offen). Falsches `memory_type` → `getPsramSize()==0`
-(N8R2: `qio_qspi`).
+(N16R8/Octal wäre `qio_opi` — nicht unser Modul).
 
 NimBLE bleibt auf 1.4.x gepinnt wie in heartrate und Sonde, damit der Code
 unverändert wandert. In 1.4 sind `getStartHandle`/`getEndHandle` privat —

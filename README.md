@@ -91,10 +91,11 @@ Ab 0.3.14: Observer vs. Controller und Exklusiv-Lock — siehe
 | ESP32-S3 | `ergo` | zwei BLE-Links im Coach, drei in der Bridge |
 
 Kein D1 Mini: der Coach braucht zwei gleichzeitige Verbindungen, die Bridge drei.
-PSRAM (YD-ESP32-S3 N16R8, `qio_opi`) ist **an**, aber nicht als globaler
-`malloc`: BLE/WiFi/DMA bleiben intern. Debug-Ring und Status-JSON liegen in
-PSRAM — gleiches Muster wie hu-probe (`technology-audit`). `getPsramSize()==0`
-heißt fast immer falsches `memory_type` (N8R2 braucht `qio_qspi`).
+PSRAM (YD-ESP32-S3 **N8R2**, `qio_qspi`, 2 MiB Quad) ist **an**, aber nicht
+als globaler `malloc`: BLE/WiFi/DMA bleiben intern. Debug-Ring und Status-JSON
+liegen in PSRAM — gleiches Muster und dasselbe Board wie hu-probe
+(`technology-audit`). `getPsramSize()==0` heißt fast immer falsches
+`memory_type` (N16R8/Octal wäre `qio_opi` — das ist nicht unser Modul).
 
 ---
 

@@ -5,12 +5,11 @@ Notizen; Belege und Messwerte bleiben in den Primärprotokollen unter `debug/`.
 
 ## 0.3.25-dev — 2026-10-22
 
-PSRAM aktiv für YD-ESP32-S3 **N16R8** (`qio_opi` + `BOARD_HAS_PSRAM`).
-`malloc` bleibt intern — BLE/WiFi/DMA nicht nach SPIRAM. Debug-Ring
-(`ERGO_DEBUG_RING`, Default 512) und Status-JSON per `callocPreferPsram`.
-Status: `psram`, `freePsram`, `minHeap`, `debug.ring.inPsram`. Boot loggt
-`[MEM]`; `getPsramSize()==0` → Hinweis N16R8 vs N8R2. Audit-Vorlage:
-hu-probe 2026-10-21 / Sheet `esp32-s3-silicon`. **Heilt Nachtest 6 nicht.**
+PSRAM aktiv für YD-ESP32-S3 **N8R2** (`qio_qspi` + `BOARD_HAS_PSRAM`;
+2 MiB Quad AP_3v3 — hu-probe eFuse/Kopf). `HwInfo` (aus hu-probe) liest
+Modul/Flash/PSRAM und steht im UI-Kopf wie bei der Sonde. `malloc` bleibt
+intern. Debug-Ring und Status-JSON per `callocPreferPsram`. Status: `hw.*`,
+`hwModule`, `psram`, `freePsram`, `minHeap`. **Heilt Nachtest 6 nicht.**
 
 ## 0.3.24-dev — 2026-09-14
 

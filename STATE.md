@@ -35,7 +35,7 @@ Stand: **2026-10-22** · Firmware **0.3.25-dev**
 
 | | |
 |---|---|
-| Gerät | ESP32-S3 auf `192.168.178.88`, MAC `68B6B329339C` |
+| Gerät | YD-ESP32-S3 **N8R2** (8 MiB Quad-Flash, 2 MiB Quad-PSRAM) auf `192.168.178.88`, MAC `68B6B329339C` |
 | Bike | Hammer Varon XTR II, BLE-Name `TC174`, MAC `c2:32:a5:1e:bf:b5` |
 | Hub | `192.168.178.113:8093`, `fwType: ergo` |
 | Rollback-Bin | `../nodes/esp32.ftmsprobe/dist/ftmsprobe.0.1.4.esp32s3.bin` (Monorepo) |

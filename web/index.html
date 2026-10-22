@@ -65,7 +65,8 @@ h1{font-family:'Syne',system-ui,sans-serif;font-size:30px;letter-spacing:.14em;
   margin:0;font-weight:800}
 .badge{font-size:12px;color:var(--accent);border:1px solid var(--accent);
   border-radius:999px;padding:2px 10px}
-.sub{color:var(--dim);font-size:13px;margin-bottom:18px}
+.sub{color:var(--dim);font-size:13px;margin-bottom:4px}
+#hwNow{margin-bottom:18px}
 nav{display:flex;flex-wrap:wrap;gap:3px;margin-bottom:18px;background:var(--card);
   border:1px solid var(--edge);border-radius:12px;padding:4px}
 .tab{background:transparent;color:var(--dim);border:0;border-radius:9px;
@@ -270,6 +271,7 @@ footer{color:var(--dim);font-size:12px;text-align:center;margin-top:26px}
     </span>
   </header>
   <div class="sub" id="sub">verbinde...</div>
+  <div class="sub" id="hwNow">Hardware: …</div>
   <nav id="nav"></nav>
 
   <section id="t-ride">
@@ -1140,7 +1142,7 @@ function render(s){
   $('name').textContent=s.name||'-';
   $('ip').textContent=s.ip||'-';
   $('mac').textContent=s.mac||'-';
-  $('board').textContent=s.boardLabel||s.board||'-';
+  $('board').textContent=(s.hw&&s.hw.module)||s.hwModule||s.boardLabel||s.board||'-';
   $('rssi').textContent=(s.rssi!=null?s.rssi+' dBm':'-');
   $('up').textContent=s.uptime||'-';
   $('heap').textContent=(s.heap!=null?(s.heap/1024).toFixed(0)+' kB':'-');
@@ -1157,6 +1159,21 @@ function render(s){
   $('codec').textContent=s.codecSelfTest||'-';
   dot($('cdot'),s.codecSelfTest==='ok');
   $('sub').textContent=[s.fwType||'ergo',s.chip||'',s.time||'ohne Zeit'].join(' / ');
+  const h=s.hw||{},hf=h.flash||{},hp=h.psram||{};
+  const MB=b=>Math.round((b||0)/1048576);
+  let ps='keins';
+  if(hp.bytes_efuse){
+    ps=MB(hp.bytes_efuse)+' MiB '+(hp.bus||'')+' '+(hp.vendor||'');
+    if(hp.build_enabled && hp.bytes_enabled) ps+=' (aktiv)';
+    else if(hp.build_enabled) ps+=' (Build an, Treiber 0 — '+((hp.memory_type_needed)||'memory_type')+')';
+    else ps+=' (im Build aus)';
+  }
+  $('hwNow').textContent='Hardware: '+(h.chip||s.chip||'?')+' rev '+(h.chip_rev??'?')+
+    ' · Modul '+(h.module||s.hwModule||'?')+
+    ' · Flash '+MB(hf.bytes_real)+' MiB ('+(hf.vendor||hf.jedec_id||'?')+', genutzt '+MB(hf.bytes_configured)+')'+
+    ' · PSRAM '+ps+
+    ' · Heap frei '+Math.round((h.heap_free||s.heap||0)/1024)+' KiB, größter Block '+
+    Math.round((h.heap_max_alloc||0)/1024)+' KiB';
   setActiveChip(s.profileInfo||null);
   renderBle(s);
   renderCalib(s);

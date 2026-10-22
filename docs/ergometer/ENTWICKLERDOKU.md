@@ -361,16 +361,20 @@ Geräteprofil Labor-Varon (Defaults ab 0.3.20 auch nach NVS-Load):
 
 ### PSRAM (ab 0.3.25)
 
-YD-ESP32-S3 **N16R8**: `board_build.arduino.memory_type = qio_opi` und
-`-DBOARD_HAS_PSRAM`. technology-audit (`esp32-s3-silicon`): verbautes PSRAM
-ist sonst unsichtbar (`getPsramSize()==0`). hu-probe hat gemessen, dass ein
-Ring in PSRAM den internen Heap entlastet — und dass PSRAM **kein** Coex-
-oder Last-Fix ist.
+YD-ESP32-S3 **N8R2** (hu-probe gemessen): `board_build.arduino.memory_type
+= qio_qspi` und `-DBOARD_HAS_PSRAM`. technology-audit (`esp32-s3-silicon`):
+verbautes PSRAM ist sonst unsichtbar (`getPsramSize()==0`). hu-probe hat
+gemessen, dass ein Ring in PSRAM den internen Heap entlastet — und dass
+PSRAM **kein** Coex- oder Last-Fix ist.
 
 `malloc` wird **nicht** nach SPIRAM umgebogen (DMA/BLE/WiFi bleiben intern).
 Explizit in PSRAM: Debug-Ring (`ERGO_DEBUG_RING` Slots) und das große
 Status-JSON (SSE / `/api/status`). Fallback intern, wenn PSRAM fehlt.
-N8R2 (Quad) braucht `qio_qspi` statt `qio_opi`.
+N16R8 (Octal) wäre `qio_opi` — das ist nicht das verbaute Modul.
+
+`HwInfo` (1:1 aus hu-probe) liest eFuse BLK1 + Flash-JEDEC einmalig beim
+Boot. Status `hw` speist die Kopfzeile wie bei der Sonde:
+`Hardware: ESP32-S3 rev … · Modul N8R2 · Flash … · PSRAM … (aktiv) · Heap …`.
 
 ---
 
