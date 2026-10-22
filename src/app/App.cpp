@@ -16,8 +16,20 @@
 #include "core/FtpCareer.h"
 #include "core/Progression.h"
 #include "core/NetUtil.h"
+#include "core/PsramAlloc.h"
 #include "core/Zone.h"
 #include "web/UiPages.h"
+
+namespace {
+struct PreferPsramAllocator : ArduinoJson::Allocator {
+    void* allocate(size_t size) override { return ergo::callocPreferPsram(1, size); }
+    void deallocate(void* ptr) override { ergo::freePrefer(ptr); }
+    void* reallocate(void* ptr, size_t new_size) override {
+        return ergo::reallocPreferPsram(ptr, new_size);
+    }
+};
+PreferPsramAllocator gStatusAlloc;
+}  // namespace
 
 App& App::instance() {
     static App app;
@@ -31,6 +43,14 @@ void App::begin() {
     delay(300);
     Serial.printf("\n=== esp32.ergo v%s (%s) ===\n", FW_VERSION, ERGO_BOARD_LABEL);
     Serial.printf("[BOOT] reset reason %d\n", (int)esp_reset_reason());
+    Serial.printf("[MEM] heap %u  min %u  psram %u  freePsram %u\n",
+                  (unsigned)ergo::freeHeap(), (unsigned)ergo::minFreeHeap(),
+                  (unsigned)ergo::psramSize(), (unsigned)ergo::freePsram());
+    if (!ergo::psramReady()) {
+        Serial.println(
+            "[MEM] PSRAM 0 — memory_type pruefen (N16R8=qio_opi, N8R2=qio_qspi). "
+            "Ring bleibt intern.");
+    }
 
     config.begin();
     // Alte Probe-Namen still auf Ergo ziehen (einmalig, NVS).
@@ -76,6 +96,16 @@ void App::begin() {
     // Konfiguration gemerkt. Ein Mitschnitt, der einen Neustart ueberlebt und
     // dann monatelang unbemerkt mitlaeuft, ist kein Werkzeug, sondern ein Leck.
     ring.setEnabled(false);
+    {
+        bool inPsram = false;
+        void* buf = ergo::callocPreferPsram(ERGO_DEBUG_RING, sizeof(ergo::DebugRing::Rec),
+                                            &inPsram);
+        if (buf && ring.attach(static_cast<ergo::DebugRing::Rec*>(buf), ERGO_DEBUG_RING)) {
+            ringInPsram_ = inPsram;
+            Serial.printf("[MEM] DebugRing %u Slots (%s)\n", (unsigned)ring.capacity(),
+                          inPsram ? "PSRAM" : "intern");
+        }
+    }
     ftms.begin(&limiter);
     ftms.setDebugRing(&ring);
     ftms.setJournal(&journal);
@@ -445,7 +475,11 @@ void App::buildStatusJson(JsonDocument& doc) {
     doc["rssi"] = WiFi.RSSI();
     doc["uptimeS"] = millis() / 1000UL;
     doc["uptime"] = NetUtil::fmtUptime(millis() / 1000UL);
-    doc["heap"] = ESP.getFreeHeap();
+    doc["heap"] = ergo::freeHeap();
+    doc["minHeap"] = ergo::minFreeHeap();
+    doc["psram"] = ergo::psramSize();
+    doc["freePsram"] = ergo::freePsram();
+    doc["psramReady"] = ergo::psramReady();
     doc["freeSketch"] = ESP.getFreeSketchSpace();
     doc["hub"] = config.hubHost + ":" + String(config.hubPort);
     doc["hubOk"] = hub.lastOk();
@@ -713,7 +747,10 @@ void App::buildHeartbeat(JsonDocument& doc) {
     doc["ip"] = NetUtil::localIp();
     doc["rssi"] = WiFi.RSSI();
     doc["uptime"] = millis() / 1000UL;
-    doc["freeHeap"] = ESP.getFreeHeap();
+    doc["freeHeap"] = ergo::freeHeap();
+    doc["minHeap"] = ergo::minFreeHeap();
+    doc["psram"] = ergo::psramSize();
+    doc["freePsram"] = ergo::freePsram();
     doc["freeSketch"] = ESP.getFreeSketchSpace();
     doc["fwType"] = FW_TYPE;
     doc["board"] = ERGO_BOARD_ID;
@@ -798,7 +835,7 @@ void App::buildHeartbeat(JsonDocument& doc) {
 }
 
 String App::statusString() {
-    JsonDocument doc;
+    JsonDocument doc(&gStatusAlloc);
     buildStatusJson(doc);
     return NetUtil::jsonToString(doc);
 }
@@ -873,7 +910,7 @@ void App::registerRoutes() {
         [this]() { handleOtaUpload(); });
 
     server.on("/api/status", HTTP_GET, [this]() {
-        JsonDocument doc;
+        JsonDocument doc(&gStatusAlloc);
         buildStatusJson(doc);
         NetUtil::sendJson(server, 200, doc);
     });
@@ -4115,7 +4152,8 @@ void App::appendDebugJson(JsonObject obj) const {
     JsonObject r = obj["ring"].to<JsonObject>();
     r["on"] = ring.enabled();
     r["count"] = ring.count();
-    r["slots"] = ergo::kRingSlots;
+    r["slots"] = ring.capacity();
+    r["inPsram"] = ringInPsram_;
     r["seen"] = ring.seen();
     r["thinned"] = ring.thinned();
     r["overwritten"] = ring.overwritten();

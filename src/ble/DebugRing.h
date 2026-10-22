@@ -24,8 +24,9 @@
  */
 namespace ergo {
 
-/** 256 Datensaetze a 32 Byte = 8 kB. Bei 2 Hz und `ibdEvery = 5` reicht das
- *  fuer gut zehn Minuten Fahrt, inklusive des vollstaendigen Steuerverkehrs. */
+/** Interner Fallback: 256 Datensaetze a 32 Byte = 8 kB. Bei 2 Hz und
+ *  `ibdEvery = 5` reicht das fuer gut zehn Minuten. Mit PSRAM haengt die App
+ *  einen groesseren Puffer an (`ERGO_DEBUG_RING`). */
 constexpr uint16_t kRingSlots = 256;
 /** Das laengste beobachtete 0x2AD2 des Varon hat 19 Byte. */
 constexpr uint8_t kRingPayload = 24;
@@ -41,6 +42,15 @@ public:
         Dir dir = Dir::Notify;
         uint8_t data[kRingPayload] = {0};
     };
+
+    /**
+     * Optionaler groesserer Speicher (typisch PSRAM). `storage` muss `cap`
+     * Eintraege halten und mindestens so lange leben wie dieser Ring.
+     * Native Tests rufen das nicht — sie bleiben auf dem internen Fallback.
+     */
+    bool attach(Rec* storage, uint16_t cap);
+    uint16_t capacity() const { return cap_; }
+    bool usingExternalStorage() const { return slots_ != fallback_; }
 
     /** Aus bleibt der Standard. Mitschreiben kostet RAM und soll eine
      *  Entscheidung sein, keine Nebenwirkung. */
@@ -81,7 +91,9 @@ public:
     static size_t formatLine(const Rec& r, char* out, size_t cap);
 
 private:
-    Rec slots_[kRingSlots];
+    Rec fallback_[kRingSlots];
+    Rec* slots_ = fallback_;
+    uint16_t cap_ = kRingSlots;
     uint16_t head_ = 0;  // naechster Schreibplatz
     uint16_t count_ = 0;
     uint32_t seen_ = 0;

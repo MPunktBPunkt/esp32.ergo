@@ -3,6 +3,15 @@
 Absteigend nach Version. Kurze Einträge aus den ehemaligen `debug/UPDATE_*.md`-
 Notizen; Belege und Messwerte bleiben in den Primärprotokollen unter `debug/`.
 
+## 0.3.25-dev — 2026-10-22
+
+PSRAM aktiv für YD-ESP32-S3 **N16R8** (`qio_opi` + `BOARD_HAS_PSRAM`).
+`malloc` bleibt intern — BLE/WiFi/DMA nicht nach SPIRAM. Debug-Ring
+(`ERGO_DEBUG_RING`, Default 512) und Status-JSON per `callocPreferPsram`.
+Status: `psram`, `freePsram`, `minHeap`, `debug.ring.inPsram`. Boot loggt
+`[MEM]`; `getPsramSize()==0` → Hinweis N16R8 vs N8R2. Audit-Vorlage:
+hu-probe 2026-10-21 / Sheet `esp32-s3-silicon`. **Heilt Nachtest 6 nicht.**
+
 ## 0.3.24-dev — 2026-09-14
 
 `HR_HOLD` / Reha nur mit Strap oder Relay (`hrUsableForControl`). Bike-HR

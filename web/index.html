@@ -564,6 +564,8 @@ footer{color:var(--dim);font-size:12px;text-align:center;margin-top:26px}
         <div><div class="k">WLAN</div><div class="v" id="rssi">-</div></div>
         <div><div class="k">Laufzeit</div><div class="v" id="up">-</div></div>
         <div><div class="k">Heap frei</div><div class="v" id="heap">-</div></div>
+        <div><div class="k">Heap min</div><div class="v" id="minheap">-</div></div>
+        <div><div class="k">PSRAM</div><div class="v" id="psram">-</div></div>
         <div><div class="k">Hub</div>
           <div class="v addr"><span class="dot" id="hubdot"></span><span id="hub">-</span></div></div>
         <div><div class="k">Codec-Selbsttest</div>
@@ -1142,6 +1144,14 @@ function render(s){
   $('rssi').textContent=(s.rssi!=null?s.rssi+' dBm':'-');
   $('up').textContent=s.uptime||'-';
   $('heap').textContent=(s.heap!=null?(s.heap/1024).toFixed(0)+' kB':'-');
+  $('minheap').textContent=(s.minHeap!=null?(s.minHeap/1024).toFixed(0)+' kB':'-');
+  if(s.psramReady && s.psram){
+    let txt=(s.psram/1024).toFixed(0)+' kB · frei '+((s.freePsram||0)/1024).toFixed(0)+' kB';
+    if(s.debug && s.debug.ring && s.debug.ring.inPsram) txt+=' · Ring in PSRAM';
+    $('psram').textContent=txt;
+  } else {
+    $('psram').textContent='aus (0) — memory_type?';
+  }
   $('hub').textContent=s.hub||'-';
   dot($('hubdot'),s.hubOk);
   $('codec').textContent=s.codecSelfTest||'-';

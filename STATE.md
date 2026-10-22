@@ -4,7 +4,7 @@
 [docs/ergometer/ENTWICKLERDOKU.md](docs/ergometer/ENTWICKLERDOKU.md).
 Versionsgeschichte: [CHANGELOG.md](CHANGELOG.md).
 
-Stand: **2026-09-14** · Firmware **0.3.24-dev**
+Stand: **2026-10-22** · Firmware **0.3.25-dev**
 
 ---
 
@@ -40,8 +40,8 @@ Stand: **2026-09-14** · Firmware **0.3.24-dev**
 | Hub | `192.168.178.113:8093`, `fwType: ergo` |
 | Rollback-Bin | `../nodes/esp32.ftmsprobe/dist/ftmsprobe.0.1.4.esp32s3.bin` (Monorepo) |
 | Build-Host | Debian, `pio` unter `/home/martin/.venvs/pio/bin/pio` |
-| Aktuelle Bin | `dist/ergo.0.3.24-dev.esp32s3.bin` |
-| Flash | Bin 1 473 936 B / App-Partition 1 966 080 B (`min_spiffs`) ≈ **75,0 %** (0.3.24-dev, 2026-09-14) |
+| Aktuelle Bin | `dist/ergo.0.3.25-dev.esp32s3.bin` (PSRAM-Build; Flash-% nach erstem PIO-Lauf) |
+| Flash | zuletzt gemessen 1 473 936 B / 1 966 080 B ≈ **75,0 %** (0.3.24-dev, 2026-09-14) |
 
 Die Entwurfs-Instanz auf Windows hat **nur git** — kein PlatformIO, keinen
 Compiler. **Firmware- und UI-Build brauchen Python** (`tools/pio_pack_ui.py` →

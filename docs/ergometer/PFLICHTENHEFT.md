@@ -86,7 +86,8 @@ während der Fahrt nicht verbunden.
 
 ### Plattform
 
-- **ESP32-S3 (YD-ESP32-S3)** als primäres Ziel, PSRAM aktiv
+- **ESP32-S3 (YD-ESP32-S3 N16R8)** als primäres Ziel, PSRAM aktiv
+  (`qio_opi` + `BOARD_HAS_PSRAM`; allokiert nur explizite Puffer, nicht `malloc`)
 - WiFiManager (Captive Portal), keine Secrets im Source, NVS-Namespace `esphub`
 - ConfigStore (NVS), LittleFS für Workouts, Kalibrierung und Session-Archiv
 - WebServer :80, SSE, Browser-OTA
@@ -876,11 +877,13 @@ build_flags =
 ; ROLE_PERIPHERAL / ROLE_BROADCASTER NICHT deaktivieren (Bridge **v0.3**)
 ```
 
-Bemerkenswert daran: `heartrate-s3` läuft mit drei Links, WiFi und offener
-SSE-UI **ohne PSRAM** — keine `memory_type`- oder `psram_type`-Zeile, kein
-`BOARD_HAS_PSRAM`. Revision 1 hatte PSRAM als notwendig angenommen; belegt ist
-das nicht. PSRAM wird erst eingeschaltet, wenn der Heap es verlangt, und dann
-mit Messung statt auf Verdacht.
+`heartrate-s3` hat belegt, dass drei Links + WiFi + SSE **ohne** PSRAM laufen.
+Ergo schaltet PSRAM trotzdem ein (N16R8, `qio_opi` + `BOARD_HAS_PSRAM`), aber
+**nicht** als globalen Heap: BLE/WiFi/DMA bleiben intern. Nutzen — gemessen
+in hu-probe, Sheet `esp32-s3-silicon`: mehr interner Headroom, längerer
+Debug-Ring, Status-JSON aus SPIRAM. PSRAM heilt **keine** RF-/Last-Crashes
+(Nachtest 6 bleibt offen). Falsches `memory_type` → `getPsramSize()==0`
+(N8R2: `qio_qspi`).
 
 NimBLE bleibt auf 1.4.x gepinnt wie in heartrate und Sonde, damit der Code
 unverändert wandert. In 1.4 sind `getStartHandle`/`getEndHandle` privat —
@@ -1031,7 +1034,7 @@ Betriebsregeln und Checkliste: [BRIDGE.md](BRIDGE.md).
 | Nur 16 Stufen als Stellgröße | ERG ist grundsätzlich quantisiert. Ehrlich in der UI zeigen statt exakte Zielwerte vorzutäuschen. |
 | Kein Set Target Power | Erledigt durch Emulation, verlagert aber Aufwand in `PowerController` und Kalibrierung. |
 | Keine Rückmeldung der Stufe | Schattenwert kann auseinanderlaufen. Nach jedem Connect Stufe neu setzen statt annehmen. |
-| Drei BLE-Links am Ergo-Knoten | **Entschärft.** `heartrate-s3` fährt denselben Rollenmix mit `MAX_CONNECTIONS=3` produktiv, ohne PSRAM. Dual-Link am Bike gemessen und unter Last stabil — [HW_NACHTEST_20260913.md](../../debug/HW_NACHTEST_20260913.md). Rückfallebene bleibt der Puls aus `2AD2` (Anzeige), für Regelung siehe §12 / `hrUsableForControl`. |
+| Drei BLE-Links am Ergo-Knoten | **Entschärft.** `heartrate-s3` fährt denselben Rollenmix mit `MAX_CONNECTIONS=3` produktiv, auch ohne PSRAM. Ergo nutzt PSRAM nur für Ring/Status, nicht für den BLE-Stack. Dual-Link am Bike gemessen und unter Last stabil — [HW_NACHTEST_20260913.md](../../debug/HW_NACHTEST_20260913.md). Rückfallebene bleibt der Puls aus `2AD2` (Anzeige), für Regelung siehe §12 / `hrUsableForControl`. |
 | Peripheral-Rolle für die Bridge | **Entschärft.** `HrServer` in heartrate v0.3 ist die laufende Vorlage samt Advertising, Client-Limit und Notify-Einspeisung aus dem Loop. |
 | Verhalten des Bikes bei Client-Abbruch | Test 6 lief nie. Bis dahin Hub-Watchdog aus und `08 01` vor jedem Neustart. |
 | Encoding auf einem Datenpunkt | **Entschärft.** Vollständiger Sweep plus Steuer-Journal mit **0 Widersprüchen**. |
