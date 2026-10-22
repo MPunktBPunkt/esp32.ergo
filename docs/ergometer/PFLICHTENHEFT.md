@@ -416,7 +416,8 @@ Weiteres:
 **Verbindungsbudget.** Für den Ergo-Knoten sind es Bike (Central) + Puls
 (Central) + App (Peripheral) = drei Links, also `MAX_CONNECTIONS=3`. Das ist
 dasselbe Budget, mit dem `heartrate-s3` heute schon läuft: ein Gurt-Link plus
-zwei Verbraucher, und das ohne PSRAM. Die Rollenkombination ist damit in der
+zwei Verbraucher, und das ohne PSRAM (Ergo-PSRAM ist Headroom, kein
+Link-Budget). Die Rollenkombination ist damit in der
 Familie erprobt — anders als in Revision 1 ist sie kein Risiko mehr, sondern
 eine Referenz.
 
