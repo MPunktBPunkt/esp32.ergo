@@ -182,7 +182,8 @@ beiden Fenstern stabil ist — besser Leistung *pro Kadenz* statt Leistung allei
 **Stand:** Die Encoding-Frage ist entschieden (`04` sint16 wirkt; siehe Sweeps
 in §8 und §9). Die Forderung ist umgesetzt in
 `src/control/ControlJournal.{h,cpp}` und in der Kennfläche
-([KALIBRIERUNG.md](KALIBRIERUNG.md): 62 Zellen belegt, Sweeps bei 60 und 80 rpm).
+([KALIBRIERUNG.md](KALIBRIERUNG.md): 99 Zellen belegt, 8/8 Bänder,
+Sweeps bei 60 und 80 rpm).
 
 ## 8. Das Leistungsraster — gemessen und entschieden
 
@@ -202,6 +203,7 @@ feinere Last und Spitzen, nicht mehr Pflicht gegen einen Deckel bei ~130 W.
 | 2,0 … 16,0 | 30,7 … **170,2 W** | ~60 rpm | Sweep 2026-09-11 — [HW_TEST1_60RPM.md](../../debug/HW_TEST1_60RPM.md) |
 | 16,0 | **244,6 W** (~245 W) | ~82 rpm | Sweep 2026-09-13 — [HW_TEST2_80RPM.md](../../debug/HW_TEST2_80RPM.md) |
 | 8,0 | 122,9 W | ~79 rpm | dieselbe Quelle; leicht: 122,7 W — [HW_TEST2_LIGHT.md](../../debug/HW_TEST2_LIGHT.md) |
+| 16,0 | **339 W** | 100–110 rpm | Heatmap 2026-09-15, passiv — [KALIBRIERUNG.md](KALIBRIERUNG.md) |
 
 Sweep 60 rpm (gültig): Stufe 2→16 in Zweistufenschritten ca. **+20 W** je Schritt,
 nahezu linear bis 170,2 W ([HW_TEST1_60RPM.md](../../debug/HW_TEST1_60RPM.md)).

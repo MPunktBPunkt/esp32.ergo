@@ -108,6 +108,10 @@ auf dem Display.
 └──────────────────────────────────────────────────────────────────┘
 ```
 
+Live (0.3.23-dev, 2026-09-15) — Handstufe, Auto-Pause ohne Kadenz, Zonenschiene unten:
+
+![Ride: Handstufe, Auto-Pause, Zonenschiene](screenshots/ride.png)
+
 ### Die Zonenschiene
 
 Die Leiste unter der Hero-Zone ist das Element, das MyWoosh-Gefühl erzeugt:
@@ -198,6 +202,8 @@ die am falschen Profil hängt, ist ein Sicherheitsproblem.
 Die **Kennfläche Stufe × Kadenz → Watt gehört nicht ins Profil.** Sie ist eine
 Eigenschaft des Bikes und wird geteilt. Nur so lernt sie aus beiden Nutzern
 mit.
+
+![Profile: Kartenwahl und Editor (Martin aktiv)](screenshots/profile.png)
 
 ### Profilwahl
 
@@ -315,6 +321,12 @@ Dateiwege bleiben offen: Download als JSON, Upload per Datei, und der Editor
 liest jede Datei, die von Hand geschrieben wurde. Import von `.zwo` kommt in
 v0.3.
 
+![Workouts: Bibliothek mit Favoriten, Schlössern und Force](screenshots/workouts.png)
+
+![Vorschau VO2 5×4 gegen Profil/Kennfläche](screenshots/workout-vorschau.png)
+
+![Schritt-Editor: % FTP, Intervallblock](screenshots/schritt-editor.png)
+
 ---
 
 ## 6. Tests
@@ -390,7 +402,37 @@ man sieht sofort, welche Bereiche gemessen und welche noch geraten sind. Ab
 **0.3.23** markiert die Matrix live Zeile (Stufe) und Spalte (Kadenzband); die
 Schnittzelle zeigt, wohin der nächste Lernpunkt geht. Das passive Lernen füllt
 sie mit jeder Fahrt weiter. Stufe ± bleibt im Fahren-Dock — unter der Matrix
-keine eigenen Buttons.
+keine eigenen Buttons. Stand 2026-09-15: [KALIBRIERUNG.md](KALIBRIERUNG.md)
+(753 Stützstellen, 8/8 Bänder) und
+[`screenshots/kennflaeche.png`](screenshots/kennflaeche.png).
+
+### Live-Screenshots (2026-09-15, Firmware-Badge 0.3.23-dev)
+
+Weitere Reiter, wie sie auf dem Gerät aussehen. Tests und Verlauf waren in
+dieser Serie nicht dabei.
+
+| Tab | Bild |
+|-----|------|
+| Ride | [ride.png](screenshots/ride.png) |
+| Workouts | [workouts.png](screenshots/workouts.png) · [Vorschau](screenshots/workout-vorschau.png) · [Editor](screenshots/schritt-editor.png) |
+| Profile | [profile.png](screenshots/profile.png) |
+| Geräte | [geraete.png](screenshots/geraete.png) |
+| Einstellungen | [einstellungen.png](screenshots/einstellungen.png) · [Entwickler](screenshots/einstellungen-entwickler.png) |
+| OTA | [ota.png](screenshots/ota.png) |
+| Kalibrierung | [kennflaeche.png](screenshots/kennflaeche.png) · [Sweep](screenshots/kalibrierung-sweep.png) |
+| Debug | [debug.png](screenshots/debug.png) |
+
+![Geräte: Bike READY, HR-Relay READY, Bridge aus](screenshots/geraete.png)
+
+![Einstellungen: Hub, Bridge, Entwickler-UI](screenshots/einstellungen.png)
+
+![Erweitert: Simulation, Geräteprofil, Decke 224 W](screenshots/einstellungen-entwickler.png)
+
+![OTA und Neustart](screenshots/ota.png)
+
+![Kalibrierung: Stufen-Sweep und Nachtests](screenshots/kalibrierung-sweep.png)
+
+![Debug: Caps, Journal, Limiter](screenshots/debug.png)
 
 ---
 

@@ -11,6 +11,15 @@ Modul/Flash/PSRAM und steht im UI-Kopf wie bei der Sonde. `malloc` bleibt
 intern. Debug-Ring und Status-JSON per `callocPreferPsram`. Status: `hw.*`,
 `hwModule`, `psram`, `freePsram`, `minHeap`. **Heilt Nachtest 6 nicht.**
 
+## Doku — 2026-09-15
+
+Live-Screenshots der Web-UI unter
+[`docs/ergometer/WEBINTERFACE.md`](docs/ergometer/WEBINTERFACE.md)
+(Ride, Workouts, Profile, Geräte, Einstellungen, OTA, Kalibrierung, Debug).
+Kennfläche aus der Heatmap: **753 Stützstellen**, **99/128 Zellen**,
+**8/8 Bänder**, Peak **339 W** @ Stufe 16 / 100–110 rpm.
+Tabelle: [`docs/ergometer/KALIBRIERUNG.md`](docs/ergometer/KALIBRIERUNG.md).
+
 ## 0.3.24-dev — 2026-09-14
 
 `HR_HOLD` / Reha nur mit Strap oder Relay (`hrUsableForControl`). Bike-HR
