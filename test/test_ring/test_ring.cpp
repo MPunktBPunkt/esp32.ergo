@@ -204,6 +204,20 @@ static void test_jsonl_needs_room(void) {
     TEST_ASSERT_EQUAL_UINT32(0, DebugRing::formatLine(*r.at(0), small, sizeof(small)));
 }
 
+static void test_attach_grows_capacity(void) {
+    DebugRing r;
+    DebugRing::Rec extra[32];
+    TEST_ASSERT_TRUE(r.attach(extra, 32));
+    TEST_ASSERT_EQUAL_UINT16(32, r.capacity());
+    r.setEnabled(true);
+    r.setIbdEvery(1);
+    uint32_t t = 0;
+    feedIbd(r, 40, t);
+    TEST_ASSERT_EQUAL_UINT16(32, r.count());
+    TEST_ASSERT_EQUAL_UINT32(8, r.overwritten());
+    TEST_ASSERT_NULL(r.at(32));
+}
+
 int main(int, char**) {
     UNITY_BEGIN();
     RUN_TEST(test_disabled_records_nothing);
@@ -218,5 +232,6 @@ int main(int, char**) {
     RUN_TEST(test_jsonl_line);
     RUN_TEST(test_jsonl_write_direction);
     RUN_TEST(test_jsonl_needs_room);
+    RUN_TEST(test_attach_grows_capacity);
     return UNITY_END();
 }

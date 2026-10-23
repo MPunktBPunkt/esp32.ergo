@@ -3,6 +3,14 @@
 Absteigend nach Version. Kurze Einträge aus den ehemaligen `debug/UPDATE_*.md`-
 Notizen; Belege und Messwerte bleiben in den Primärprotokollen unter `debug/`.
 
+## 0.3.25-dev — 2026-10-22
+
+PSRAM aktiv für YD-ESP32-S3 **N8R2** (`qio_qspi` + `BOARD_HAS_PSRAM`;
+2 MiB Quad AP_3v3 — hu-probe eFuse/Kopf). `HwInfo` (aus hu-probe) liest
+Modul/Flash/PSRAM und steht im UI-Kopf wie bei der Sonde. `malloc` bleibt
+intern. Debug-Ring und Status-JSON per `callocPreferPsram`. Status: `hw.*`,
+`hwModule`, `psram`, `freePsram`, `minHeap`. **Heilt Nachtest 6 nicht.**
+
 ## 0.3.24-dev — 2026-09-14
 
 `HR_HOLD` / Reha nur mit Strap oder Relay (`hrUsableForControl`). Bike-HR

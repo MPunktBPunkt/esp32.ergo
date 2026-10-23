@@ -41,6 +41,14 @@ void DebugRing::setEnabled(bool on) { enabled_ = on; }
 
 void DebugRing::setIbdEvery(uint16_t n) { ibdEvery_ = n; }
 
+bool DebugRing::attach(Rec* storage, uint16_t cap) {
+    if (!storage || cap < 8) return false;
+    slots_ = storage;
+    cap_ = cap;
+    clear();
+    return true;
+}
+
 void DebugRing::clear() {
     head_ = 0;
     count_ = 0;
@@ -69,7 +77,7 @@ void DebugRing::add(uint16_t uuid, Dir dir, const uint8_t* data, size_t len, uin
         haveFlags_ = true;
     }
 
-    if (count_ == kRingSlots) overwritten_++;
+    if (count_ == cap_) overwritten_++;
 
     Rec& r = slots_[head_];
     r.atMs = nowMs;
@@ -84,15 +92,15 @@ void DebugRing::add(uint16_t uuid, Dir dir, const uint8_t* data, size_t len, uin
     for (size_t i = 0; i < n; i++) r.data[i] = data[i];
     for (size_t i = n; i < kRingPayload; i++) r.data[i] = 0;
 
-    head_ = (uint16_t)((head_ + 1) % kRingSlots);
-    if (count_ < kRingSlots) count_++;
+    head_ = (uint16_t)((head_ + 1) % cap_);
+    if (count_ < cap_) count_++;
 }
 
 const DebugRing::Rec* DebugRing::at(uint16_t i) const {
     if (i >= count_) return nullptr;
     // Bei vollem Ring beginnt der aelteste Datensatz auf `head_`.
-    const uint16_t start = (count_ == kRingSlots) ? head_ : 0;
-    return &slots_[(uint16_t)((start + i) % kRingSlots)];
+    const uint16_t start = (count_ == cap_) ? head_ : 0;
+    return &slots_[(uint16_t)((start + i) % cap_)];
 }
 
 size_t DebugRing::formatLine(const Rec& r, char* out, size_t cap) {
