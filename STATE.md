@@ -4,7 +4,7 @@
 [docs/ergometer/ENTWICKLERDOKU.md](docs/ergometer/ENTWICKLERDOKU.md).
 Versionsgeschichte: [CHANGELOG.md](CHANGELOG.md).
 
-Stand: **2026-09-15** · Firmware **0.3.24-dev** (Live-UI-Badge auf den
+Stand: **2026-10-23** · Firmware **0.3.25-dev** (Live-UI-Badge auf den
 Screenshots: **0.3.23-dev**)
 
 ---
@@ -36,13 +36,13 @@ Screenshots: **0.3.23-dev**)
 
 | | |
 |---|---|
-| Gerät | ESP32-S3 auf `192.168.178.88`, MAC `68B6B329339C` |
+| Gerät | YD-ESP32-S3 **N8R2** (8 MiB Quad-Flash, 2 MiB Quad-PSRAM) auf `192.168.178.88`, MAC `68B6B329339C` |
 | Bike | Hammer Varon XTR II, BLE-Name `TC174`, MAC `c2:32:a5:1e:bf:b5` |
 | Hub | `192.168.178.113:8093`, `fwType: ergo` |
 | Rollback-Bin | `../nodes/esp32.ftmsprobe/dist/ftmsprobe.0.1.4.esp32s3.bin` (Monorepo) |
 | Build-Host | Debian, `pio` unter `/home/martin/.venvs/pio/bin/pio` |
-| Aktuelle Bin | `dist/ergo.0.3.24-dev.esp32s3.bin` |
-| Flash | Bin 1 473 936 B / App-Partition 1 966 080 B (`min_spiffs`) ≈ **75,0 %** (0.3.24-dev, 2026-09-14) |
+| Aktuelle Bin | `dist/ergo.0.3.25-dev.esp32s3.bin` (PSRAM-Build; Flash-% nach erstem PIO-Lauf) |
+| Flash | zuletzt gemessen 1 473 936 B / 1 966 080 B ≈ **75,0 %** (0.3.24-dev, 2026-09-14) |
 
 Die Entwurfs-Instanz auf Windows hat **nur git** — kein PlatformIO, keinen
 Compiler. **Firmware- und UI-Build brauchen Python** (`tools/pio_pack_ui.py` →

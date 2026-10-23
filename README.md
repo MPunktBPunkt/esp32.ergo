@@ -1,6 +1,6 @@
 # esp32.ergo
 
-![Version](https://img.shields.io/badge/version-0.3.23--dev-green)
+![Version](https://img.shields.io/badge/version-0.3.25--dev-green)
 [![License: GPL v3](https://img.shields.io/badge/License-GPLv3-blue.svg)](https://www.gnu.org/licenses/gpl-3.0)
 [![Build](https://github.com/MPunktBPunkt/esp32.ergo/actions/workflows/build.yml/badge.svg)](https://github.com/MPunktBPunkt/esp32.ergo/actions/workflows/build.yml)
 [![Donate](https://img.shields.io/badge/Donate-PayPal-00457C.svg?logo=paypal)](https://www.paypal.com/donate/?business=martin%40bchmnn.de&currency_code=EUR)
@@ -97,7 +97,12 @@ Ab 0.3.14: Observer vs. Controller und Exklusiv-Lock — siehe
 |-------|----------------|---------|
 | ESP32-S3 | `ergo` | zwei BLE-Links im Coach, drei in der Bridge |
 
-Kein D1 Mini: der Coach braucht zwei gleichzeitige Verbindungen, die Bridge drei. Kein PSRAM — `heartrate-s3` fährt drei Links plus WiFi und SSE ohne.
+Kein D1 Mini: der Coach braucht zwei gleichzeitige Verbindungen, die Bridge drei.
+PSRAM (YD-ESP32-S3 **N8R2**, `qio_qspi`, 2 MiB Quad) ist **an**, aber nicht
+als globaler `malloc`: BLE/WiFi/DMA bleiben intern. Debug-Ring und Status-JSON
+liegen in PSRAM — gleiches Muster und dasselbe Board wie hu-probe
+(`technology-audit`). `getPsramSize()==0` heißt fast immer falsches
+`memory_type` (N16R8/Octal wäre `qio_opi` — das ist nicht unser Modul).
 
 ---
 

@@ -209,6 +209,7 @@ private:
      */
     void loopDebug(unsigned long now);
     void appendDebugJson(JsonObject obj) const;
+    bool ringInPsram_ = false;
     uint32_t liveSeen_ = 0;
     uint32_t respSeen_ = 0;
     uint16_t judgedSeen_ = 0;
