@@ -54,6 +54,8 @@ void App::begin() {
                       HwInfo::moduleGuess());
     }
 
+    CpuLoad::begin();
+
     config.begin();
     // Alte Probe-Namen still auf Ergo ziehen (einmalig, NVS).
     if (config.deviceName == "FtmsProbe-S3" || config.deviceName == "FtmsProbe") {
@@ -480,10 +482,21 @@ void App::buildStatusJson(JsonDocument& doc) {
     doc["heap"] = ergo::freeHeap();
     doc["minHeap"] = ergo::minFreeHeap();
     doc["psram"] = ergo::psramSize();
+    doc["psramSize"] = ergo::psramSize();
     doc["freePsram"] = ergo::freePsram();
     doc["psramReady"] = ergo::psramReady();
     doc["hwModule"] = HwInfo::moduleGuess();
+    doc["module"] = HwInfo::moduleGuess();
     doc["freeSketch"] = ESP.getFreeSketchSpace();
+    doc["sketch"] = ESP.getFreeSketchSpace();
+    doc["sketchUsed"] = ESP.getSketchSize();
+    doc["cpu0"] = CpuLoad::core0Percent();
+    if (CpuLoad::core1Percent() >= 0) {
+        doc["cpu1"] = CpuLoad::core1Percent();
+        doc["cpu"] = (CpuLoad::core0Percent() + CpuLoad::core1Percent()) / 2;
+    } else {
+        doc["cpu"] = CpuLoad::core0Percent();
+    }
     {
         JsonObject hw = doc["hw"].to<JsonObject>();
         hw["chip"] = ESP.getChipModel();
@@ -492,6 +505,17 @@ void App::buildStatusJson(JsonDocument& doc) {
         hw["heap_min_free"] = ergo::minFreeHeap();
         hw["heap_max_alloc"] = ESP.getMaxAllocHeap();
         HwInfo::toJson(hw);
+        // Familien-Standard: eine Zeile für Hub/Status (wie UI-Kopf).
+        char sum[192];
+        const uint32_t flashMb = (uint32_t)(HwInfo::flashBytesReal() >> 20);
+        const uint32_t psMb = (uint32_t)(HwInfo::psramBytesEfuse() >> 20);
+        snprintf(sum, sizeof(sum),
+                 "%s rev %d · Modul %s · Flash %u MiB · PSRAM %u MiB%s · Heap frei %u KiB",
+                 ESP.getChipModel(), (int)ESP.getChipRevision(), HwInfo::moduleGuess(),
+                 (unsigned)flashMb, (unsigned)psMb,
+                 ergo::psramReady() ? " (aktiv)" : " (Build/Treiber prüfen)",
+                 (unsigned)(ergo::freeHeap() / 1024u));
+        doc["hwSummary"] = sum;
     }
     doc["hub"] = config.hubHost + ":" + String(config.hubPort);
     doc["hubOk"] = hub.lastOk();
@@ -762,9 +786,16 @@ void App::buildHeartbeat(JsonDocument& doc) {
     doc["freeHeap"] = ergo::freeHeap();
     doc["minHeap"] = ergo::minFreeHeap();
     doc["psram"] = ergo::psramSize();
+    doc["psramSize"] = ergo::psramSize();
     doc["freePsram"] = ergo::freePsram();
     doc["hwModule"] = HwInfo::moduleGuess();
+    doc["module"] = HwInfo::moduleGuess();
     doc["freeSketch"] = ESP.getFreeSketchSpace();
+    {
+        const int c0 = CpuLoad::core0Percent();
+        const int c1 = CpuLoad::core1Percent();
+        doc["cpu"] = (c1 >= 0) ? ((c0 + c1) / 2) : c0;
+    }
     doc["fwType"] = FW_TYPE;
     doc["board"] = ERGO_BOARD_ID;
 
@@ -4666,6 +4697,7 @@ void App::registerDebugRoutes() {
 
 void App::loop() {
     server.handleClient();
+    CpuLoad::poll();
     ble.loop();
     hub.loop();
 

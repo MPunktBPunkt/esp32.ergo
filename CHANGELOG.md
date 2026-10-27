@@ -3,6 +3,11 @@
 Absteigend nach Version. Kurze Einträge aus den ehemaligen `debug/UPDATE_*.md`-
 Notizen; Belege und Messwerte bleiben in den Primärprotokollen unter `debug/`.
 
+## 0.3.26-dev — 2026-10-27
+
+`CpuLoad` (Status/Heartbeat `cpu`/`cpu0`/`cpu1`), Hub-Rename (`reply.name` → NVS),
+Familien-Aliase `module`/`psramSize`. PSRAM/`HwInfo` bleiben wie 0.3.25.
+
 ## 0.3.25-dev — 2026-10-22
 
 PSRAM aktiv für YD-ESP32-S3 **N8R2** (`qio_qspi` + `BOARD_HAS_PSRAM`;

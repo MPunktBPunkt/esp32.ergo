@@ -94,6 +94,16 @@ void HubClient::sendHeartbeat() {
                         Serial.println("[OTA] Hub-URL gemerkt — warte auf freies Gerät");
                 }
             }
+            // Hub rename (iobroker.esp-hub reply.name) → NVS + Web-UI.
+            if (!resp["name"].isNull()) {
+                String newName = resp["name"].as<String>();
+                newName.trim();
+                if (newName.length() > 0 && newName != config_->deviceName) {
+                    config_->deviceName = newName;
+                    config_->save();
+                    Serial.println("[HB] Name: " + config_->deviceName);
+                }
+            }
         }
     }
     http.end();

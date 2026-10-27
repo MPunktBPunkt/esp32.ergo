@@ -30,6 +30,7 @@
 #include "core/SessionStore.h"
 #include "core/SessionSummary.h"
 #include "core/SessionTracker.h"
+#include "esphub/CpuLoad.h"
 
 /**
  * Shell, BLE, Kalibrierung, Profile, OFF / LEVEL / ERG / HR_HOLD / REHA / WORKOUT.
